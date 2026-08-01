@@ -44,9 +44,23 @@ lib/
   state/session.dart                saved (reconnect) set + live count
   widgets/                          glass, play button, countdown ring,
                                     presence tile, self view
-  screens/                          onboarding · home · finding · live
+  net/                              network_client (matchmaking) · rtc_service (video seam)
+  screens/                          welcome · signin · profile (age/gender) · onboarding
+                                    (camera) · home · finding · live · settings · legal
 ```
 
+## Modes
+- **Simulated (default):** compiles with only standard packages (camera +
+  web_socket_channel) — bulletproof for Codemagic/TestFlight. People, matches and
+  games are on-device; your camera is the self-view.
+- **Live matchmaking:** set `--dart-define=WHATIF_BACKEND=wss://…/ws` (deploy
+  `server/` to Railway). Real strangers pair; presence, games, reactions and
+  report/block are live.
+- **Live video:** an opt-in add-on (LiveKit) — see `docs/ENABLE_VIDEO.md`. Kept
+  out of the default build so first compiles never break on a native SDK.
+
 ## Status
-First buildable version of the live-video product, on simulated data. Next:
-real-time matching + WebRTC video + moderation (see `PRODUCT_SPEC.md §9`).
+Full onboarding (welcome → sign-in → age/gender → camera), settings, privacy/
+terms/about, the home→finding→live loop, and a Railway matchmaking backend. Video
+is one file away (`docs/ENABLE_VIDEO.md`). Next hardening: real age verification +
+AI live-moderation (`PRODUCT_SPEC.md §4, §9`).

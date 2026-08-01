@@ -8,6 +8,9 @@ import 'net/network_client.dart';
 import 'net/rtc_service.dart';
 import 'state/session.dart';
 import 'theme/tokens.dart';
+import 'screens/welcome_screen.dart';
+import 'screens/signin_screen.dart';
+import 'screens/profile_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/finding_screen.dart';
@@ -34,7 +37,7 @@ class WhatIfApp extends StatelessWidget {
   }
 }
 
-enum _Step { onboarding, home, finding, live }
+enum _Step { welcome, signin, profile, permission, home, finding, live }
 
 class _Root extends StatefulWidget {
   const _Root();
@@ -44,7 +47,7 @@ class _Root extends StatefulWidget {
 
 class _RootState extends State<_Root> {
   final _rng = Random();
-  _Step _step = _Step.onboarding;
+  _Step _step = _Step.welcome;
   Cell? _cell;
   int _drop = 0;
   StreamSubscription<Map<String, dynamic>>? _netSub;
@@ -144,8 +147,11 @@ class _RootState extends State<_Root> {
   Widget build(BuildContext context) {
     final live = AppConfig.isLive;
     final Widget screen = switch (_step) {
-      _Step.onboarding => OnboardingScreen(onDone: () => _to(_Step.home)),
-      _Step.home => HomeScreen(onPlay: _play),
+      _Step.welcome => WelcomeScreen(onNext: () => _to(_Step.signin)),
+      _Step.signin => SignInScreen(onContinue: () => _to(_Step.profile)),
+      _Step.profile => ProfileScreen(onDone: () => _to(_Step.permission)),
+      _Step.permission => OnboardingScreen(onDone: () => _to(_Step.home)),
+      _Step.home => HomeScreen(onPlay: _play, onSignOut: () => _to(_Step.welcome)),
       _Step.finding => FindingScreen(onDone: _dropSimulated, waitForExternal: live),
       _Step.live => LiveScreen(
           key: ValueKey(_drop),

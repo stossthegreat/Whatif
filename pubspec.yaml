@@ -42,8 +42,9 @@ dependencies:
   # Real matchmaking (pure Dart WebSocket) — used only when WHATIF_BACKEND is set.
   web_socket_channel: ^3.0.1
 
-  # Live group video ("livestream") — used only in live mode.
-  livekit_client: ^2.3.0
+  # Live group video (LiveKit) is an opt-in add-on — see docs/ENABLE_VIDEO.md.
+  # Kept out of the default build so first compiles are bulletproof.
+  # livekit_client: ^2.3.0
 
 dev_dependencies:
   flutter_test:

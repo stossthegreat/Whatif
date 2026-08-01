@@ -25,6 +25,31 @@ class AppSession extends ChangeNotifier {
   bool serverDriven = false;
   final Set<String> saved = <String>{};
 
+  // ---- profile (from onboarding questions) ----
+  bool signedIn = false;
+  int? age;
+  String? gender; // Woman / Man / Nonbinary / Other
+  String? lookingFor; // Everyone / Women / Men
+
+  // ---- settings ----
+  bool soundOn = true;
+  bool hapticsOn = true;
+
+  void setProfile({int? age, String? gender, String? lookingFor}) {
+    if (age != null) this.age = age;
+    if (gender != null) this.gender = gender;
+    if (lookingFor != null) this.lookingFor = lookingFor;
+    notifyListeners();
+  }
+
+  void signOut() {
+    signedIn = false;
+    age = null;
+    gender = null;
+    lookingFor = null;
+    notifyListeners();
+  }
+
   void setLiveCount(int n) {
     serverDriven = true;
     liveCount = n;

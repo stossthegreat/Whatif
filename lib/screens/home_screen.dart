@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import '../core/haptics.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
+import '../widgets/glass.dart';
 import '../widgets/play_button.dart';
 import '../widgets/self_view.dart';
+import 'settings_screen.dart';
 
 /// Home — already alive. Your mirrored self-view fills the screen (getting-ready
 /// delight), one PLAY, a live count. No menu, no feed. The whole screen is a dare.
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.onPlay});
+  const HomeScreen({super.key, required this.onPlay, required this.onSignOut});
   final VoidCallback onPlay;
+  final VoidCallback onSignOut;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +49,19 @@ class HomeScreen extends StatelessWidget {
                                   RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},')} live',
                                 style: T.tiny.copyWith(color: C.tx2, fontWeight: FontWeight.w600)),
                           ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Press(
+                        onTap: () {
+                          Buzz.tick();
+                          SettingsScreen.push(context, onSignOut);
+                        },
+                        child: Container(
+                          width: 34, height: 34,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
+                          child: const Icon(Icons.settings_rounded, size: 18, color: C.tx2),
                         ),
                       ),
                     ],
