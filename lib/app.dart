@@ -37,7 +37,7 @@ class RivlrApp extends StatelessWidget {
   }
 }
 
-enum _Step { welcome, signin, profile, permission, home, finding, live }
+enum _Step { boot, welcome, signin, profile, permission, home, finding, live }
 
 class _Root extends StatefulWidget {
   const _Root();
@@ -47,7 +47,7 @@ class _Root extends StatefulWidget {
 
 class _RootState extends State<_Root> {
   final _rng = Random();
-  _Step _step = _Step.welcome;
+  _Step _step = _Step.boot;
   Cell? _cell;
   int _drop = 0;
   StreamSubscription<Map<String, dynamic>>? _netSub;
@@ -55,10 +55,19 @@ class _RootState extends State<_Root> {
   @override
   void initState() {
     super.initState();
+    _boot();
+  }
+
+  Future<void> _boot() async {
+    // load saved identity BEFORE the network hello, so the backend sees a
+    // stable uid and we can skip onboarding for returning users.
+    await AppSession.instance.load();
     if (AppConfig.isLive) {
       NetworkClient.instance.connect();
       _netSub = NetworkClient.instance.events.listen(_onNet);
     }
+    if (!mounted) return;
+    _to(AppSession.instance.onboarded ? _Step.home : _Step.welcome);
   }
 
   @override
@@ -106,7 +115,18 @@ class _RootState extends State<_Root> {
         .toList();
     if (people.isEmpty) people = Person.group(_rng, 1); // solo test — show one tile
     final g = ((m['game'] as Map?) ?? const {}).cast<String, dynamic>();
-    final def = GameDef.byKind(gameKindFrom((g['kind'] as String?) ?? 'poll'));
+    final kind = gameKindFrom((g['kind'] as String?) ?? 'poll');
+    final base = GameDef.byKind(kind);
+    // honour the server's game name/hint (it owns the wild variants like
+    // "Survival" / "Red Flag"), falling back to the local pack's defaults.
+    final def = GameDef(
+      kind: kind,
+      name: (g['name'] as String?) ?? base.name,
+      hint: (g['hint'] as String?) ?? base.hint,
+      minStrangers: base.minStrangers,
+      maxStrangers: base.maxStrangers,
+      prompts: base.prompts,
+    );
     final prompt = ((g['prompt'] as List?) ?? const []).map((e) => e.toString()).toList();
     return Cell(people: people, game: def, prompt: prompt.isEmpty ? def.prompts.first : prompt);
   }
@@ -151,10 +171,14 @@ class _RootState extends State<_Root> {
   Widget build(BuildContext context) {
     final live = AppConfig.isLive;
     final Widget screen = switch (_step) {
+      _Step.boot => const ColoredBox(color: C.black),
       _Step.welcome => WelcomeScreen(onNext: () => _to(_Step.signin)),
       _Step.signin => SignInScreen(onContinue: () => _to(_Step.profile)),
       _Step.profile => ProfileScreen(onDone: () => _to(_Step.permission)),
-      _Step.permission => OnboardingScreen(onDone: () => _to(_Step.home)),
+      _Step.permission => OnboardingScreen(onDone: () {
+          AppSession.instance.completeOnboarding();
+          _to(_Step.home);
+        }),
       _Step.home => MainShell(onPlay: _play, onSignOut: () => _to(_Step.welcome)),
       _Step.finding => FindingScreen(onDone: _dropSimulated, waitForExternal: live),
       _Step.live => LiveScreen(

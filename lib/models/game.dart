@@ -200,6 +200,107 @@ class GameDef {
         ['Try not to smile. Impossible.'],
       ],
     ),
+    GameDef(
+      kind: GameKind.point, name: 'Caption This', hint: 'best caption wins — say it out loud',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Caption this: 🐸🚗💨'], ['Caption this: 👵🛹🔥'], ['Caption this: 🦆👮‍♂️🚨'],
+        ['Caption this: 🧍‍♂️🕳️👀'], ['Caption this: 🐱💼📉'], ['Caption this: 🤡🎂😭'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Roast Me', hint: 'gentle roasts only — crown the best',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['Roast the person on your left (with love)'], ['Roast this app. Go.'],
+        ['Roast your own haircut before someone else does'], ['Roast Mondays like they owe you money'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.same, name: 'Emoji Only', hint: 'answer in one emoji — match the room',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Your week, in one emoji', '😂', '💀', '😭', '🔥'],
+        ['Your love life, one emoji', '📉', '🔥', '👻', '🤡'],
+        ['This room, one emoji', '🎪', '✨', '💀', '🧠'],
+        ['Your bank account rn', '😭', '💀', '📉', '🤑'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.thumbs, name: 'Truth Meter', hint: '👍 = cap. call it out',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['“I could survive a week without my phone”'], ['“I’ve never stalked an ex online”'],
+        ['“I always tip 20%”'], ['“I read the terms & conditions”'],
+        ['“I’m a good texter”'], ['“I’ve never lied in this app”'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Five Second Rule', hint: '5 seconds — then crown who nailed it',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Name 5 fruits. FIVE SECONDS.'], ['Name 5 apps on your phone. GO.'],
+        ['5 excuses for being late. NOW.'], ['5 things in your fridge. QUICK.'],
+        ['5 red flags. FAST.'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Act It Out', hint: 'mime it — first right guess crowns you',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Mime: making a pizza'], ['Mime: losing your phone'], ['Mime: a cat at 3am'],
+        ['Mime: airport security'], ['Mime: your morning routine'], ['Mime: winning the lottery'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'First To Find', hint: 'run — first back with it wins',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['First to show something RED'], ['First to show a spoon'], ['First to show shoes'],
+        ['First to show something older than you'], ['First to show a snack'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Worst Impression', hint: 'do it badly on purpose — funniest wins',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Your worst BATMAN'], ['Your worst British accent'], ['Your worst influencer apology'],
+        ['Your worst gym bro'], ['Your worst weather reporter'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Finish The Lyric', hint: 'no music. full confidence.',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Sing any chorus like it’s the final'], ['Finish a lyric everyone knows — wrong words allowed'],
+        ['Hum a song — first to guess crowns you'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'One Word Story', hint: 'one word each — funniest ending wins',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['Start with: “Yesterday…”'], ['Start with: “Officer…”'], ['Start with: “Unfortunately…”'],
+        ['Start with: “My therapist…”'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Finish The Sentence', hint: 'funniest answer takes it',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['“My last search was…”'], ['“I knew it was over when…”'], ['“My villain origin story is…”'],
+        ['“The weirdest thing I own is…”'], ['“My red flag is…”'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Odd One Out', hint: 'someone got a different prompt. find them',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['One of you is describing a DIFFERENT thing 👀 — find them'],
+        ['One of you got the fake prompt. Sniff them out.'],
+        ['Someone here is improvising. Point at who.'],
+      ],
+    ),
   ];
 
   static const bag = [1, 1, 1, 2, 2, 3, 3, 5];
@@ -208,12 +309,23 @@ class GameDef {
   static GameDef byKind(GameKind k) => pack.firstWhere((g) => g.kind == k);
 }
 
-/// One live cell: who's here, the game, and the chosen prompt.
+/// One live cell: who's here, the game, the chosen prompt — and a personality.
+/// Rooms are never "Room #421"; they're places you remember being thrown into.
 class Cell {
-  Cell({required this.people, required this.game, required this.prompt});
+  Cell({required this.people, required this.game, required this.prompt, String? roomName})
+      : roomName = roomName ?? roomNames[_rn.nextInt(roomNames.length)];
   final List<Person> people;
   final GameDef game;
   final List<String> prompt; // [head, ...options], options already shuffled
+  final String roomName;
+
+  static final _rn = Random();
+  static const roomNames = [
+    '🔥 Chaos Kitchen', '👀 Red Flag Factory', '😂 Laugh Prison',
+    '💀 Therapy Gone Wrong', '🤖 NPC Headquarters', '🧠 Galaxy Brain Zone',
+    '🎪 The Circus', '🚨 Drama Department', '✨ Delulu Lounge',
+    '🎭 Main Character School', '🧃 Vibe Check Point', '🌀 The Spin Cycle',
+  ];
 
   int get strangers => people.length;
   bool get isOneToOne => people.length == 1;

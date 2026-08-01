@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../core/haptics.dart';
-import '../models/person.dart';
 import '../theme/tokens.dart';
 
 /// Finding — the roulette. Not a fade: a slot-machine reel of flags, faces,
@@ -35,6 +35,7 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
+    WakelockPlus.enable(); // don't let the screen sleep while matching
     _items = List.generate(_count, (i) => _Item.build(i, i == _winner, _rng));
     _c.addListener(_onTick);
     _spin();
@@ -78,6 +79,7 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
 
   @override
   void dispose() {
+    WakelockPlus.disable();
     _c.dispose();
     super.dispose();
   }
@@ -174,37 +176,71 @@ class _Item {
   _Item(this.widget);
   final Widget widget;
 
-  static const _flags = ['🇬🇧', '🇺🇸', '🇯🇵', '🇧🇷', '🇮🇹', '🇫🇷', '🇰🇷', '🇪🇸', '🇩🇪', '🇮🇳', '🇲🇽', '🇨🇦', '🇳🇬', '🇦🇺'];
-  static const _emoji = ['😂', '🔥', '💀', '❤️', '😳', '👏', '⚡️', '🎭', '🌶️', '👀'];
+  // All chosen to render on iOS out of the box — no tofu boxes.
+  static const _flags = [
+    '🇬🇧', '🇺🇸', '🇯🇵', '🇧🇷', '🇮🇹', '🇫🇷', '🇰🇷', '🇪🇸', '🇩🇪', '🇮🇳',
+    '🇲🇽', '🇨🇦', '🇳🇬', '🇦🇺', '🇿🇦', '🇦🇷', '🇳🇱', '🇸🇪', '🇵🇹', '🇮🇪',
+  ];
+  static const _faces = ['😀', '😎', '🥳', '🤩', '😏', '😇', '🤠', '🥸', '😌', '🙃', '😜', '🤪'];
+  static const _reacts = ['😂', '🔥', '💀', '❤️', '😳', '👏', '⚡', '👀', '🎉', '✨'];
 
   static _Item build(int i, bool winner, math.Random r) {
-    if (winner) return _Item(_Face(person: Person.random(r), winner: true));
+    if (winner) return _Item(_WinnerOrb(face: _faces[r.nextInt(_faces.length)]));
     switch (i % 3) {
       case 0:
         return _Item(Text(_flags[r.nextInt(_flags.length)], style: const TextStyle(fontSize: 46)));
       case 1:
-        return _Item(_Face(person: Person.random(r), winner: false));
+        return _Item(_FaceOrb(face: _faces[r.nextInt(_faces.length)]));
       default:
-        return _Item(Text(_emoji[r.nextInt(_emoji.length)], style: const TextStyle(fontSize: 40)));
+        return _Item(Text(_reacts[r.nextInt(_reacts.length)], style: const TextStyle(fontSize: 42)));
     }
   }
 }
 
-class _Face extends StatelessWidget {
-  const _Face({required this.person, required this.winner});
-  final Person person;
-  final bool winner;
+/// A glossy obsidian orb carrying a face — matches the home lobby language, so
+/// the reel never shows a flat, "blank" circle.
+class _FaceOrb extends StatelessWidget {
+  const _FaceOrb({required this.face});
+  final String face;
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: winner ? 82 : 70,
-      height: winner ? 82 : 70,
+      width: 72, height: 72,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(colors: [person.light.withOpacity(1), C.char2], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        border: Border.all(color: winner ? C.sig : Colors.white.withOpacity(0.15), width: winner ? 2.5 : 1),
-        boxShadow: [BoxShadow(color: person.light.withOpacity(winner ? 0.7 : 0.3), blurRadius: winner ? 22 : 10, spreadRadius: -3)],
+        gradient: const RadialGradient(
+          center: Alignment(-0.45, -0.55), radius: 1.05,
+          colors: [Color(0xFF2A2D34), Color(0xFF0C0D10), Color(0xFF000000)],
+          stops: [0.0, 0.55, 1.0],
+        ),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        boxShadow: [BoxShadow(color: C.sig.withOpacity(0.14), blurRadius: 14, spreadRadius: -6)],
       ),
+      child: Text(face, style: const TextStyle(fontSize: 30)),
+    );
+  }
+}
+
+class _WinnerOrb extends StatelessWidget {
+  const _WinnerOrb({required this.face});
+  final String face;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 84, height: 84,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const RadialGradient(
+          center: Alignment(-0.4, -0.5), radius: 1.05,
+          colors: [Color(0xFF3A2A55), Color(0xFF140A22), Color(0xFF000000)],
+          stops: [0.0, 0.5, 1.0],
+        ),
+        border: Border.all(color: C.sig, width: 2.5),
+        boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 26, spreadRadius: -3)],
+      ),
+      child: Text(face, style: const TextStyle(fontSize: 38)),
     );
   }
 }

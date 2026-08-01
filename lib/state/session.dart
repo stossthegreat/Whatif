@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/game.dart';
 import '../models/person.dart';
 
@@ -61,6 +62,51 @@ class AppSession extends ChangeNotifier {
     myUid = List.generate(20, (_) => _r.nextInt(16).toRadixString(16)).join();
   }
 
+  // ---- persistence (so a cold start skips onboarding) ----------------------
+  SharedPreferences? _prefs;
+  bool onboarded = false;
+
+  /// Load saved identity + onboarding state. Call once at launch *before* the
+  /// network hello, so the backend sees a stable uid across sessions.
+  Future<void> load() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      _prefs = p;
+      onboarded = p.getBool('onboarded') ?? false;
+      signedIn = p.getBool('signedIn') ?? false;
+      myUid = p.getString('uid') ?? myUid;
+      myHandle = p.getString('handle') ?? myHandle;
+      myHue = p.getDouble('hue') ?? myHue;
+      gender = p.getString('gender');
+      lookingFor = p.getString('lookingFor');
+      final a = p.getInt('age');
+      if (a != null) age = a;
+      // persist the freshly-generated identity the first time
+      if (p.getString('uid') == null) await _persist();
+    } catch (_) {/* first run / no store — defaults are fine */}
+  }
+
+  Future<void> _persist() async {
+    final p = _prefs;
+    if (p == null) return;
+    await p.setBool('onboarded', onboarded);
+    await p.setBool('signedIn', signedIn);
+    await p.setString('uid', myUid);
+    await p.setString('handle', myHandle);
+    await p.setDouble('hue', myHue);
+    if (gender != null) await p.setString('gender', gender!);
+    if (lookingFor != null) await p.setString('lookingFor', lookingFor!);
+    if (age != null) await p.setInt('age', age!);
+  }
+
+  /// Onboarding finished — remember it so we never show it again.
+  void completeOnboarding() {
+    onboarded = true;
+    signedIn = true;
+    _persist();
+    notifyListeners();
+  }
+
   /// A saved person and you both saved each other → mark it mutual (or add).
   void markMutual(String name, {double hue = 210}) {
     final i = sparks.indexWhere((s) => s.name == name);
@@ -116,6 +162,18 @@ class AppSession extends ChangeNotifier {
     return 'Chaos Lord 👑';
   }
 
+  // ---- badges (the room voted — you earned it) ----
+  final Map<String, int> badges = {
+    '😂 Funniest': 2,
+    '🔥 Main Character': 1,
+  };
+
+  void earnBadge(String key) {
+    badges[key] = (badges[key] ?? 0) + 1;
+    chaosScore += 25;
+    notifyListeners();
+  }
+
   // ---- sparks (people you vibed with) ----
   final Set<String> saved = <String>{};
   final List<Spark> sparks = <Spark>[];
@@ -144,7 +202,11 @@ class AppSession extends ChangeNotifier {
   void _seedMoments() {
     moments.addAll([
       Moment(game: 'Point Party', result: 'the room pointed at @sol', hues: [212, 196, 220, 205], laughs: 31, ago: '2h'),
+      Moment(game: 'Two Truths', result: 'you read them 😏 nailed the lie', hues: [205, 216], laughs: 24, ago: '5h'),
+      Moment(game: 'Hot Take', result: 'the room split 68% your way', hues: [196, 220, 208], laughs: 17, ago: 'yesterday'),
       Moment(game: 'Freeze Face', result: 'you cracked 😂 @nova won', hues: [220, 208], laughs: 12, ago: 'yesterday'),
+      Moment(game: 'Confession Cam', result: '4 in the room are guilty 👀', hues: [212, 190, 200, 216, 205], laughs: 42, ago: '2d'),
+      Moment(game: 'Survival', result: 'the room crowned @maple', hues: [220, 196, 205], laughs: 28, ago: '2d'),
     ]);
   }
 
@@ -184,17 +246,20 @@ class AppSession extends ChangeNotifier {
     if (age != null) this.age = age;
     if (gender != null) this.gender = gender;
     if (lookingFor != null) this.lookingFor = lookingFor;
+    _persist();
     notifyListeners();
   }
 
   void signOut() {
     signedIn = false;
+    onboarded = false;
     age = null;
     gender = null;
     lookingFor = null;
     saved.clear();
     sparks.clear();
     _initIdentity();
+    _prefs?.clear();
     notifyListeners();
   }
 

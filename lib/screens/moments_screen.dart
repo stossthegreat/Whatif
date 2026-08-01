@@ -51,10 +51,7 @@ class MomentsScreen extends StatelessWidget {
                 ),
                 Expanded(
                   child: moments.isEmpty
-                      ? Center(child: Padding(
-                          padding: const EdgeInsets.all(40),
-                          child: Text('Play a few rooms — your best moments land here, ready to share.',
-                              style: T.body, textAlign: TextAlign.center)))
+                      ? const _EmptyMoments()
                       : GridView.builder(
                           padding: const EdgeInsets.fromLTRB(18, 4, 18, 28),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -75,37 +72,112 @@ class MomentsScreen extends StatelessWidget {
   }
 }
 
+/// A captured moment as a mini share-card — dark gradient, a purple glow, the
+/// game tag, the punchline in bold, the people who were there, and the laughs.
+/// Tapping opens the full shareable card.
 class _MomentCard extends StatelessWidget {
   const _MomentCard(this.m);
   final Moment m;
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(
-          colors: [C.sig.withOpacity(0.16), C.glass],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            colors: [Color(0xFF17091F), Color(0xFF0A0B10)],
+          ),
+          border: Border.all(color: C.hair2),
         ),
-        border: Border.all(color: C.hair),
+        child: Stack(
+          children: [
+            // purple glow, top-right
+            Positioned(
+              top: -34, right: -30,
+              child: Container(
+                width: 120, height: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(colors: [C.sig.withOpacity(0.45), Colors.transparent]),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(15),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(m.game.toUpperCase(), style: T.eyebrow.copyWith(color: C.sig, fontSize: 9.5, letterSpacing: 1.6)),
+                      const Spacer(),
+                      const Icon(Icons.play_circle_fill_rounded, size: 18, color: Colors.white24),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: Text(m.result,
+                        style: T.h3.copyWith(color: Colors.white, fontWeight: FontWeight.w800, height: 1.16, fontSize: 17)),
+                  ),
+                  Row(children: [
+                    for (final h in m.hues.take(4))
+                      Align(
+                        widthFactor: 0.7,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFF0A0B10), width: 2),
+                          ),
+                          child: IdentityOrb(hue: h, size: 24),
+                        ),
+                      ),
+                  ]),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Text('😂 ${m.laughs}', style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+                    const Spacer(),
+                    Text(m.ago, style: T.tiny.copyWith(color: C.tx3)),
+                  ]),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(m.game.toUpperCase(), style: T.eyebrow.copyWith(color: C.sig, fontSize: 10)),
-          const SizedBox(height: 10),
-          Expanded(child: Text(m.result, style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w700, height: 1.2))),
-          Row(children: [
-            for (final h in m.hues.take(4)) Padding(padding: const EdgeInsets.only(right: 4), child: IdentityOrb(hue: h, size: 20)),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
-            Text('😂 ${m.laughs}', style: T.tiny.copyWith(color: C.tx2, fontWeight: FontWeight.w700)),
-            const Spacer(),
-            Text(m.ago, style: T.tiny),
-          ]),
-        ],
+    );
+  }
+}
+
+/// A designed empty state — never a lonely line of text.
+class _EmptyMoments extends StatelessWidget {
+  const _EmptyMoments();
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 92, height: 92,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(colors: [C.sig.withOpacity(0.3), C.purpleDeep.withOpacity(0.2)]),
+                border: Border.all(color: C.sig.withOpacity(0.5)),
+                boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 34, spreadRadius: -10)],
+              ),
+              child: const Text('🎬', style: TextStyle(fontSize: 40)),
+            ),
+            const SizedBox(height: 22),
+            Text('Your moments live here', style: T.big.copyWith(fontSize: 22), textAlign: TextAlign.center),
+            const SizedBox(height: 10),
+            Text('Every big reveal gets captured as a card built to share. Drop into a room and make one.',
+                style: T.body, textAlign: TextAlign.center),
+          ],
+        ),
       ),
     );
   }
