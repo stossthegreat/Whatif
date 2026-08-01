@@ -1,4 +1,4 @@
-# Building WhatIf for TestFlight
+# Building Rivlr for TestFlight
 
 The app is a complete, buildable Flutter project. These are the exact steps to
 get it onto TestFlight. (Requires a Mac with Xcode and an Apple Developer Program
@@ -38,7 +38,7 @@ The camera/microphone usage strings are already in `ios/Runner/Info.plist`.
 - **Live build** — deploy `server/` to Railway + a LiveKit project (see
   `server/README.md`), then build with the backend wired in:
   ```bash
-  flutter build ipa --release --dart-define=WHATIF_BACKEND=wss://<your-domain>/ws
+  flutter build ipa --release --dart-define=RIVLR_BACKEND=wss://<your-domain>/ws
   ```
   In live mode LiveKit owns the camera and prompts for permission on the first
   match; matchmaking pairs real strangers and their video fills the tiles.

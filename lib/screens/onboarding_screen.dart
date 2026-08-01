@@ -51,8 +51,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      const Text('What', style: T.mark),
-                      Text('If', style: T.mark.copyWith(fontWeight: FontWeight.w800)),
+                      const Wordmark(size: 21),
                       const Spacer(),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),

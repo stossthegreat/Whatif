@@ -1,9 +1,9 @@
 {
-  "name": "whatif-server",
+  "name": "rivlr-server",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "WhatIf matchmaking + live-video (LiveKit) signaling server",
+  "description": "Rivlr matchmaking + live-video (LiveKit) signaling server",
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts"

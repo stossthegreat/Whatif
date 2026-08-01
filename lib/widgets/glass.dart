@@ -4,6 +4,33 @@ import 'package:flutter/physics.dart';
 import '../core/haptics.dart';
 import '../theme/tokens.dart';
 
+/// The Rivlr wordmark — clean white with a single cool-signal period. The one
+/// brand flourish, used across onboarding and Home.
+class Wordmark extends StatelessWidget {
+  const Wordmark({super.key, this.size = 20, this.color = C.tx});
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text.rich(
+      TextSpan(
+        style: TextStyle(
+          fontSize: size,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -size * 0.035,
+          color: color,
+          height: 1.0,
+        ),
+        children: const [
+          TextSpan(text: 'Rivlr'),
+          TextSpan(text: '.', style: TextStyle(color: C.sig)),
+        ],
+      ),
+    );
+  }
+}
+
 /// A frosted glass surface with a specular top edge (the "gloss").
 class Glass extends StatelessWidget {
   const Glass({

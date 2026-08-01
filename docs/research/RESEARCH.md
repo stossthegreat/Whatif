@@ -1,4 +1,4 @@
-# WhatIf — Research Evidence Base
+# Rivlr — Research Evidence Base
 
 Three parallel research digs underpin the **Addiction & Fun Engine** (spec §3).
 Condensed findings + full sources below.
@@ -61,7 +61,7 @@ Magazine) · streak ethics (Smashing Magazine; UX Magazine) · guilt notificatio
 - **Thin frame, fat deck:** each game = a template + a versioned prompt pool; the
   recomposing group is procedural content, so repeats never feel the same.
 
-**The 18-game launch portfolio** and **6 rules of a WhatIf game** are in spec §3.5.
+**The 18-game launch portfolio** and **6 rules of a Rivlr game** are in spec §3.5.
 
 **Sources:** BreakNice (icebreaker psychology) · PartyPlay (party-game psychology) ·
 Group Humor (Medium) · Psychology Today (improv reduces social anxiety) · American

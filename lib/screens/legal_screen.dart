@@ -62,7 +62,7 @@ class LegalCopy {
 
   static const privacy = '''PLACEHOLDER — replace with your real Privacy Policy.
 
-WhatIf is a live social app for adults (18+). This is a summary of how we intend to handle your data:
+Rivlr is a live social app for adults (18+). This is a summary of how we intend to handle your data:
 
 • Camera & microphone are used only to connect you live with other people. We do not record or store your video or audio.
 
@@ -72,13 +72,13 @@ WhatIf is a live social app for adults (18+). This is a summary of how we intend
 
 • You can delete your account and associated data at any time from Settings.
 
-Contact: privacy@whatif.example
+Contact: privacy@rivlr.example
 
 Last updated: replace-me.''';
 
   static const terms = '''PLACEHOLDER — replace with your real Terms of Service.
 
-By using WhatIf you agree to:
+By using Rivlr you agree to:
 
 • You are 18 years or older.
 
@@ -88,11 +88,11 @@ By using WhatIf you agree to:
 
 • The service is provided “as is” while in early access.
 
-Contact: support@whatif.example
+Contact: support@rivlr.example
 
 Last updated: replace-me.''';
 
-  static const about = '''WhatIf — what happens tonight?
+  static const about = '''Rivlr — what happens tonight?
 
 A live social platform. Press one button and, seconds later, you’re face-to-face with people you’ve never met — sometimes one, sometimes a room. A quick game breaks the ice, then the moment moves on. You never know who’s next.
 

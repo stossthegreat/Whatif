@@ -25,10 +25,7 @@ class WelcomeScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 18),
-                  Row(children: [
-                    const Text('What', style: T.mark),
-                    Text('If', style: T.mark.copyWith(fontWeight: FontWeight.w800)),
-                  ]),
+                  const Wordmark(size: 21),
                   const Spacer(),
                   Text('Meet someone\nnew. Every\nsingle night.', style: T.huge(46 * r.scale)),
                   const SizedBox(height: 18),

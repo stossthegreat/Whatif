@@ -16,13 +16,13 @@ import 'screens/home_screen.dart';
 import 'screens/finding_screen.dart';
 import 'screens/live_screen.dart';
 
-class WhatIfApp extends StatelessWidget {
-  const WhatIfApp({super.key});
+class RivlrApp extends StatelessWidget {
+  const RivlrApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'WhatIf',
+      title: 'Rivlr',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

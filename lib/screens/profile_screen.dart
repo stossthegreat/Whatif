@@ -44,7 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 20),
               Text('A few quick\nthings.', style: T.huge(38 * r.scale)),
               const SizedBox(height: 8),
-              Text('WhatIf is 18+. This helps us match you well.', style: T.sub),
+              Text('Rivlr is 18+. This helps us match you well.', style: T.sub),
               const SizedBox(height: 30),
 
               Expanded(

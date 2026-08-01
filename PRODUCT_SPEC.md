@@ -1,4 +1,4 @@
-# WhatIf — Product & Design Spec
+# Rivlr — Product & Design Spec
 
 > **Press one button. Seconds later you're live with people you've never met.
 > You never know who, how many, or what happens next.**
@@ -14,7 +14,7 @@ stranger discovery** (every drop is new people; see §3.7 for the one addition).
 
 ## 1. Thesis
 
-WhatIf compresses the entire arc of meeting someone — the anticipation, the
+Rivlr compresses the entire arc of meeting someone — the anticipation, the
 awkward hello, the laugh, the moment you'll retell — into a loop you start with
 **one tap** and re-roll forever.
 
@@ -47,7 +47,7 @@ sketchy, cheap, and static. **That gap is the product.**
 ```
 
 **The fluid cell.** Monkey is *skip → new stranger → skip* (1:1, discrete).
-Jackbox is one fixed room. **WhatIf is neither** — you're dropped into a **living
+Jackbox is one fixed room. **Rivlr is neither** — you're dropped into a **living
 cell that continuously recomposes**, membership and activity morphing every beat.
 The next comes to *you*. The app is a **conductor** deciding group size, games,
 twists, tempo. The user has three verbs: **PLAY · NEXT · LEAVE** — and one always
@@ -75,7 +75,7 @@ the drug.
 > **Design law: protect the held breath above everything. Design the 1.5s, not
 > the person.**
 
-### 3.2 The WhatIf compulsion loop
+### 3.2 The Rivlr compulsion loop
 
 Each step names the specific dopamine lever it pulls.
 
@@ -118,7 +118,7 @@ anxiety and Zoom-fatigue).
 
 ### 3.4 Triple-random composition
 
-WhatIf randomizes **three independent variables at once**, re-rolled every
+Rivlr randomizes **three independent variables at once**, re-rolled every
 recompose — where TikTok randomizes one (content). Compound uncertainty makes
 prediction *impossible*, so the anticipation ramp stays pinned near maximum and
 novelty decays far slower.
@@ -141,7 +141,7 @@ rhythm never goes samey):
 2. **Simultaneous Action → Verdict** — everyone acts at once; the grid renders a live verdict (fastest, most video-native).
 3. **Pattern → Break** — rhythm/standoff; the break is the joke (zero content needed).
 
-**The 6 rules of a WhatIf game:** ① one sentence to play · ② point the camera at
+**The 6 rules of a Rivlr game:** ① one sentence to play · ② point the camera at
 faces, not text · ③ everyone risks at once (reciprocal vulnerability — no one
 cornered alone) · ④ build one peak, then get out (setup → anticipation →
 simultaneous reveal → hand-off; cut it the instant the laugh lands) · ⑤ **no
@@ -283,7 +283,7 @@ whisper.
 ### 0 · First run (≤ 60s to first live face)
 Open on a **value moment, not a form**: a beautiful mirrored self-view already
 running + one glowing PLAY. Tap PLAY → camera/mic permission fires **at the moment
-of intent** ("to meet someone, WhatIf needs to see you"). 18+ age assurance runs
+of intent** ("to meet someone, Rivlr needs to see you"). 18+ age assurance runs
 **inside** the flattering "getting ready" self-view, so the legal gate *is* the
 anticipation beat. Defer everything else — no username/bio before the first
 electric reveal. **The first match is rigged** to a warm, high-quality partner so

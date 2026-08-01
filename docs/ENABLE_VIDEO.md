@@ -105,7 +105,7 @@ class VideoView extends StatelessWidget {
 
 That's it. Build live:
 ```bash
-flutter build ipa --release --dart-define=WHATIF_BACKEND=wss://<your-domain>/ws
+flutter build ipa --release --dart-define=RIVLR_BACKEND=wss://<your-domain>/ws
 ```
 
 > If the LiveKit SDK's API differs slightly by version, the only files to touch

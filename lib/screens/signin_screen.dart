@@ -29,10 +29,7 @@ class SignInScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 18),
-              Row(children: [
-                const Text('What', style: T.mark),
-                Text('If', style: T.mark.copyWith(fontWeight: FontWeight.w800)),
-              ]),
+              const Wordmark(size: 21),
               const Spacer(),
               Text('Save your\nvibe.', style: T.huge(42 * r.scale)),
               const SizedBox(height: 14),

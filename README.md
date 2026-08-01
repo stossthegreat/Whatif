@@ -1,4 +1,4 @@
-# WhatIf
+# Rivlr
 
 **Press one button. Seconds later you're live with people you've never met.**
 
@@ -53,7 +53,7 @@ lib/
 - **Simulated (default):** compiles with only standard packages (camera +
   web_socket_channel) — bulletproof for Codemagic/TestFlight. People, matches and
   games are on-device; your camera is the self-view.
-- **Live matchmaking:** set `--dart-define=WHATIF_BACKEND=wss://…/ws` (deploy
+- **Live matchmaking:** set `--dart-define=RIVLR_BACKEND=wss://…/ws` (deploy
   `server/` to Railway). Real strangers pair; presence, games, reactions and
   report/block are live.
 - **Live video:** an opt-in add-on (LiveKit) — see `docs/ENABLE_VIDEO.md`. Kept

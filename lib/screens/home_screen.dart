@@ -31,10 +31,7 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Row(children: [
-                        const Text('What', style: T.mark),
-                        Text('If', style: T.mark.copyWith(fontWeight: FontWeight.w800)),
-                      ]),
+                      const Wordmark(size: 21),
                       const Spacer(),
                       AnimatedBuilder(
                         animation: AppSession.instance,
