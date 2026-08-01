@@ -104,7 +104,8 @@ async function formCell(memberIds: string[]) {
   let k = lastKind;
   let n = lastName;
   for (let i = 0; i < ROUNDS; i++) {
-    const r = rollGame(strangers, k, n);
+    const vibe = i === 0 ? 'warm' : i === ROUNDS - 1 ? 'spark' : undefined;
+    const r = rollGame(strangers, k, n, vibe);
     k = r.game.kind;
     n = r.game.name;
     rounds.push({ kind: r.game.kind, name: r.game.name, hint: r.game.hint, prompt: r.prompt });

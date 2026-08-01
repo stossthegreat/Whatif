@@ -3,7 +3,7 @@
 // and the matchmaker avoids repeating the last kind, so cells never feel samey.
 
 export type GameKind =
-  | 'point' | 'poll' | 'wouldRather' | 'thumbs' | 'same' | 'freeze' | 'twoTruths' | 'rapidFire';
+  | 'point' | 'poll' | 'wouldRather' | 'thumbs' | 'same' | 'freeze' | 'twoTruths' | 'rapidFire' | 'spin';
 
 export interface GameDef {
   kind: GameKind;
@@ -12,6 +12,8 @@ export interface GameDef {
   minStrangers: number;
   maxStrangers: number;
   prompts: string[][]; // [headline, ...options]
+  // session-arc tier: 'warm' (round 1), 'wild' (default), 'spark' (flirty finale)
+  vibe?: 'warm' | 'wild' | 'spark';
 }
 
 export const PACK: GameDef[] = [
@@ -24,7 +26,7 @@ export const PACK: GameDef[] = [
       ['Who has the worst screen time?'], ['Most likely to become famous'],
       ['Who is the main character here?'], ['Most likely to ghost the group'],
     ] },
-  { kind: 'poll', name: 'Hot Take', hint: 'pick a side',
+  { kind: 'poll', name: 'Hot Take', vibe: 'warm', hint: 'pick a side',
     minStrangers: 1, maxStrangers: 8, prompts: [
       ['Pineapple on pizza?', 'crime', 'genius'], ['Socks in bed?', 'yes', 'never'],
       ['Text or call?', 'text', 'call'], ['Cereal then milk?', 'right', 'chaos'],
@@ -40,7 +42,7 @@ export const PACK: GameDef[] = [
       ['…pretended to know a song I didn’t'], ['…re-gifted a present'],
       ['…googled myself'], ['…lied to get out of a date'],
     ] },
-  { kind: 'same', name: 'Same Brain', hint: 'match the room — pick fast',
+  { kind: 'same', name: 'Same Brain', vibe: 'warm', hint: 'match the room — pick fast',
     minStrangers: 1, maxStrangers: 8, prompts: [
       ['Name a fruit', 'banana', 'apple', 'mango', 'grape'],
       ['A colour, go', 'blue', 'red', 'green', 'black'],
@@ -55,7 +57,7 @@ export const PACK: GameDef[] = [
       ['Give your worst fake cry — and hold'], ['Your best villain smile — freeze'],
       ['Most confused face — hold it'], ['Puppy eyes. Do not break.'],
     ] },
-  { kind: 'wouldRather', name: 'Would You Rather', hint: 'lock your choice, then compare',
+  { kind: 'wouldRather', name: 'Would You Rather', vibe: 'warm', hint: 'lock your choice, then compare',
     minStrangers: 1, maxStrangers: 6, prompts: [
       ['Fight 100 duck-sized horses, or…', '100 tiny horses', '1 giant duck'],
       ['Always be 10 min late, or…', 'always late', 'always 20 early'],
@@ -63,7 +65,7 @@ export const PACK: GameDef[] = [
       ['Be famous, or…', 'famous', 'filthy rich'],
       ['Teleport, or…', 'teleport', 'fly'],
     ] },
-  { kind: 'twoTruths', name: 'Two Truths', hint: 'read their face — spot the lie',
+  { kind: 'twoTruths', name: 'Two Truths', vibe: 'spark', hint: 'read their face — spot the lie',
     minStrangers: 1, maxStrangers: 2, prompts: [
       ['Which one is the lie?', 'skydived once', 'has four siblings', 'hates coffee'],
       ['Spot the lie', 'met a celebrity', 'speaks 3 languages', 'broke a bone at 7'],
@@ -102,7 +104,7 @@ export const PACK: GameDef[] = [
       ['Everyone make a COW 🐄 — point at the best'], ['Make a police SIREN 🚨'],
       ['Do your best EVIL LAUGH 😈'], ['Make a phone RINGTONE 📱'],
     ] },
-  { kind: 'point', name: 'First Impression', hint: 'first 5 seconds — vote your fave',
+  { kind: 'point', name: 'First Impression', vibe: 'spark', hint: 'first 5 seconds — vote your fave',
     minStrangers: 2, maxStrangers: 8, prompts: [
       ['Who’s the main character of this room?'], ['Who would you grab a drink with?'],
       ['Who’s got the best energy?'], ['Who’s the most chaotic?'],
@@ -122,7 +124,7 @@ export const PACK: GameDef[] = [
       ['Roast the person on your left (with love)'], ['Roast this app. Go.'],
       ['Roast your own haircut before someone else does'], ['Roast Mondays like they owe you money'],
     ] },
-  { kind: 'same', name: 'Emoji Only', hint: 'answer in one emoji — match the room',
+  { kind: 'same', name: 'Emoji Only', vibe: 'warm', hint: 'answer in one emoji — match the room',
     minStrangers: 1, maxStrangers: 8, prompts: [
       ['Your week, in one emoji', '😂', '💀', '😭', '🔥'],
       ['Your love life, one emoji', '📉', '🔥', '👻', '🤡'],
@@ -256,7 +258,7 @@ export const PACK: GameDef[] = [
       ['Most likely to argue with a self-checkout machine'],
       ['Most likely to text their ex tonight'],
     ] },
-  { kind: 'poll', name: 'Green Flag Red Flag', hint: 'judge them. instantly.',
+  { kind: 'poll', name: 'Green Flag Red Flag', vibe: 'warm', hint: 'judge them. instantly.',
     minStrangers: 1, maxStrangers: 8, prompts: [
       ['They reply in 0.2 seconds', 'green flag', 'red flag'],
       ['They still follow all their exes', 'green flag', 'red flag'],
@@ -265,7 +267,7 @@ export const PACK: GameDef[] = [
       ['They talk to their pet in a baby voice', 'green flag', 'red flag'],
       ['Their camera roll is 90% selfies', 'green flag', 'red flag'],
     ] },
-  { kind: 'thumbs', name: 'Delulu Check', hint: '👍 = you actually believe it',
+  { kind: 'thumbs', name: 'Delulu Check', vibe: 'warm', hint: '👍 = you actually believe it',
     minStrangers: 1, maxStrangers: 8, prompts: [
       ['I could land a plane in an emergency'],
       ['I could survive a zombie apocalypse'],
@@ -274,7 +276,7 @@ export const PACK: GameDef[] = [
       ['I could go pro if I trained for a year'],
       ['A celebrity would 100% date me'],
     ] },
-  { kind: 'same', name: 'Cursed Combos', hint: 'pick the worst — match the room',
+  { kind: 'same', name: 'Cursed Combos', vibe: 'warm', hint: 'pick the worst — match the room',
     minStrangers: 1, maxStrangers: 8, prompts: [
       ['Worst pizza topping', 'toothpaste', 'mayo ice cream', 'wet socks', 'gravel'],
       ['Worst superpower', 'always slightly damp', 'teleport 3cm', 'invisible when nobody looks', 'talk to pigeons'],
@@ -287,6 +289,54 @@ export const PACK: GameDef[] = [
       ['You’re all mannequins. HOLD IT'],
       ['Buffering robots. Do not un-buffer.'],
     ] },
+  // ---- face battles (the camera IS the game) ----
+  { kind: 'freeze', name: 'Face Battle', hint: 'pull it. HOLD it. funniest wins.',
+    minStrangers: 1, maxStrangers: 8, prompts: [
+      ['UGLIEST face contest. 3…2…1 GO'], ['Best fish face 🐟 hold it'],
+      ['Cross-eyed + tongue out. HOLD'], ['Double chin championship. Commit.'],
+      ['Your best “I just saw my ex” face'], ['Your “wifi dropped mid-message” face'],
+      ['Best evil villain smirk. Freeze.'], ['The face you make reading old texts'],
+    ] },
+  // ---- SPARK — the flirty finale ----
+  { kind: 'spin', name: 'Spin the Bottle', vibe: 'spark', hint: 'the bottle picks. no escape.',
+    minStrangers: 1, maxStrangers: 8, prompts: [
+      ['{target} — what’s your actual type? Be honest'],
+      ['{target} — rate your own rizz out of 10'],
+      ['{target} — best pickup line. Right now.'],
+      ['{target} — who in this room would you take on a date? 👀'],
+      ['{target} — blow the room a kiss. Commit.'],
+      ['{target} — describe your dream date in 10 seconds'],
+      ['{target} — your most romantic move ever. Spill.'],
+      ['{target} — flirt with the camera for 5 seconds'],
+    ] },
+  { kind: 'point', name: 'Rizz Battle', vibe: 'spark', hint: 'smoothest wins. or funniest fail.',
+    minStrangers: 1, maxStrangers: 8, prompts: [
+      ['Best pickup line wins. GO'], ['Worst pickup line on purpose'],
+      ['Rizz up an imaginary barista'], ['Shoot your shot at the camera — smoothest wins'],
+      ['Compliment someone so hard they short-circuit'],
+    ] },
+  { kind: 'freeze', name: 'Kiss Face', vibe: 'spark', hint: 'fully commit. do not laugh.',
+    minStrangers: 1, maxStrangers: 8, prompts: [
+      ['Practice your kiss face 😗 HOLD IT'], ['Slow-motion air kiss. Fully commit 😂'],
+      ['Wink at the camera like a movie star. Freeze.'], ['Your best “hey you” face. Hold it.'],
+      ['Blow a kiss in extreme slow motion'],
+    ] },
+  { kind: 'freeze', name: 'Eye Contact', vibe: 'spark', hint: 'hold it. no laughing.',
+    minStrangers: 1, maxStrangers: 8, prompts: [
+      ['Dead-eye contact with the camera. 10 seconds. No laughing'],
+      ['Stare-off. First to blink loses'], ['Look into the lens like you’re in love. HOLD.'],
+      ['Eye contact + slow smile. Do not crack.'],
+    ] },
+  { kind: 'point', name: 'Compliment Battle', vibe: 'spark', hint: 'make someone blush — words only',
+    minStrangers: 2, maxStrangers: 8, prompts: [
+      ['Best compliment to the person on your left'], ['Hype up a stranger like they’re your best mate'],
+      ['Make someone blush with words only'], ['Give the most oddly specific compliment'],
+    ] },
+  { kind: 'point', name: 'Date Pitch', vibe: 'spark', hint: '30 seconds. sell it.',
+    minStrangers: 1, maxStrangers: 8, prompts: [
+      ['30 seconds: why you’d be an elite date'], ['Pitch the WORST date idea ever'],
+      ['Sell your love life like a startup'], ['Plan a first date with £5. Convince us.'],
+    ] },
 ];
 
 const pick = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
@@ -295,7 +345,7 @@ const pick = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 const SIZE_BAG = [2, 2, 2, 3, 3, 4, 6];
 export const rollMemberCount = () => pick(SIZE_BAG);
 
-export function rollGame(strangers: number, avoidKind?: GameKind, avoidName?: string) {
+export function rollGame(strangers: number, avoidKind?: GameKind, avoidName?: string, vibe?: string) {
   let fits = PACK.filter((g) => strangers >= g.minStrangers && strangers <= g.maxStrangers);
   if (!fits.length) fits = PACK; // solo / edge — never crash
   // prefer a different kind AND a different name than last time, so no two
@@ -305,6 +355,11 @@ export function rollGame(strangers: number, avoidKind?: GameKind, avoidName?: st
   else {
     const byName = fits.filter((g) => g.name !== avoidName);
     if (byName.length) fits = byName;
+  }
+  // session arc: open warm, end on spark — strangers warm up before kiss faces
+  if (vibe) {
+    const tiered = fits.filter((g) => (g.vibe ?? 'wild') === vibe);
+    if (tiered.length) fits = tiered;
   }
   const game = pick(fits);
   const chosen = pick(game.prompts);

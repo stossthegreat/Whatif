@@ -7,7 +7,7 @@ import 'person.dart';
 /// experiences — including 1:1-only games — depending on the (unpredictable)
 /// group size. Prompts are deep and never repeat back-to-back, so no two plays
 /// feel the same.
-enum GameKind { point, poll, wouldRather, thumbs, same, freeze, twoTruths, rapidFire }
+enum GameKind { point, poll, wouldRather, thumbs, same, freeze, twoTruths, rapidFire, spin }
 
 GameKind gameKindFrom(String s) =>
     GameKind.values.firstWhere((k) => k.name == s, orElse: () => GameKind.poll);
@@ -20,6 +20,7 @@ class GameDef {
     required this.minStrangers,
     required this.maxStrangers,
     required this.prompts,
+    this.vibe = 'wild',
   });
 
   final GameKind kind;
@@ -27,6 +28,10 @@ class GameDef {
   final String hint;
   final int minStrangers;
   final int maxStrangers;
+
+  /// Session-arc tier: 'warm' (round 1 — instant answers), 'wild' (the chaos
+  /// middle), 'spark' (the flirty finale — the seed of the dating vision).
+  final String vibe;
 
   /// Each prompt is [headline, ...options]. Some kinds ignore options.
   final List<List<String>> prompts;
@@ -48,7 +53,7 @@ class GameDef {
       ],
     ),
     GameDef(
-      kind: GameKind.poll, name: 'Hot Take', hint: 'pick a side',
+      kind: GameKind.poll, name: 'Hot Take', vibe: 'warm', hint: 'pick a side',
       minStrangers: 1, maxStrangers: 8,
       prompts: [
         ['Pineapple on pizza?', 'crime', 'genius'], ['Socks in bed?', 'yes', 'never'],
@@ -72,7 +77,7 @@ class GameDef {
       ],
     ),
     GameDef(
-      kind: GameKind.same, name: 'Same Brain', hint: 'match the room — pick fast',
+      kind: GameKind.same, name: 'Same Brain', vibe: 'warm', hint: 'match the room — pick fast',
       minStrangers: 1, maxStrangers: 8,
       prompts: [
         ['Name a fruit', 'banana', 'apple', 'mango', 'grape'],
@@ -96,7 +101,7 @@ class GameDef {
       ],
     ),
     GameDef(
-      kind: GameKind.wouldRather, name: 'Would You Rather', hint: 'lock your choice, then compare',
+      kind: GameKind.wouldRather, name: 'Would You Rather', vibe: 'warm', hint: 'lock your choice, then compare',
       minStrangers: 1, maxStrangers: 6,
       prompts: [
         ['Fight 100 duck-sized horses, or…', '100 tiny horses', '1 giant duck'],
@@ -110,7 +115,7 @@ class GameDef {
       ],
     ),
     GameDef(
-      kind: GameKind.twoTruths, name: 'Two Truths', hint: 'read their face — spot the lie',
+      kind: GameKind.twoTruths, name: 'Two Truths', vibe: 'spark', hint: 'read their face — spot the lie',
       minStrangers: 1, maxStrangers: 2,
       prompts: [
         ['Which one is the lie?', 'skydived once', 'has four siblings', 'hates coffee'],
@@ -185,7 +190,7 @@ class GameDef {
       ],
     ),
     GameDef(
-      kind: GameKind.point, name: 'First Impression', hint: 'first 5 seconds — vote your fave',
+      kind: GameKind.point, name: 'First Impression', vibe: 'spark', hint: 'first 5 seconds — vote your fave',
       minStrangers: 2, maxStrangers: 8,
       prompts: [
         ['Who’s the main character of this room?'], ['Who would you grab a drink with?'],
@@ -217,7 +222,7 @@ class GameDef {
       ],
     ),
     GameDef(
-      kind: GameKind.same, name: 'Emoji Only', hint: 'answer in one emoji — match the room',
+      kind: GameKind.same, name: 'Emoji Only', vibe: 'warm', hint: 'answer in one emoji — match the room',
       minStrangers: 1, maxStrangers: 8,
       prompts: [
         ['Your week, in one emoji', '😂', '💀', '😭', '🔥'],
@@ -413,7 +418,7 @@ class GameDef {
       ],
     ),
     GameDef(
-      kind: GameKind.poll, name: 'Green Flag Red Flag', hint: 'judge them. instantly.',
+      kind: GameKind.poll, name: 'Green Flag Red Flag', vibe: 'warm', hint: 'judge them. instantly.',
       minStrangers: 1, maxStrangers: 8,
       prompts: [
         ['They reply in 0.2 seconds', 'green flag', 'red flag'],
@@ -425,7 +430,7 @@ class GameDef {
       ],
     ),
     GameDef(
-      kind: GameKind.thumbs, name: 'Delulu Check', hint: '👍 = you actually believe it',
+      kind: GameKind.thumbs, name: 'Delulu Check', vibe: 'warm', hint: '👍 = you actually believe it',
       minStrangers: 1, maxStrangers: 8,
       prompts: [
         ['I could land a plane in an emergency'],
@@ -437,7 +442,7 @@ class GameDef {
       ],
     ),
     GameDef(
-      kind: GameKind.same, name: 'Cursed Combos', hint: 'pick the worst — match the room',
+      kind: GameKind.same, name: 'Cursed Combos', vibe: 'warm', hint: 'pick the worst — match the room',
       minStrangers: 1, maxStrangers: 8,
       prompts: [
         ['Worst pizza topping', 'toothpaste', 'mayo ice cream', 'wet socks', 'gravel'],
@@ -453,6 +458,88 @@ class GameDef {
         ['Everyone act like an NPC. First to break loses'],
         ['You’re all mannequins. HOLD IT'],
         ['Buffering robots. Do not un-buffer.'],
+      ],
+    ),
+    // ---- face battles (the camera IS the game) -----------------------------
+    GameDef(
+      kind: GameKind.freeze, name: 'Face Battle', hint: 'pull it. HOLD it. funniest wins.',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['UGLIEST face contest. 3…2…1 GO'],
+        ['Best fish face 🐟 hold it'],
+        ['Cross-eyed + tongue out. HOLD'],
+        ['Double chin championship. Commit.'],
+        ['Your best “I just saw my ex” face'],
+        ['Your “wifi dropped mid-message” face'],
+        ['Best evil villain smirk. Freeze.'],
+        ['The face you make reading old texts'],
+      ],
+    ),
+    // ---- SPARK — the flirty finale (the seed of the dating vision) ---------
+    GameDef(
+      kind: GameKind.spin, name: 'Spin the Bottle', vibe: 'spark', hint: 'the bottle picks. no escape.',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['{target} — what’s your actual type? Be honest'],
+        ['{target} — rate your own rizz out of 10'],
+        ['{target} — best pickup line. Right now.'],
+        ['{target} — who in this room would you take on a date? 👀'],
+        ['{target} — blow the room a kiss. Commit.'],
+        ['{target} — describe your dream date in 10 seconds'],
+        ['{target} — your most romantic move ever. Spill.'],
+        ['{target} — flirt with the camera for 5 seconds'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Rizz Battle', vibe: 'spark', hint: 'smoothest wins. or funniest fail.',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Best pickup line wins. GO'],
+        ['Worst pickup line on purpose'],
+        ['Rizz up an imaginary barista'],
+        ['Shoot your shot at the camera — smoothest wins'],
+        ['Compliment someone so hard they short-circuit'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.freeze, name: 'Kiss Face', vibe: 'spark', hint: 'fully commit. do not laugh.',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Practice your kiss face 😗 HOLD IT'],
+        ['Slow-motion air kiss. Fully commit 😂'],
+        ['Wink at the camera like a movie star. Freeze.'],
+        ['Your best “hey you” face. Hold it.'],
+        ['Blow a kiss in extreme slow motion'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.freeze, name: 'Eye Contact', vibe: 'spark', hint: 'hold it. no laughing.',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Dead-eye contact with the camera. 10 seconds. No laughing'],
+        ['Stare-off. First to blink loses'],
+        ['Look into the lens like you’re in love. HOLD.'],
+        ['Eye contact + slow smile. Do not crack.'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Compliment Battle', vibe: 'spark', hint: 'make someone blush — words only',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['Best compliment to the person on your left'],
+        ['Hype up a stranger like they’re your best mate'],
+        ['Make someone blush with words only'],
+        ['Give the most oddly specific compliment'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Date Pitch', vibe: 'spark', hint: '30 seconds. sell it.',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['30 seconds: why you’d be an elite date'],
+        ['Pitch the WORST date idea ever'],
+        ['Sell your love life like a startup'],
+        ['Plan a first date with £5. Convince us.'],
       ],
     ),
   ];
@@ -517,6 +604,13 @@ class Cell {
       if (fits.isEmpty) fits = [...GameDef.pack];
       final varied = fits.where((g) => g.kind != lastKind && g.name != lastName).toList();
       if (varied.isNotEmpty) fits = varied;
+      // the session arc: open warm (instant answers), end on spark (flirty).
+      // Strangers need a warm-up before they'll do a kiss face.
+      final wantVibe = i == 0 ? 'warm' : (i == count - 1 ? 'spark' : null);
+      if (wantVibe != null) {
+        final tiered = fits.where((g) => g.vibe == wantVibe).toList();
+        if (tiered.isNotEmpty) fits = tiered;
+      }
       final game = fits[r.nextInt(fits.length)];
       lastKind = game.kind;
       lastName = game.name;

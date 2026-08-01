@@ -101,9 +101,21 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   bool _stamp = true; // the room-name stamp on arrival
   bool _wheelRevive = false; // decided once, when the wheel is armed
 
+  // the {target} engine — every round one random person can be "it". For spin
+  // games the animated bottle IS the picker; for others it fills prompt slots.
+  int _target = 0;
+  bool _bottleDone = true;
+
   Cell get cell => widget.cell;
   GameDef get game => cell.rounds[_round].game;
   List<String> get _prompt => cell.rounds[_round].prompt;
+
+  String get _targetName =>
+      _target >= cell.people.length ? 'you' : '@${cell.people[_target].name}';
+
+  /// Fill prompt variables — the same prompt lands on a different victim
+  /// every single time it's played.
+  String _fill(String s) => s.replaceAll('{target}', _targetName);
 
   @override
   void initState() {
@@ -211,10 +223,14 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     setState(() {
       _phase = _Phase.game;
       _answered = false;
+      // roll this round's target; the bottle animates the pick for spin games
+      _target = _r.nextInt(cell.people.length + 1);
+      _bottleDone = game.kind != GameKind.spin;
     });
     final secs = switch (game.kind) {
       GameKind.freeze => 5,
       GameKind.rapidFire => 10,
+      GameKind.spin => 13, // the bottle eats the first ~2.5s
       _ => 9,
     };
     _runTimer(secs, _autoResolve);
@@ -237,7 +253,26 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         _resolveFreeze();
       case GameKind.rapidFire:
         _resolveRapid();
+      case GameKind.spin:
+        _resolveSpin();
     }
+  }
+
+  void _resolveSpin() {
+    if (_answered) return;
+    _answered = true;
+    Buzz.commit();
+    final lines = [
+      '$_targetName took it on the chin 😎',
+      'the bottle chose violence 😂',
+      '$_targetName will never recover',
+      '$_targetName said what they said 💅',
+    ];
+    setState(() {
+      _winnerIdx = _target < cell.people.length ? _target : null;
+      _result = lines[_r.nextInt(lines.length)];
+    });
+    Timer(const Duration(milliseconds: 650), _toReveal);
   }
 
   bool get _finalRound => _round >= cell.rounds.length - 1;
@@ -584,6 +619,18 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               ],
             ),
           ),
+          // 4.5 · the bottle — spins over the faces, picks its victim
+          if (_phase == _Phase.game && game.kind == GameKind.spin && !_bottleDone)
+            _BottleOverlay(
+              key: ValueKey('bottle$_round'),
+              targetName: _targetName,
+              onDone: () {
+                if (!mounted) return;
+                Buzz.impact();
+                Sfx.land();
+                setState(() => _bottleDone = true);
+              },
+            ),
           // 5 · Chaos Card — full-screen interruption
           if (_chaos != null) _ChaosOverlay(emoji: _chaos![0], text: _chaos![1]),
           // 6 · the ceremony
@@ -850,10 +897,17 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               ],
             ),
             const SizedBox(height: 8),
-            Text(_prompt.first,
+            AnimatedSwitcher(
+              duration: M.quick,
+              child: Text(
+                // spin games keep the prompt hidden until the bottle lands
+                game.kind == GameKind.spin && !_bottleDone ? 'Spin the Bottle 🍾' : _fill(_prompt.first),
+                key: ValueKey('$_round·$_bottleDone'),
                 style: T.big.copyWith(fontSize: 24, height: 1.12, shadows: const [
                   Shadow(color: Color(0xCC000000), blurRadius: 12),
-                ])),
+                ]),
+              ),
+            ),
             const SizedBox(height: 14),
             Padding(
               padding: const EdgeInsets.only(right: 52),
@@ -906,6 +960,17 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         return [Text('hold it… 😐', style: T.sub.copyWith(color: Colors.white))];
       case GameKind.rapidFire:
         return [_optBtn('Done', 0)];
+      case GameKind.spin:
+        return [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            const Text('🍾', style: TextStyle(fontSize: 16)),
+            const SizedBox(width: 8),
+            Text(
+              _bottleDone ? '$_targetName is on the spot' : 'the bottle is deciding…',
+              style: T.sub.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+            ),
+          ]),
+        ];
     }
   }
 
@@ -1342,6 +1407,111 @@ class _FloatingEmojiState extends State<_FloatingEmoji> with SingleTickerProvide
           ),
         );
       },
+    );
+  }
+}
+
+/// The bottle. Spins over the faces with ticking suspense, decelerates, lands —
+/// and someone is on the spot. Straight from the spin-the-bottle playbook:
+/// the two seconds where nobody knows WHO is the whole game.
+class _BottleOverlay extends StatefulWidget {
+  const _BottleOverlay({super.key, required this.targetName, required this.onDone});
+  final String targetName;
+  final VoidCallback onDone;
+
+  @override
+  State<_BottleOverlay> createState() => _BottleOverlayState();
+}
+
+class _BottleOverlayState extends State<_BottleOverlay> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 2300));
+  late final double _finalR;
+  int _lastTick = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    final r = Random();
+    _finalR = (4 + r.nextInt(3)) * 2 * pi + r.nextDouble() * 2 * pi;
+    _c.addListener(_tick);
+    _c.forward().whenComplete(() {
+      if (mounted) {
+        Timer(const Duration(milliseconds: 500), widget.onDone);
+      }
+    });
+  }
+
+  void _tick() {
+    final rot = Curves.easeOutQuart.transform(_c.value) * _finalR;
+    final t = (rot / (pi / 3)).floor();
+    if (t != _lastTick) {
+      _lastTick = t;
+      if (_c.value > 0.08 && _c.value < 0.96) {
+        Buzz.tick();
+        Sfx.tick();
+      }
+    }
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rot = Curves.easeOutQuart.transform(_c.value) * _finalR;
+    final done = _c.isCompleted;
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: const Color(0x8C000000),
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('THE BOTTLE DECIDES', style: T.eyebrow.copyWith(color: C.sig, letterSpacing: 3, fontSize: 11)),
+              const SizedBox(height: 24),
+              Container(
+                width: 150,
+                height: 150,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0x40140A1E),
+                  border: Border.all(color: C.sig.withOpacity(0.4)),
+                  boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 44, spreadRadius: -10)],
+                ),
+                child: Transform.rotate(
+                  angle: rot,
+                  child: const Text('🍾', style: TextStyle(fontSize: 64)),
+                ),
+              ),
+              const SizedBox(height: 24),
+              AnimatedSwitcher(
+                duration: M.quick,
+                child: done
+                    ? Container(
+                        key: const ValueKey('picked'),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: C.sig,
+                          borderRadius: BorderRadius.circular(100),
+                          boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 26, spreadRadius: -4)],
+                        ),
+                        child: Text('${widget.targetName} 👀',
+                            style: T.h3.copyWith(color: Colors.white, fontSize: 17)),
+                      )
+                    : Text('who’s it landing on…',
+                        key: const ValueKey('spinning'), style: T.sub.copyWith(color: Colors.white70)),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
