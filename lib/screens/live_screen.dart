@@ -342,6 +342,33 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             padding: EdgeInsets.fromLTRB(12, MediaQuery.of(context).padding.top + 62, 12, 0),
             child: _buildGrid(),
           ),
+          // cinematic legibility scrims (top for the bar, bottom for the card)
+          Positioned(
+            top: 0, left: 0, right: 0, height: 150,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                    colors: [Colors.black.withOpacity(0.65), Colors.transparent],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 0, left: 0, right: 0, height: 260,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                    colors: [Colors.black.withOpacity(0.8), Colors.transparent],
+                  ),
+                ),
+              ),
+            ),
+          ),
           // self PiP
           Positioned(
             right: 16,
