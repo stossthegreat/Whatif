@@ -59,7 +59,19 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   Timer? _idle;
   Timer? _speak;
   Timer? _startTimer;
+  Timer? _director;
   StreamSubscription<Map<String, dynamic>>? _netSub;
+
+  // The Director — invisible, keeps the room from ever going awkward.
+  String? _twist;
+  static const _twists = [
+    '⚡  Everyone point at the funniest person',
+    '🔥  Next answer has to be a lie',
+    '😂  10 seconds to make the room laugh',
+    '❤️  Two of you — 30 seconds, go',
+    '👀  Everyone freeze. Hold it.',
+    '🌀  CHAOS — the rules just changed',
+  ];
 
   Cell get cell => widget.cell;
   GameDef get game => cell.game;
@@ -73,6 +85,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       setState(() => _speakingIdx = _r.nextInt(cell.people.length));
     });
     _startTimer = Timer(const Duration(milliseconds: 700), _startGame);
+    // the Director injects a twist a little way into the cell
+    _director = Timer(Duration(milliseconds: 9000 + _r.nextInt(7000)), _injectTwist);
     // relay peers' reactions in live mode
     if (widget.live) {
       _netSub = NetworkClient.instance.events.listen((m) {
@@ -88,8 +102,18 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _idle?.cancel();
     _speak?.cancel();
     _startTimer?.cancel();
+    _director?.cancel();
     _netSub?.cancel();
     super.dispose();
+  }
+
+  void _injectTwist() {
+    if (!mounted) return;
+    Buzz.impact();
+    setState(() => _twist = _twists[_r.nextInt(_twists.length)]);
+    Timer(const Duration(milliseconds: 3800), () {
+      if (mounted) setState(() => _twist = null);
+    });
   }
 
   // ---- game timer plumbing --------------------------------------------------
@@ -404,6 +428,23 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                   const Spacer(),
                   const SizedBox(width: 38),
                 ],
+              ),
+            ),
+          ),
+          // Director twist banner
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 64,
+            left: 20, right: 20,
+            child: IgnorePointer(
+              child: AnimatedSwitcher(
+                duration: M.quick,
+                transitionBuilder: (child, anim) => FadeTransition(
+                  opacity: anim,
+                  child: ScaleTransition(scale: Tween(begin: 0.92, end: 1.0).animate(anim), child: child),
+                ),
+                child: _twist == null
+                    ? const SizedBox.shrink()
+                    : _TwistBanner(key: ValueKey<String>(_twist!), text: _twist!),
               ),
             ),
           ),
@@ -745,6 +786,33 @@ class _FloatingEmojiState extends State<_FloatingEmoji> with SingleTickerProvide
           ),
         );
       },
+    );
+  }
+}
+
+/// The Director's twist banner — a glass pill with a purple glow that drops in,
+/// tells the room what just changed, then fades. The room never goes awkward.
+class _TwistBanner extends StatelessWidget {
+  const _TwistBanner({super.key, required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+        decoration: BoxDecoration(
+          color: const Color(0xE6141018),
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(color: C.sig.withOpacity(0.6)),
+          boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 30, spreadRadius: -8)],
+        ),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+        ),
+      ),
     );
   }
 }
