@@ -29,7 +29,7 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
 
   late final AnimationController _c =
       AnimationController(vsync: this, duration: const Duration(milliseconds: 2400));
-  late final List<_Item> _items;
+  late List<_Item> _items;
   int _lastCenter = -1;
   bool _matched = false;
 
@@ -37,13 +37,15 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
   void initState() {
     super.initState();
     WakelockPlus.enable(); // don't let the screen sleep while matching
-    _items = List.generate(_count, (i) => _Item.build(i, i == _winner, _rng));
     _c.addListener(_onTick);
     _spin();
   }
 
   void _spin() {
     _matched = false;
+    // a fresh reel every spin — new faces, new flags, a different landing
+    // face each time. The slot machine never repeats itself.
+    _items = List.generate(_count, (i) => _Item.build(i, i == _winner, _rng));
     _c.forward(from: 0).whenComplete(() {
       if (!mounted) return;
       if (widget.waitForExternal) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/haptics.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
+import '../widgets/aurora.dart';
 import '../widgets/glass.dart';
 
 /// The onboarding questions: age (18+ gate), gender, and who you want to meet —
@@ -35,14 +36,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final r = Responsive.of(context);
     return Scaffold(
       backgroundColor: C.black,
-      body: SafeArea(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const Aurora(orbs: 3, opacity: 0.7),
+          SafeArea(
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: r.gutter),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 20),
-              Text('A few quick\nthings.', style: T.huge(38 * r.scale)),
+              RichText(
+                text: TextSpan(
+                  style: T.huge(38 * r.scale),
+                  children: const [
+                    TextSpan(text: 'A few quick\n'),
+                    TextSpan(text: 'things', style: TextStyle(color: C.sig)),
+                    TextSpan(text: '.'),
+                  ],
+                ),
+              ),
               const SizedBox(height: 8),
               Text('Rivlr is 18+. This helps us match you well.', style: T.sub),
               const SizedBox(height: 30),
@@ -80,23 +94,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
 
-              Press(
-                haptic: false,
-                onTap: _ready ? _continue : null,
-                child: Opacity(
-                  opacity: _ready ? 1 : 0.4,
-                  child: Container(
-                    height: 62,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-                    child: Text('Continue', style: T.h3.copyWith(color: Colors.black, fontSize: 17)),
-                  ),
-                ),
-              ),
+              Cta(label: 'Continue', onTap: _ready ? _continue : null),
               const SizedBox(height: 16),
             ],
           ),
         ),
+          ),
+        ],
       ),
     );
   }
@@ -114,7 +118,11 @@ class _AgeStepper extends StatelessWidget {
         _round(Icons.remove_rounded, age > 18 ? () => onChanged(age - 1) : null),
         Expanded(
           child: Center(
-            child: Text('$age', style: T.mono.copyWith(fontSize: 56)),
+            child: Text('$age',
+                style: T.mono.copyWith(
+                  fontSize: 56,
+                  shadows: [Shadow(color: C.sigGlow, blurRadius: 28)],
+                )),
           ),
         ),
         _round(Icons.add_rounded, age < 99 ? () => onChanged(age + 1) : null),

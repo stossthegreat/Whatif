@@ -48,7 +48,7 @@ class _MainShellState extends State<MainShell> {
             child: IndexedStack(
               index: _tab,
               children: [
-                HomeScreen(onPlay: widget.onPlay, onSignOut: widget.onSignOut),
+                HomeScreen(onSignOut: widget.onSignOut),
                 MeScreen(embedded: true, onSignOut: widget.onSignOut),
               ],
             ),

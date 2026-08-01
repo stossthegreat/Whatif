@@ -26,18 +26,39 @@ class SelfView extends StatelessWidget {
           final size = cam.value.previewSize;
           final w = size?.height ?? 720.0;
           final h = size?.width ?? 1280.0;
-          // NOTE: on iOS the camera plugin already delivers the front-camera
-          // preview mirrored (selfie-style), so we must NOT flip it again — an
-          // extra flip is what makes it feel reversed ("go left, goes right").
-          inner = ClipRect(
-            child: OverflowBox(
-              maxWidth: double.infinity,
-              maxHeight: double.infinity,
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(width: w, height: h, child: CameraPreview(cam)),
+          // MIRROR — non-negotiable. The Flutter camera plugin's iOS preview is
+          // NOT mirrored (it shows what others see — the "ugly" photo view).
+          // A selfie view must behave like a bathroom mirror: lean left and
+          // your image leans toward the same edge of the screen you leaned to.
+          // That's FaceTime / Instagram behavior, and it's this flip.
+          inner = Transform(
+            alignment: Alignment.center,
+            transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
+            child: ClipRect(
+              child: OverflowBox(
+                maxWidth: double.infinity,
+                maxHeight: double.infinity,
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(width: w, height: h, child: CameraPreview(cam)),
+                ),
               ),
             ),
+          );
+          // fade in over the placeholder so the first sideways/rotating frames
+          // of the camera boot are never visible
+          inner = TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 450),
+            curve: Curves.easeOut,
+            builder: (context, v, child) => Stack(
+              fit: StackFit.expand,
+              children: [
+                const _Placeholder(),
+                Opacity(opacity: v, child: child),
+              ],
+            ),
+            child: inner,
           );
         } else {
           inner = const _Placeholder();
