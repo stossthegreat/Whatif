@@ -15,6 +15,7 @@ class PresenceTile extends StatefulWidget {
     this.win = false,
     this.dimmed = false,
     this.saved = false,
+    this.radius = 20,
     this.popDelay = Duration.zero,
     this.videoChild,
     this.onTap,
@@ -23,6 +24,9 @@ class PresenceTile extends StatefulWidget {
   });
 
   final Person person;
+
+  /// Corner radius. 0 for the full-bleed live wall.
+  final double radius;
 
   /// When set (live mode), this fills the tile (the participant's video) instead
   /// of the placeholder light pool.
@@ -79,12 +83,12 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
         curve: M.ease,
         decoration: BoxDecoration(
           color: const Color(0xFF0B0C0F),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(widget.radius),
           border: border,
           boxShadow: boxShadow,
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(widget.radius),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -135,7 +139,7 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
                   curve: M.ease,
                   builder: (context, v, __) => DecoratedBox(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(widget.radius),
                       border: Border.all(color: Colors.white.withOpacity(v), width: 2),
                     ),
                   ),

@@ -62,6 +62,7 @@ class _MainShellState extends State<MainShell> {
             child: _NavBar(
               index: _tab,
               onTap: _go,
+              onPlay: widget.onPlay,
               height: _barHeight,
               bottomInset: mq.padding.bottom,
             ),
@@ -83,11 +84,13 @@ class _NavBar extends StatelessWidget {
   const _NavBar({
     required this.index,
     required this.onTap,
+    required this.onPlay,
     required this.height,
     required this.bottomInset,
   });
   final int index;
   final ValueChanged<int> onTap;
+  final VoidCallback onPlay;
   final double height;
   final double bottomInset;
 
@@ -116,18 +119,86 @@ class _NavBar extends StatelessWidget {
               final mutuals = AppSession.instance.mutualCount;
               return Row(
                 children: [
-                  for (var i = 0; i < _items.length; i++)
-                    Expanded(
-                      child: _NavCell(
-                        item: _items[i],
-                        selected: index == i,
-                        badge: i == 1 && mutuals > 0 ? mutuals : 0,
-                        onTap: () => onTap(i),
-                      ),
+                  Expanded(child: _NavCell(item: _items[0], selected: index == 0, onTap: () => onTap(0))),
+                  Expanded(
+                    child: _NavCell(
+                      item: _items[1],
+                      selected: index == 1,
+                      badge: mutuals > 0 ? mutuals : 0,
+                      onTap: () => onTap(1),
                     ),
+                  ),
+                  // center: drop into a live room from anywhere
+                  Expanded(child: _CenterPlay(onTap: onPlay)),
+                  Expanded(child: _NavCell(item: _items[2], selected: index == 2, onTap: () => onTap(2))),
+                  Expanded(child: _NavCell(item: _items[3], selected: index == 3, onTap: () => onTap(3))),
                 ],
               );
             },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The center drop-in button — our take on TikTok's "+" — a black key with a
+/// purple/blue split glow. Tap it from any tab to go live.
+class _CenterPlay extends StatelessWidget {
+  const _CenterPlay({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          Buzz.pop();
+          onTap();
+        },
+        child: SizedBox(
+          width: 60,
+          height: 40,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // left purple edge
+              Positioned(
+                left: 6,
+                child: Container(
+                  width: 46,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: C.sig,
+                    borderRadius: BorderRadius.circular(11),
+                    boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 12, spreadRadius: -3)],
+                  ),
+                ),
+              ),
+              // right blue edge
+              Positioned(
+                right: 6,
+                child: Container(
+                  width: 46,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: C.blue,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                ),
+              ),
+              // black key
+              Container(
+                width: 48,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0A0B0D),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: const Icon(Icons.play_arrow_rounded, size: 24, color: Colors.white),
+              ),
+            ],
           ),
         ),
       ),
