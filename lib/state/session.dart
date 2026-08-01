@@ -57,7 +57,7 @@ class AppSession extends ChangeNotifier {
   ];
   void _initIdentity() {
     myHandle = '${_handleWords[_r.nextInt(_handleWords.length)]}${10 + _r.nextInt(89)}';
-    myHue = const [205.0, 212, 196, 220, 190, 208, 216, 200][_r.nextInt(8)];
+    myHue = const <double>[205, 212, 196, 220, 190, 208, 216, 200][_r.nextInt(8)];
     myUid = List.generate(20, (_) => _r.nextInt(16).toRadixString(16)).join();
   }
 
