@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../core/haptics.dart';
 import '../models/game.dart';
 import '../models/person.dart';
@@ -78,6 +79,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    WakelockPlus.enable(); // never sleep on a live call
     Buzz.pop();
     _speak = Timer.periodic(const Duration(milliseconds: 1200), (_) {
       if (!mounted || cell.people.isEmpty) return;
@@ -98,6 +100,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    WakelockPlus.disable();
     _timer.dispose();
     _idle?.cancel();
     _speak?.cancel();

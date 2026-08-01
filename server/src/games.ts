@@ -74,6 +74,44 @@ export const PACK: GameDef[] = [
       ['Say the first word you think of: SUNDAY'], ['Describe your week in one word — go'],
       ['Best food, worst food. Fast.'], ['Your hype song, right now'],
     ] },
+
+  // ---- the wild ones (perform, then the room crowns someone) ----------------
+  { kind: 'point', name: 'Red Flag', hint: 'point at your suspect',
+    minStrangers: 2, maxStrangers: 8, prompts: [
+      ['Most likely to forget your birthday'], ['Most likely to text back in 3 days'],
+      ['Most likely to get arrested for something dumb'], ['Biggest red-flag energy'],
+      ['Most likely to start drama'], ['Most likely to ghost after one date'],
+    ] },
+  { kind: 'point', name: 'Voice Swap', hint: 'do the voice — then point at who nailed it',
+    minStrangers: 1, maxStrangers: 8, prompts: [
+      ['Everyone talk like a PIRATE 🏴‍☠️'], ['Talk like a ROBOT 🤖'],
+      ['Talk like your GRANDMA 👵'], ['Talk like a movie VILLAIN 😈'], ['Talk like a BABY 👶'],
+    ] },
+  { kind: 'point', name: 'Sell It', hint: '30 seconds — then crown the best pitch',
+    minStrangers: 1, maxStrangers: 8, prompts: [
+      ['Sell a single sock to the room'], ['Sell a banana like it’s a supercar'],
+      ['Convince the room to give you £100'], ['Sell a rock as a life-changing product'],
+    ] },
+  { kind: 'point', name: 'Survival', hint: 'argue your case — then vote the survivor',
+    minStrangers: 2, maxStrangers: 8, prompts: [
+      ['Zombie apocalypse — who survives? Make your case'], ['Plane crash on an island — who’s useful?'],
+      ['Prison break — who’s the brains?'], ['Last one in the bunker — why you?'],
+    ] },
+  { kind: 'point', name: 'Sound Effect', hint: 'recreate it — funniest wins',
+    minStrangers: 2, maxStrangers: 8, prompts: [
+      ['Everyone make a COW 🐄 — point at the best'], ['Make a police SIREN 🚨'],
+      ['Do your best EVIL LAUGH 😈'], ['Make a phone RINGTONE 📱'],
+    ] },
+  { kind: 'point', name: 'First Impression', hint: 'first 5 seconds — vote your fave',
+    minStrangers: 2, maxStrangers: 8, prompts: [
+      ['Who’s the main character of this room?'], ['Who would you grab a drink with?'],
+      ['Who’s got the best energy?'], ['Who’s the most chaotic?'],
+    ] },
+  { kind: 'freeze', name: 'Laugh Lock', hint: 'do NOT laugh first',
+    minStrangers: 1, maxStrangers: 8, prompts: [
+      ['Laugh Lock — first to laugh loses'], ['Straightest face wins. Go.'],
+      ['Try not to smile. Impossible.'],
+    ] },
 ];
 
 const pick = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
@@ -82,11 +120,17 @@ const pick = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 const SIZE_BAG = [2, 2, 2, 3, 3, 4, 6];
 export const rollMemberCount = () => pick(SIZE_BAG);
 
-export function rollGame(strangers: number, avoidKind?: GameKind) {
+export function rollGame(strangers: number, avoidKind?: GameKind, avoidName?: string) {
   let fits = PACK.filter((g) => strangers >= g.minStrangers && strangers <= g.maxStrangers);
   if (!fits.length) fits = PACK; // solo / edge — never crash
-  const varied = fits.filter((g) => g.kind !== avoidKind);
+  // prefer a different kind AND a different name than last time, so no two
+  // rooms in a row ever feel like the same game
+  const varied = fits.filter((g) => g.kind !== avoidKind && g.name !== avoidName);
   if (varied.length) fits = varied;
+  else {
+    const byName = fits.filter((g) => g.name !== avoidName);
+    if (byName.length) fits = byName;
+  }
   const game = pick(fits);
   const chosen = pick(game.prompts);
   const [head, ...opts] = chosen;

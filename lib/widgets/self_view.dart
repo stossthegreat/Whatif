@@ -8,10 +8,9 @@ import '../theme/tokens.dart';
 /// to an elegant cool-light placeholder if the camera isn't available/allowed —
 /// so every screen looks intentional either way.
 class SelfView extends StatelessWidget {
-  const SelfView({super.key, this.label, this.mirror = true, this.grade = false});
+  const SelfView({super.key, this.label, this.grade = false});
 
   final String? label;
-  final bool mirror;
 
   /// If true, lay a soft dark grade over the preview (used on Home so type reads).
   final bool grade;
@@ -27,7 +26,10 @@ class SelfView extends StatelessWidget {
           final size = cam.value.previewSize;
           final w = size?.height ?? 720.0;
           final h = size?.width ?? 1280.0;
-          Widget preview = ClipRect(
+          // NOTE: on iOS the camera plugin already delivers the front-camera
+          // preview mirrored (selfie-style), so we must NOT flip it again — an
+          // extra flip is what makes it feel reversed ("go left, goes right").
+          inner = ClipRect(
             child: OverflowBox(
               maxWidth: double.infinity,
               maxHeight: double.infinity,
@@ -37,14 +39,6 @@ class SelfView extends StatelessWidget {
               ),
             ),
           );
-          if (mirror) {
-            preview = Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
-              child: preview,
-            );
-          }
-          inner = preview;
         } else {
           inner = const _Placeholder();
         }

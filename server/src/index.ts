@@ -26,6 +26,7 @@ const HUES = [205, 212, 196, 220, 190, 208, 216, 200];
 const pick = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 
 let lastKind: ReturnType<typeof rollGame>['game']['kind'] | undefined;
+let lastName: string | undefined;
 
 // ---- net helpers -----------------------------------------------------------
 function send(u: User | undefined, obj: unknown) {
@@ -95,8 +96,9 @@ async function formCell(memberIds: string[]) {
   if (live.length === 0) return;
 
   const strangers = live.length - 1;
-  const { game, prompt } = rollGame(strangers, lastKind);
+  const { game, prompt } = rollGame(strangers, lastKind, lastName);
   lastKind = game.kind;
+  lastName = game.name;
 
   const cellId = randomUUID();
   const room = `cell_${cellId}`;
