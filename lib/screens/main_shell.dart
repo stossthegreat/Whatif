@@ -15,8 +15,9 @@ import 'me_screen.dart';
 ///
 /// People don't open Rivlr to browse — they open it to get dropped into chaos.
 class MainShell extends StatefulWidget {
-  const MainShell({super.key, required this.onPlay, required this.onSignOut});
+  const MainShell({super.key, required this.onPlay, required this.onParty, required this.onSignOut});
   final VoidCallback onPlay;
+  final VoidCallback onParty;
   final VoidCallback onSignOut;
 
   @override
@@ -48,7 +49,7 @@ class _MainShellState extends State<MainShell> {
             child: IndexedStack(
               index: _tab,
               children: [
-                HomeScreen(onSignOut: widget.onSignOut),
+                HomeScreen(onSignOut: widget.onSignOut, onParty: widget.onParty),
                 MeScreen(embedded: true, onSignOut: widget.onSignOut),
               ],
             ),

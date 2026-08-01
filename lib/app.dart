@@ -13,6 +13,7 @@ import 'screens/signin_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/main_shell.dart';
+import 'screens/party_screen.dart';
 import 'screens/finding_screen.dart';
 import 'screens/live_screen.dart';
 
@@ -37,7 +38,7 @@ class RivlrApp extends StatelessWidget {
   }
 }
 
-enum _Step { boot, welcome, signin, profile, permission, home, finding, live }
+enum _Step { boot, welcome, signin, profile, permission, home, party, finding, live }
 
 class _Root extends StatefulWidget {
   const _Root();
@@ -211,7 +212,11 @@ class _RootState extends State<_Root> {
           AppSession.instance.completeOnboarding();
           _to(_Step.home);
         }),
-      _Step.home => MainShell(onPlay: _play, onSignOut: () => _to(_Step.welcome)),
+      _Step.home => MainShell(
+          onPlay: _play,
+          onParty: () => _to(_Step.party),
+          onSignOut: () => _to(_Step.welcome)),
+      _Step.party => PartyScreen(onBack: () => _to(_Step.home)),
       _Step.finding => FindingScreen(onDone: _dropSimulated, waitForExternal: live),
       _Step.live => LiveScreen(
           key: ValueKey(_drop),

@@ -59,8 +59,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   _section('YOU'),
                   _card([
-                    _info(s.signedIn ? 'Signed in' : 'Guest',
-                        profileLine.isEmpty ? 'Tap continue to set up' : profileLine),
+                    _info('@${s.myHandle}',
+                        [
+                          if (profileLine.isNotEmpty) profileLine,
+                          if (s.myVibes.isNotEmpty) s.myVibes.join(' · '),
+                          s.signedIn ? 'signed in' : 'guest',
+                        ].join('\n')),
                   ]),
                   const SizedBox(height: 20),
                   _section('PREFERENCES'),
@@ -68,8 +72,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _toggle('Haptics', s.hapticsOn, (v) => setState(() { s.hapticsOn = v; Buzz.enabled = v; })),
                     _divider(),
                     _toggle('Sound', s.soundOn, (v) => setState(() => s.soundOn = v)),
-                    _divider(),
-                    _toggle('Notifications', true, (_) {}),
                   ]),
                   const SizedBox(height: 20),
                   _section('ABOUT'),
@@ -93,7 +95,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _link('Delete account', () => _confirmDelete(context), color: C.live),
                   ]),
                   const SizedBox(height: 26),
-                  Center(child: Text('Rivlr · 1.0.0', style: T.tiny)),
+                  Center(child: Text('Rivlr · 1.0.0 (21)', style: T.tiny)),
                 ],
               ),
             ),
@@ -114,7 +116,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: T.body.copyWith(color: C.tx2))),
           TextButton(
-            onPressed: () { Navigator.pop(ctx); Navigator.pop(context); widget.onSignOut(); },
+            onPressed: () {
+              AppSession.instance.signOut(); // wipes device data + identity
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              widget.onSignOut();
+            },
             child: Text('Delete', style: T.body.copyWith(color: C.live, fontWeight: FontWeight.w700)),
           ),
         ],

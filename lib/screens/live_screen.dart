@@ -200,7 +200,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _idle?.cancel();
     _startTimer?.cancel();
     _resultGrace?.cancel();
+    _revealTick?.cancel();
     setState(() {
+      _revealCount = null;
       _round = idx;
       _answered = false;
       _pointPick = null;
@@ -208,6 +210,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _winnerIdx = null;
       _split = const [];
       _result = '';
+      _voteCounts = {};
     });
     _startGame();
   }
@@ -227,6 +230,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     setState(() {
       switch (game.kind) {
         case GameKind.point:
+          final tally = (m['tally'] as Map?) ?? const {};
+          _voteCounts = {};
+          for (final e in tally.entries) {
+            final ti = _idxOf(e.key as String?);
+            final c = (e.value as num?)?.toInt() ?? 0;
+            if (ti != null && c > 0) _voteCounts[ti] = c;
+          }
           if (isYou) {
             _result = 'the room pointed at YOU 😳';
           } else if (winnerIdx != null) {
@@ -364,6 +374,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _comboReset?.cancel();
     _resultGrace?.cancel();
     _wheelTimeout?.cancel();
+    _revealTick?.cancel();
     _netSub?.cancel();
     super.dispose();
   }
@@ -504,8 +515,43 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   bool get _finalRound => _round >= cell.rounds.length - 1;
 
+  // the signature beat: answers stay hidden, then 3…2…1 — everything flips at
+  // once. The suspense before the flip is the dopamine.
+  int? _revealCount;
+  Timer? _revealTick;
+
+  /// point-game vote counts per tile index (people.length == you), shown as
+  /// chips on the faces when the reveal flips.
+  Map<int, int> _voteCounts = {};
+
   void _toReveal() {
+    if (_revealCount != null) return; // countdown already running
     _timer.stop();
+    _revealCount = 3;
+    Buzz.tick();
+    Sfx.pip();
+    setState(() {});
+    _revealTick?.cancel();
+    _revealTick = Timer.periodic(const Duration(milliseconds: 420), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      final next = (_revealCount ?? 1) - 1;
+      if (next <= 0) {
+        t.cancel();
+        setState(() => _revealCount = null);
+        Sfx.match();
+        _doReveal();
+      } else {
+        Buzz.tick();
+        Sfx.pip();
+        setState(() => _revealCount = next);
+      }
+    });
+  }
+
+  void _doReveal() {
     Buzz.commit();
     if (_finalRound) {
       // only the session's climax becomes a shareable moment
@@ -539,6 +585,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _winnerIdx = null;
       _split = const [];
       _result = '';
+      _voteCounts = {};
       _phase = _Phase.drop;
     });
     Buzz.pop();
@@ -567,6 +614,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _result = '';
       _voteEmoji = null;
       _awards = const [];
+      _voteCounts = {};
       _phase = _Phase.drop;
       _stamp = true;
     });
@@ -893,6 +941,32 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               ],
             ),
           ),
+          // 4.4 · the flip — 3…2…1, everything reveals at once
+          if (_revealCount != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Container(
+                  color: const Color(0x59000000),
+                  alignment: Alignment.center,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    transitionBuilder: (child, anim) => FadeTransition(
+                      opacity: anim,
+                      child: ScaleTransition(
+                          scale: Tween(begin: 1.6, end: 1.0).animate(anim), child: child),
+                    ),
+                    child: Text(
+                      '$_revealCount',
+                      key: ValueKey(_revealCount),
+                      style: T.huge(120).copyWith(
+                        color: Colors.white,
+                        shadows: const [Shadow(color: Color(0xCC000000), blurRadius: 24)],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           // 4.5 · the bottle — spins over the faces, picks its victim
           if (_phase == _Phase.game && game.kind == GameKind.spin && !_bottleDone)
             _BottleOverlay(
@@ -1006,12 +1080,14 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       onReport: () => _openReport(p),
       onSave: () => _save(p),
     );
-    if (_lucky != i) return tile;
+    final votes = _voteCounts[i] ?? 0;
+    if (_lucky != i && votes == 0) return tile;
     return Stack(
       fit: StackFit.expand,
       children: [
         tile,
-        const Positioned(left: 10, top: 10, child: _StarChip()),
+        if (_lucky == i) const Positioned(left: 10, top: 10, child: _StarChip()),
+        if (votes > 0) Positioned(right: 10, top: 10, child: _VoteChip(count: votes)),
       ],
     );
   }
@@ -1044,6 +1120,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           ),
           if (_lucky == cell.people.length)
             const Positioned(left: 10, top: 10, child: _StarChip()),
+          if ((_voteCounts[cell.people.length] ?? 0) > 0)
+            Positioned(
+                right: 10, top: 10, child: _VoteChip(count: _voteCounts[cell.people.length]!)),
         ],
       ),
     );
@@ -1185,11 +1264,18 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             const SizedBox(height: 14),
             Padding(
               padding: const EdgeInsets.only(right: 52),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: _inputs(),
-              ),
+              child: _answered && _serverDriven
+                  ? Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.lock_rounded, size: 15, color: C.sig),
+                      const SizedBox(width: 8),
+                      Text('locked in — waiting for the room…',
+                          style: T.sub.copyWith(color: Colors.white70, fontWeight: FontWeight.w600)),
+                    ])
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: _inputs(),
+                    ),
             ),
           ],
         ],
@@ -1545,6 +1631,30 @@ class _StarChip extends StatelessWidget {
       ),
       child: const Text('⭐ main character',
           style: TextStyle(fontSize: 10.5, color: Color(0xFFFFD54A), fontWeight: FontWeight.w800)),
+    );
+  }
+}
+
+/// Real vote count on a face after the flip — "👉 3".
+class _VoteChip extends StatelessWidget {
+  const _VoteChip({required this.count});
+  final int count;
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 1.4, end: 1),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutBack,
+      builder: (context, v, child) => Transform.scale(scale: v, child: child),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: Text('👉 $count',
+            style: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.w900)),
+      ),
     );
   }
 }

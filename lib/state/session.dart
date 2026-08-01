@@ -52,6 +52,9 @@ class AppSession extends ChangeNotifier {
   late String myHandle;
   late double myHue;
   late String myUid; // stable id sent to the backend
+
+  /// The vibes picked in onboarding — shapes matchmaking + game selection later.
+  List<String> myVibes = [];
   static const _handleWords = [
     'wildcard', 'menace', 'ghost', 'goblin', 'sunny', 'chaos', 'riot',
     'maple', 'nova', 'zephyr', 'biscuit', 'vortex', 'gremlin', 'echo',
@@ -81,6 +84,7 @@ class AppSession extends ChangeNotifier {
       lookingFor = p.getString('lookingFor');
       final a = p.getInt('age');
       if (a != null) age = a;
+      myVibes = p.getStringList('vibes') ?? myVibes;
       // persist the freshly-generated identity the first time
       if (p.getString('uid') == null) await _persist();
     } catch (_) {/* first run / no store — defaults are fine */}
@@ -97,6 +101,19 @@ class AppSession extends ChangeNotifier {
     if (gender != null) await p.setString('gender', gender!);
     if (lookingFor != null) await p.setString('lookingFor', lookingFor!);
     if (age != null) await p.setInt('age', age!);
+    await p.setStringList('vibes', myVibes);
+  }
+
+  /// A fresh handle suggestion (onboarding shuffle).
+  String suggestHandle() =>
+      '${_handleWords[_r.nextInt(_handleWords.length)]}${10 + _r.nextInt(89)}';
+
+  void setHandle(String h) {
+    final clean = h.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
+    if (clean.length < 3) return;
+    myHandle = clean.substring(0, clean.length.clamp(0, 14));
+    _persist();
+    notifyListeners();
   }
 
   /// Onboarding finished — remember it so we never show it again.
@@ -242,10 +259,11 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setProfile({int? age, String? gender, String? lookingFor}) {
+  void setProfile({int? age, String? gender, String? lookingFor, List<String>? vibes}) {
     if (age != null) this.age = age;
     if (gender != null) this.gender = gender;
     if (lookingFor != null) this.lookingFor = lookingFor;
+    if (vibes != null) myVibes = vibes;
     _persist();
     notifyListeners();
   }

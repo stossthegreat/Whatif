@@ -91,6 +91,47 @@ function tryMatch() {
   }
 }
 
+// ---- friend rooms (party codes) --------------------------------------------
+// The liquidity unlock: start a room with your mates via a 4-char code, then
+// the same cell engine runs it. Fun with 3 users instead of 3,000.
+
+interface Party { code: string; hostId: string; members: string[]; }
+const parties = new Map<string, Party>();
+const partyByUser = new Map<string, string>(); // conn-id -> code
+
+const CODE_CHARS = 'ABCDEFGHJKMNPQRSTVWXYZ23456789'; // no 0/O/1/I/L confusion
+function newPartyCode(): string {
+  let c = '';
+  do {
+    c = Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
+  } while (parties.has(c));
+  return c;
+}
+
+function partyState(p: Party) {
+  return {
+    t: 'party', code: p.code, hostId: p.hostId,
+    members: p.members.map((id) => {
+      const u = store.users.get(id);
+      return { id, name: u?.name ?? '?', hue: u?.hue ?? 205 };
+    }),
+  };
+}
+function broadcastParty(p: Party) {
+  for (const id of p.members) sendById(id, partyState(p));
+}
+function leaveParty(userId: string) {
+  const code = partyByUser.get(userId);
+  if (!code) return;
+  partyByUser.delete(userId);
+  const p = parties.get(code);
+  if (!p) return;
+  p.members = p.members.filter((x) => x !== userId);
+  if (!p.members.length) { parties.delete(code); return; }
+  if (p.hostId === userId) p.hostId = p.members[0]; // promote — the room survives
+  broadcastParty(p);
+}
+
 // ---- the session engine ----------------------------------------------------
 // The server owns the room: it rolls the session, times the rounds, tallies
 // real answers, schedules chaos, computes awards from real votes, and rolls
@@ -185,6 +226,7 @@ function endRound(cell: Cell) {
     winner ??= pick(cell.members);
     cell.lastWinnerId = winner;
     msg.winnerId = winner;
+    msg.tally = Object.fromEntries(tally); // per-face vote counts for the reveal
   } else if (kind === 'spin') {
     const winner = round.targetId && cell.members.includes(round.targetId) ? round.targetId : pick(cell.members);
     cell.lastWinnerId = winner;
@@ -393,9 +435,41 @@ wss.on('connection', (ws) => {
         notifyLive(user);
         break;
       }
-      case 'play': leaveCell(user); enqueue(user); break;
+      case 'play': leaveParty(id); leaveCell(user); enqueue(user); break;
       case 'next': leaveCell(user); enqueue(user); break;
       case 'leave': dequeue(id); leaveCell(user); user.state = 'idle'; break;
+      case 'host': {
+        leaveParty(id); dequeue(id); leaveCell(user);
+        const p: Party = { code: newPartyCode(), hostId: id, members: [id] };
+        parties.set(p.code, p);
+        partyByUser.set(id, p.code);
+        send(user, partyState(p));
+        break;
+      }
+      case 'joinParty': {
+        const code = String(m.code ?? '').toUpperCase().trim();
+        const p = parties.get(code);
+        if (!p || p.members.length >= 8) {
+          send(user, { t: 'partyError', reason: !p ? 'That code doesn’t exist' : 'That room is full' });
+          break;
+        }
+        leaveParty(id); dequeue(id); leaveCell(user);
+        p.members.push(id);
+        partyByUser.set(id, code);
+        broadcastParty(p);
+        break;
+      }
+      case 'leaveParty': leaveParty(id); break;
+      case 'startParty': {
+        const code = partyByUser.get(id);
+        const p = code ? parties.get(code) : undefined;
+        if (!p || p.hostId !== id) break;
+        const members = [...p.members];
+        for (const mid of members) partyByUser.delete(mid);
+        parties.delete(p.code);
+        void formCell(members);
+        break;
+      }
       case 'answer': {
         if (!user.cellId) break;
         broadcastCell(user.cellId, { t: 'answer', from: id, v: m.v }, id);
@@ -452,6 +526,7 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     dequeue(id);
+    leaveParty(id);
     leaveCell(user);
     if (store.byUid.get(user.uid) === id) store.byUid.delete(user.uid);
     store.users.delete(id);
