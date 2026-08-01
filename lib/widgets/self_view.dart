@@ -25,8 +25,8 @@ class SelfView extends StatelessWidget {
         Widget inner;
         if (ready && cam != null && cam.value.isInitialized) {
           final size = cam.value.previewSize;
-          final w = size?.height ?? 720;
-          final h = size?.width ?? 1280;
+          final w = size?.height ?? 720.0;
+          final h = size?.width ?? 1280.0;
           Widget preview = ClipRect(
             child: OverflowBox(
               maxWidth: double.infinity,

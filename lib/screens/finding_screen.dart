@@ -60,7 +60,7 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
 
   void _onTick() {
     // ticking that slows with the reel (only during the satisfying decel)
-    final w = context.size?.width ?? 400;
+    final w = context.size?.width ?? 400.0;
     final x = _offsetFor(w);
     final center = ((w / 2 - x) / _itemW).round();
     if (center != _lastCenter) {
