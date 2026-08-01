@@ -1,102 +1,145 @@
-import 'package:flutter/material.dart';
-import '../theme/colors.dart';
+import 'dart:math';
+import 'person.dart';
 
-/// A game type in the rotating pack. The product spine (per research) is a
-/// *rotating, role-asymmetric, reveal-driven* group game — Among Us × Jackbox —
-/// not a single fixed mechanic. Each type is a one-sentence rule (low skill
-/// floor) that ends in a public reveal (the screen-recordable "story" moment).
-class GameType {
-  const GameType({
+/// The rotating game pack. Each game is a template + a prompt pool. The live
+/// screen interprets [kind] to render the interaction. Games are tagged by how
+/// many *strangers* they need, so the matchmaker can serve genuinely different
+/// experiences — including 1:1-only games — depending on the (unpredictable)
+/// group size.
+enum GameKind { point, poll, wouldRather, thumbs, same, freeze, twoTruths, rapidFire }
+
+class GameDef {
+  const GameDef({
+    required this.kind,
     required this.name,
-    required this.tagline,
-    required this.rule,
-    required this.glyph,
-    required this.colors,
-    required this.asymmetric,
-    this.spicy = false,
+    required this.hint,
+    required this.minStrangers,
+    required this.maxStrangers,
+    required this.prompts,
   });
 
+  final GameKind kind;
   final String name;
-  final String tagline;
-  final String rule; // the single-sentence rule shown on the card
-  final String glyph;
-  final List<Color> colors;
-  final bool asymmetric; // does someone know something the others don't?
-  final bool spicy; // opt-in flirty energy (spin-the-bottle lives here)
+  final String hint;
+  final int minStrangers;
+  final int maxStrangers;
 
-  LinearGradient get gradient =>
-      LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight);
+  /// Each prompt is [headline, ...options]. Some kinds ignore options.
+  final List<List<String>> prompts;
 
-  static const List<GameType> pack = [
-    GameType(
-      name: 'Impostor',
-      tagline: 'One of you got a different prompt.',
-      rule: 'Everyone answers the same question — except the impostor, who got a slightly different one. Find them.',
-      glyph: '🎭',
-      colors: [WhatIfColors.magenta, WhatIfColors.violet],
-      asymmetric: true,
+  List<String> pick(Random r) => prompts[r.nextInt(prompts.length)];
+
+  bool fits(int strangers) => strangers >= minStrangers && strangers <= maxStrangers;
+
+  static const pack = <GameDef>[
+    // ---- group (needs someone to point at) ----
+    GameDef(
+      kind: GameKind.point, name: 'Point Party', hint: 'tap who fits — everyone points at once',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['Who woke up 5 minutes ago?'],
+        ['Most likely to start a cult (a fun one)'],
+        ['Who texts their ex at 2am?'],
+        ['Most likely to be a secret genius'],
+        ['Who is definitely lying right now?'],
+        ['Most likely to cry at a dog video'],
+      ],
     ),
-    GameType(
-      name: 'Hot Takes',
-      tagline: 'Anonymous opinions. Guess who.',
-      rule: 'Everyone drops their spiciest take anonymously. The room votes on who said what.',
-      glyph: '🌶️',
-      colors: [WhatIfColors.coral, WhatIfColors.magenta],
-      asymmetric: true,
+    // ---- works at any size, including 1:1 ----
+    GameDef(
+      kind: GameKind.poll, name: 'Hot Take', hint: 'pick a side',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Pineapple on pizza?', 'crime', 'genius'],
+        ['Socks in bed?', 'yes', 'never'],
+        ['Text or call?', 'text', 'call'],
+        ['Cereal then milk?', 'right', 'chaos'],
+      ],
     ),
-    GameType(
-      name: 'Caption This',
-      tagline: 'Make the room laugh.',
-      rule: 'Same cursed image. Best caption wins the round — you vote, you don\'t vote for your own.',
-      glyph: '💬',
-      colors: [WhatIfColors.cyan, WhatIfColors.indigo],
-      asymmetric: false,
+    GameDef(
+      kind: GameKind.thumbs, name: 'Confession Cam', hint: 'thumbs up = guilty · on 3',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Never have I ever been kicked out of a bar'],
+        ['…ghosted someone mid-conversation'],
+        ['…sent a text to the completely wrong person'],
+        ['…faked being busy to skip plans'],
+      ],
     ),
-    GameType(
-      name: 'Would You Rather',
-      tagline: 'Reveal the split.',
-      rule: 'Two terrible options. Lock your choice — then watch the room split in real time.',
-      glyph: '⚖️',
-      colors: [WhatIfColors.mint, WhatIfColors.cyan],
-      asymmetric: false,
+    GameDef(
+      kind: GameKind.same, name: 'Same Brain', hint: 'match the room — pick fast',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Name a fruit', 'banana', 'apple', 'mango', 'grape'],
+        ['A colour, go', 'blue', 'red', 'green', 'black'],
+        ['Pick a vibe', 'chaotic', 'chill', 'menace', 'soft'],
+      ],
     ),
-    GameType(
-      name: 'Most Likely To',
-      tagline: 'Point the finger.',
-      rule: 'A prompt appears. Everyone points at one person at once. Brace yourself.',
-      glyph: '👉',
-      colors: [WhatIfColors.amber, WhatIfColors.coral],
-      asymmetric: false,
+    GameDef(
+      kind: GameKind.freeze, name: 'Freeze Face', hint: 'hold it — last to laugh wins',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Hold your most SHOCKED face'],
+        ['Hold a straight face. No matter what.'],
+        ['Give your worst fake cry — and hold'],
+      ],
     ),
-    GameType(
-      name: 'Truth Roulette',
-      tagline: 'The bottle points at a dare.',
-      rule: 'The wheel spins and lands on a truth or a dare — for the whole table, not a forced pairing.',
-      glyph: '🍾',
-      colors: [WhatIfColors.violet, WhatIfColors.magenta],
-      asymmetric: false,
-      spicy: true,
+    // ---- 1:1 flavoured ----
+    GameDef(
+      kind: GameKind.wouldRather, name: 'Would You Rather', hint: 'lock your choice, then compare',
+      minStrangers: 1, maxStrangers: 6,
+      prompts: [
+        ['Fight 100 duck-sized horses, or…', '100 tiny horses', '1 giant duck'],
+        ['Always be 10 min late, or…', 'always late', 'always 20 early'],
+        ['Read minds, or…', 'read minds', 'be invisible'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.twoTruths, name: 'Two Truths', hint: 'read their face — spot the lie',
+      minStrangers: 1, maxStrangers: 2,
+      prompts: [
+        ['Which one is the lie?', 'skydived once', 'has four siblings', 'hates coffee'],
+        ['Spot the lie', 'met a celebrity', 'speaks 3 languages', 'broke a bone at 7'],
+        ['Which is fake?', 'ran a marathon', 'was on TV once', 'can’t swim'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.rapidFire, name: 'Rapid Fire', hint: '10 seconds. don’t overthink.',
+      minStrangers: 1, maxStrangers: 1,
+      prompts: [
+        ['Say the first word you think of: SUNDAY'],
+        ['Describe your week in one word — go'],
+        ['Best food, worst food. Fast.'],
+      ],
     ),
   ];
+
+  /// Weighted toward small cells, with the occasional crowd. Returns the number
+  /// of *strangers* in the cell (you are always the +1).
+  static int rollGroupSize(Random r) {
+    const bag = [1, 1, 1, 2, 2, 3, 3, 5];
+    return bag[r.nextInt(bag.length)];
+  }
+
+  static GameDef rollGame(Random r, int strangers) {
+    final fits = pack.where((g) => g.fits(strangers)).toList();
+    return fits[r.nextInt(fits.length)];
+  }
 }
 
-/// The phases a live round moves through. Drives the live-room choreography.
-enum RoundPhase {
-  gathering, // players arriving, waiting to start
-  reveal, // "next up: ???" mystery reveal of the game
-  prompt, // the question is shown, you answer
-  answering, // players lock answers, countdown
-  voting, // the room votes
-  results, // the public reveal — the peak
-}
+/// One live cell: who's here, the game, and the chosen prompt.
+class Cell {
+  Cell({required this.people, required this.game, required this.prompt});
+  final List<Person> people;
+  final GameDef game;
+  final List<String> prompt;
 
-extension RoundPhaseX on RoundPhase {
-  String get label => switch (this) {
-        RoundPhase.gathering => 'Gathering',
-        RoundPhase.reveal => 'Next up',
-        RoundPhase.prompt => 'Your move',
-        RoundPhase.answering => 'Lock it in',
-        RoundPhase.voting => 'Vote',
-        RoundPhase.results => 'The reveal',
-      };
+  int get strangers => people.length;
+  bool get isOneToOne => people.length == 1;
+
+  static Cell random(Random r) {
+    final n = GameDef.rollGroupSize(r);
+    final game = GameDef.rollGame(r, n);
+    return Cell(people: Person.group(r, n), game: game, prompt: game.pick(r));
+  }
 }
