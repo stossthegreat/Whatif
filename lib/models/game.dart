@@ -309,15 +309,28 @@ class GameDef {
   static GameDef byKind(GameKind k) => pack.firstWhere((g) => g.kind == k);
 }
 
-/// One live cell: who's here, the game, the chosen prompt — and a personality.
-/// Rooms are never "Room #421"; they're places you remember being thrown into.
-class Cell {
-  Cell({required this.people, required this.game, required this.prompt, String? roomName})
-      : roomName = roomName ?? roomNames[_rn.nextInt(roomNames.length)];
-  final List<Person> people;
+/// One round of a room's session: a game and its (pre-shuffled) prompt.
+class RoundDef {
+  RoundDef({required this.game, required this.prompt});
   final GameDef game;
   final List<String> prompt; // [head, ...options], options already shuffled
+}
+
+/// One live cell: who's here, a full session of rounds — and a personality.
+/// Rooms are never "Room #421"; they're places you remember being thrown into.
+class Cell {
+  Cell({required this.people, required this.rounds, String? roomName})
+      : roomName = roomName ?? roomNames[_rn.nextInt(roomNames.length)];
+  final List<Person> people;
+
+  /// A proper game session — several rounds before the ceremony, never a
+  /// single question. The revive wheel can re-roll these to run it back.
+  List<RoundDef> rounds;
   final String roomName;
+
+  // convenience: the opening round (used by session memory / legacy callers)
+  GameDef get game => rounds.first.game;
+  List<String> get prompt => rounds.first.prompt;
 
   static final _rn = Random();
   static const roomNames = [
@@ -330,31 +343,57 @@ class Cell {
   int get strangers => people.length;
   bool get isOneToOne => people.length == 1;
 
-  /// Unpredictable by construction: rolls a group size, then a game valid for it
-  /// (avoiding the last kind), then a prompt not seen recently, with options
-  /// shuffled — so a repeated game type never plays identically.
+  /// Roll a full session of [count] rounds for a group of [strangers] —
+  /// each round a different game (no kind or name repeats back-to-back) with a
+  /// prompt not seen recently, options shuffled. Unpredictable by construction.
+  static List<RoundDef> rollRounds(
+    Random r,
+    int strangers, {
+    int count = 3,
+    GameKind? avoidKind,
+    Set<String> recentHeads = const {},
+  }) {
+    final rounds = <RoundDef>[];
+    var lastKind = avoidKind;
+    String? lastName;
+    final seen = {...recentHeads};
+
+    for (var i = 0; i < count; i++) {
+      var fits = GameDef.pack.where((g) => g.fits(strangers)).toList();
+      if (fits.isEmpty) fits = [...GameDef.pack];
+      final varied = fits.where((g) => g.kind != lastKind && g.name != lastName).toList();
+      if (varied.isNotEmpty) fits = varied;
+      final game = fits[r.nextInt(fits.length)];
+      lastKind = game.kind;
+      lastName = game.name;
+
+      List<String> chosen = game.prompts[r.nextInt(game.prompts.length)];
+      for (var t = 0; t < 6 && seen.contains(chosen.first); t++) {
+        chosen = game.prompts[r.nextInt(game.prompts.length)];
+      }
+      seen.add(chosen.first);
+
+      final head = chosen.first;
+      final opts = chosen.skip(1).toList()..shuffle(r);
+      rounds.add(RoundDef(game: game, prompt: [head, ...opts]));
+    }
+    return rounds;
+  }
+
+  /// Re-roll this room's session in place — the revive wheel's "run it back".
+  void reroll(Random r) {
+    rounds = rollRounds(r, people.length, avoidKind: rounds.last.game.kind);
+  }
+
   static Cell random(
     Random r, {
     GameKind? avoidKind,
     Set<String> recentHeads = const {},
   }) {
     final n = GameDef.rollGroupSize(r);
-    var fits = GameDef.pack.where((g) => g.fits(n)).toList();
-    final varied = fits.where((g) => g.kind != avoidKind).toList();
-    if (varied.isNotEmpty) fits = varied;
-    final game = fits[r.nextInt(fits.length)];
-
-    // pick a prompt not used recently (try a handful of times)
-    List<String> chosen = game.prompts[r.nextInt(game.prompts.length)];
-    for (var i = 0; i < 6 && recentHeads.contains(chosen.first); i++) {
-      chosen = game.prompts[r.nextInt(game.prompts.length)];
-    }
-
-    // shuffle the options (keep the headline first)
-    final head = chosen.first;
-    final opts = chosen.skip(1).toList()..shuffle(r);
-    final prompt = [head, ...opts];
-
-    return Cell(people: Person.group(r, n), game: game, prompt: prompt);
+    return Cell(
+      people: Person.group(r, n),
+      rounds: rollRounds(r, n, avoidKind: avoidKind, recentHeads: recentHeads),
+    );
   }
 }
