@@ -3,6 +3,7 @@ import '../state/session.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
+import 'moments_screen.dart';
 
 /// Your profile — funny, not serious. Your glow, your rank, and the stats that
 /// matter here: streak, laughs, biggest-liar, chaos score, sparks.
@@ -85,23 +86,27 @@ class MeScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 20),
-                Glass(
-                  radius: 24,
-                  child: Row(
-                    children: [
-                      const Text('🎞️', style: TextStyle(fontSize: 30)),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Your funniest moment', style: T.body.copyWith(color: C.tx, fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 3),
-                            Text('auto-saved clips land here — play a few rooms', style: T.tiny),
-                          ],
+                Press(
+                  onTap: () => MomentsScreen.push(context),
+                  child: Glass(
+                    radius: 24,
+                    child: Row(
+                      children: [
+                        const Text('🎬', style: TextStyle(fontSize: 30)),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Your moments', style: T.body.copyWith(color: C.tx, fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 3),
+                              Text('${s.moments.length} clips · tap to see & share', style: T.tiny),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        const Icon(Icons.chevron_right_rounded, size: 22, color: C.tx3),
+                      ],
+                    ),
                   ),
                 ),
               ],

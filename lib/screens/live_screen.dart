@@ -178,6 +178,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   void _toReveal() {
     _timer.stop();
     Buzz.commit();
+    // capture the moment — the shareable growth unit
+    AppSession.instance.captureMoment(
+      game: game.name,
+      result: _result,
+      hues: [...cell.people.map((p) => p.hue), AppSession.instance.myHue],
+    );
     setState(() => _phase = _Phase.reveal);
     // involuntary recompose if the user just sits there — the loop pulls.
     _idle?.cancel();

@@ -15,12 +15,24 @@ class Spark {
   bool liveNow;
 }
 
-/// App-wide state: identity, funny stats, sparks, live count, and the short
-/// memory that keeps games unpredictable.
+/// A captured moment — the reveal beat, saved. The unit of the growth loop:
+/// each one becomes a shareable card built to spread.
+class Moment {
+  Moment({required this.game, required this.result, required this.hues, required this.laughs, required this.ago});
+  final String game;
+  final String result;
+  final List<double> hues; // participant glows
+  final int laughs;
+  final String ago;
+}
+
+/// App-wide state: identity, funny stats, sparks, moments, live count, and the
+/// short memory that keeps games unpredictable.
 class AppSession extends ChangeNotifier {
   AppSession._() {
     _initIdentity();
     _seedSparks();
+    _seedMoments();
     _drift = Timer.periodic(const Duration(milliseconds: 1600), (_) {
       if (serverDriven) return;
       liveCount = (liveCount + (_r.nextDouble() * 10 - 3).round()).clamp(8000, 99000);
@@ -103,6 +115,24 @@ class AppSession extends ChangeNotifier {
   }
 
   bool isSaved(String name) => saved.contains(name);
+
+  // ---- moments (the shareable growth loop) ----
+  final List<Moment> moments = <Moment>[];
+  void _seedMoments() {
+    moments.addAll([
+      Moment(game: 'Point Party', result: 'the room pointed at @sol', hues: [212, 196, 220, 205], laughs: 31, ago: '2h'),
+      Moment(game: 'Freeze Face', result: 'you cracked 😂 @nova won', hues: [220, 208], laughs: 12, ago: 'yesterday'),
+    ]);
+  }
+
+  void captureMoment({required String game, required String result, required List<double> hues}) {
+    moments.insert(0, Moment(game: game, result: result, hues: hues, laughs: 3 + _r.nextInt(40), ago: 'just now'));
+    while (moments.length > 40) {
+      moments.removeLast();
+    }
+    laughs += _r.nextInt(8);
+    notifyListeners();
+  }
 
   // ---- unpredictability memory ----
   GameKind? lastKind;
