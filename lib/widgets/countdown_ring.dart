@@ -1,111 +1,79 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../theme/colors.dart';
-import '../theme/typography.dart';
+import '../theme/tokens.dart';
 
-/// The dramatic countdown. A ring that drains as time runs out, its color
-/// shifting from cyan → amber → hot red in the final seconds, with a big number
-/// in the middle that pulses on each tick. Peak party-game tension. The caller
-/// drives [progress] (1.0 → 0.0) and [secondsLeft]; the ring handles the drama.
-class CountdownRing extends StatelessWidget {
-  const CountdownRing({
+/// A ring drawn from the top. [progress] 0→1 controls the arc length. Used both
+/// for the Finding "fill" (progress rises to 1) and small game timers (progress
+/// drains toward 0). The caller owns the semantics; this just draws.
+class RingPaint extends StatelessWidget {
+  const RingPaint({
     super.key,
     required this.progress,
-    required this.secondsLeft,
-    this.size = 160,
+    this.size = 220,
+    this.stroke = 3,
+    this.color = C.sig,
+    this.track = C.hair,
+    this.child,
   });
 
-  final double progress; // 1.0 full -> 0.0 empty
-  final int secondsLeft;
+  final double progress;
   final double size;
-
-  Color get _color {
-    if (secondsLeft <= 3) return WhatIfColors.live;
-    if (secondsLeft <= 6) return WhatIfColors.amber;
-    return WhatIfColors.cyan;
-  }
+  final double stroke;
+  final Color color;
+  final Color track;
+  final Widget? child;
 
   @override
   Widget build(BuildContext context) {
-    final urgent = secondsLeft <= 3;
     return SizedBox(
       width: size,
       height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          CustomPaint(
-            size: Size(size, size),
-            painter: _RingPainter(progress: progress, color: _color),
-          ),
-          // Number pops each second via an animated key.
-          TweenAnimationBuilder<double>(
-            key: ValueKey(secondsLeft),
-            tween: Tween(begin: urgent ? 1.4 : 1.18, end: 1.0),
-            duration: const Duration(milliseconds: 340),
-            curve: Curves.easeOutBack,
-            builder: (context, v, child) => Transform.scale(scale: v, child: child),
-            child: Text(
-              '$secondsLeft',
-              style: WhatIfType.counter.copyWith(
-                fontSize: size * 0.42,
-                color: urgent ? _color : WhatIfColors.textHigh,
-              ),
-            ),
-          ),
-        ],
+      child: CustomPaint(
+        painter: _RingPainter(progress.clamp(0, 1), stroke, color, track),
+        child: Center(child: child),
       ),
     );
   }
 }
 
 class _RingPainter extends CustomPainter {
-  _RingPainter({required this.progress, required this.color});
+  _RingPainter(this.progress, this.stroke, this.color, this.track);
   final double progress;
+  final double stroke;
   final Color color;
+  final Color track;
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
-    final radius = size.width / 2 - 8;
-    final rect = Rect.fromCircle(center: center, radius: radius);
-
-    // Track.
-    final track = Paint()
+    final radius = size.width / 2 - stroke;
+    final t = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 10
-      ..strokeCap = StrokeCap.round
-      ..color = WhatIfColors.hairline;
-    canvas.drawCircle(center, radius, track);
+      ..strokeWidth = stroke
+      ..color = track;
+    canvas.drawCircle(center, radius, t);
 
-    // Glow underlay.
-    final glow = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 16
-      ..strokeCap = StrokeCap.round
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
-      ..shader = SweepGradient(
-        colors: [color, color.withOpacity(0.4)],
-        startAngle: -math.pi / 2,
-        endAngle: math.pi * 1.5,
-      ).createShader(rect);
-
-    // Progress arc, drawn from the top, draining clockwise.
+    if (progress <= 0) return;
     final arc = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 10
+      ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round
-      ..shader = SweepGradient(
-        colors: [color.withOpacity(0.5), color],
-        startAngle: -math.pi / 2,
-        endAngle: math.pi * 1.5,
-      ).createShader(rect);
+      ..color = color;
+    // glow
+    final glow = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke + 3
+      ..strokeCap = StrokeCap.round
+      ..color = color.withOpacity(0.35)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
 
-    final sweep = (progress.clamp(0.0, 1.0)) * math.pi * 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final sweep = progress * math.pi * 2;
     canvas.drawArc(rect, -math.pi / 2, sweep, false, glow);
     canvas.drawArc(rect, -math.pi / 2, sweep, false, arc);
   }
 
   @override
-  bool shouldRepaint(_RingPainter old) => old.progress != progress || old.color != color;
+  bool shouldRepaint(_RingPainter o) =>
+      o.progress != progress || o.color != color || o.stroke != stroke;
 }

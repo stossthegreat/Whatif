@@ -1,331 +1,112 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../core/camera_service.dart';
 import '../core/haptics.dart';
-import '../models/game.dart';
-import '../models/identity.dart';
-import '../models/mock_data.dart';
-import '../theme/colors.dart';
-import '../theme/motion.dart';
-import '../theme/typography.dart';
-import '../widgets/aurora_button.dart';
-import '../widgets/confetti.dart';
-import '../widgets/gradient_text.dart';
-import '../widgets/presence_orb.dart';
-import '../widgets/reveal.dart';
-import '../widgets/whatif_scaffold.dart';
+import '../theme/tokens.dart';
+import '../widgets/glass.dart';
+import '../widgets/self_view.dart';
 
-/// Onboarding teaches by *showing*, not telling. Three pages, each a tiny live
-/// demo of the product's soul: a room gathering, the game rotating, and the
-/// shareable reveal. No forms, no tutorial. Ends on a hook, not a checklist.
+/// First run, ≤60s to a live face. Opens on a value moment, not a form. The 18+
+/// gate and camera permission are framed as "getting ready", requested at the
+/// moment of intent (the button), never as a wall.
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key, required this.onFinish});
-  final VoidCallback onFinish;
+  const OnboardingScreen({super.key, required this.onDone});
+  final VoidCallback onDone;
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  final _pc = PageController();
-  final _confetti = ConfettiController();
-  int _page = 0;
+  bool _asked = false;
 
-  static const _pages = [
-    _PageData(
-      eyebrow: 'IT’S NOT A FEED',
-      title: 'It’s a room.',
-      body: 'No scrolling. No performing. You drop in with a handful of people and something starts happening.',
-    ),
-    _PageData(
-      eyebrow: 'NEVER THE SAME TWICE',
-      title: 'A new game\nevery night.',
-      body: 'One sentence of rules. Impossible to be bad at. The game does the talking — you just react.',
-    ),
-    _PageData(
-      eyebrow: 'YOU’LL WANT TO RECORD IT',
-      title: 'Then the\nreveal.',
-      body: 'Every round ends with a moment the whole room feels at once. That’s the part that ends up on your story.',
-    ),
-  ];
-
-  @override
-  void dispose() {
-    _pc.dispose();
-    super.dispose();
-  }
-
-  void _next() {
-    if (_page < _pages.length - 1) {
-      _pc.nextPage(duration: Motion.base, curve: Motion.entrance);
-    } else {
-      widget.onFinish();
-    }
+  Future<void> _go() async {
+    Buzz.commit();
+    setState(() => _asked = true);
+    // Permission prompt fires here, at the moment of intent.
+    await CameraService.instance.ensure();
+    if (mounted) widget.onDone();
   }
 
   @override
   Widget build(BuildContext context) {
-    final last = _page == _pages.length - 1;
-    return WhatIfScaffold(
-      energy: 0.4 + _page * 0.2,
-      palette: _page == 2 ? WhatIfColors.celebration.take(3).toList() : WhatIfColors.aurora,
-      child: Stack(
+    final r = Responsive.of(context);
+    return Scaffold(
+      backgroundColor: C.black,
+      body: Stack(
+        fit: StackFit.expand,
         children: [
-          Column(
-            children: [
-              // Top bar: skip.
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 12, 0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Wordmark(fontSize: 24),
-                    if (!last)
-                      TextButton(
-                        onPressed: widget.onFinish,
-                        child: Text('Skip',
-                            style: WhatIfType.label.copyWith(color: WhatIfColors.textLow)),
-                      )
-                    else
-                      const SizedBox(height: 48),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: PageView.builder(
-                  controller: _pc,
-                  itemCount: _pages.length,
-                  onPageChanged: (i) {
-                    Buzz.tick();
-                    setState(() => _page = i);
-                    if (i == 2) {
-                      Future<void>.delayed(const Duration(milliseconds: 500),
-                          () => _confetti.fire(origin: const Offset(0.5, 0.42)));
-                    }
-                  },
-                  itemBuilder: (context, i) => _OnboardPage(
-                    data: _pages[i],
-                    index: i,
-                    active: _page == i,
+          // a faint self-preview already breathing behind the words
+          const Opacity(opacity: 0.5, child: SelfView(grade: true, label: null)),
+          SafeArea(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: r.gutter),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      const Text('What', style: T.mark),
+                      Text('If', style: T.mark.copyWith(fontWeight: FontWeight.w800)),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: C.glass,
+                          borderRadius: BorderRadius.circular(100),
+                          border: Border.all(color: C.hair),
+                        ),
+                        child: Text('18+ · verified adults', style: T.tiny),
+                      ),
+                    ],
                   ),
-                ),
-              ),
-              // Dots + CTA.
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                child: Column(
-                  children: [
-                    _Dots(count: _pages.length, index: _page),
-                    const SizedBox(height: 22),
-                    AuroraButton(
-                      label: last ? 'Get me in' : 'Next',
-                      icon: last ? Icons.bolt_rounded : Icons.arrow_forward_rounded,
-                      onTap: _next,
+                  const Spacer(),
+                  Text('Meet someone\nnew. Right now.',
+                      style: T.huge(44 * r.scale)),
+                  const SizedBox(height: 18),
+                  Text(
+                    'One tap drops you live with a stranger — sometimes a few. '
+                    'You never know who you’ll get. That’s the fun.',
+                    style: T.body.copyWith(fontSize: 17),
+                  ),
+                  const SizedBox(height: 34),
+                  Press(
+                    haptic: false,
+                    onTap: _asked ? null : _go,
+                    child: Container(
+                      height: 62,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _asked ? 'Getting ready…' : 'Enable camera & go',
+                        style: T.h3.copyWith(color: Colors.black, fontSize: 17),
+                      ),
                     ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          ConfettiOverlay(controller: _confetti),
-        ],
-      ),
-    );
-  }
-}
-
-class _PageData {
-  const _PageData({required this.eyebrow, required this.title, required this.body});
-  final String eyebrow;
-  final String title;
-  final String body;
-}
-
-class _OnboardPage extends StatelessWidget {
-  const _OnboardPage({required this.data, required this.index, required this.active});
-  final _PageData data;
-  final int index;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 8),
-          // The live demo for this page.
-          Expanded(
-            child: Center(
-              child: switch (index) {
-                0 => const _DemoRoom(),
-                1 => const _DemoGames(),
-                _ => const _DemoReveal(),
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(data.eyebrow,
-              style: WhatIfType.overline.copyWith(color: WhatIfColors.cyan)),
-          const SizedBox(height: 12),
-          GradientText(
-            data.title,
-            style: WhatIfType.h1.copyWith(fontSize: 40, height: 1.02),
-            gradient: const LinearGradient(colors: [Colors.white, Colors.white]),
-          ),
-          const SizedBox(height: 14),
-          Text(data.body, style: WhatIfType.body.copyWith(fontSize: 17, height: 1.45)),
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-}
-
-/// Page 1 demo: a cluster of orbs, one of them pulsing (you're not alone here).
-class _DemoRoom extends StatelessWidget {
-  const _DemoRoom();
-  @override
-  Widget build(BuildContext context) {
-    final crowd = Mock.group(6, from: 3);
-    return SizedBox(
-      height: 240,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          for (var i = 0; i < crowd.length; i++)
-            Transform.translate(
-              offset: Offset(
-                math.cos(i / crowd.length * math.pi * 2) * 92,
-                math.sin(i / crowd.length * math.pi * 2) * 92,
-              ),
-              child: Reveal(
-                delay: Duration(milliseconds: 120 * i),
-                child: PresenceOrb(identity: crowd[i], size: 46, active: i == 0),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      const Icon(Icons.lock_outline_rounded, size: 14, color: C.tx3),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Groups, not just strangers. Report or block anyone, instantly. '
+                          'We never record your video.',
+                          style: T.tiny.copyWith(height: 1.35),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 26),
+                ],
               ),
             ),
-          Reveal(
-            delay: const Duration(milliseconds: 400),
-            child: PresenceOrb(identity: Identity.guest, size: 72, active: true),
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Page 2 demo: a fanned stack of game cards.
-class _DemoGames extends StatelessWidget {
-  const _DemoGames();
-  @override
-  Widget build(BuildContext context) {
-    final games = GameType.pack.take(4).toList();
-    return SizedBox(
-      height: 240,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          for (var i = games.length - 1; i >= 0; i--)
-            Transform.translate(
-              offset: Offset((i - 1.5) * 28, (i - 1.5).abs() * 10),
-              child: Transform.rotate(
-                angle: (i - 1.5) * 0.09,
-                child: Reveal(
-                  delay: Duration(milliseconds: 100 * (games.length - i)),
-                  child: _MiniGameCard(games[i]),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MiniGameCard extends StatelessWidget {
-  const _MiniGameCard(this.game);
-  final GameType game;
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 128,
-      height: 172,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: game.gradient,
-        boxShadow: [
-          BoxShadow(color: game.colors.first.withOpacity(0.4), blurRadius: 30, spreadRadius: -6),
-        ],
-        border: Border.all(color: Colors.white.withOpacity(0.18)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(game.glyph, style: const TextStyle(fontSize: 40)),
-          Text(game.name,
-              style: WhatIfType.h3.copyWith(color: Colors.white, fontSize: 18)),
-        ],
-      ),
-    );
-  }
-}
-
-/// Page 3 demo: a "winner" orb rising with a crown.
-class _DemoReveal extends StatelessWidget {
-  const _DemoReveal();
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 240,
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('👑', style: TextStyle(fontSize: 40)),
-            const SizedBox(height: 8),
-            Reveal(
-              delay: const Duration(milliseconds: 200),
-              dy: 40,
-              child: PresenceOrb(identity: Mock.roster[0], size: 108, active: true, showLabel: true),
-            ),
-            const SizedBox(height: 12),
-            Reveal(
-              delay: const Duration(milliseconds: 500),
-              child: Text('funniest in the room',
-                  style: WhatIfType.label.copyWith(color: WhatIfColors.amber)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Dots extends StatelessWidget {
-  const _Dots({required this.count, required this.index});
-  final int count;
-  final int index;
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        for (var i = 0; i < count; i++)
-          AnimatedContainer(
-            duration: Motion.quick,
-            curve: Motion.entrance,
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            width: i == index ? 26 : 8,
-            height: 8,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(100),
-              gradient: i == index ? WhatIfColors.auroraSweep : null,
-              color: i == index ? null : WhatIfColors.hairlineStrong,
-            ),
-          ),
-      ],
     );
   }
 }

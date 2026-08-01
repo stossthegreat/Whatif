@@ -1,66 +1,80 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'theme/app_theme.dart';
-import 'theme/motion.dart';
-import 'screens/splash_screen.dart';
+import 'models/game.dart';
+import 'theme/tokens.dart';
 import 'screens/onboarding_screen.dart';
-import 'screens/auth_screen.dart';
-import 'screens/avatar_screen.dart';
 import 'screens/home_screen.dart';
-
-/// The onboarding-to-home journey, as one continuous space. Each step cross-
-/// fades into the next over the same living aurora, so the app never feels like
-/// a stack of separate screens.
-enum _Step { splash, onboarding, auth, avatar, home }
+import 'screens/finding_screen.dart';
+import 'screens/live_screen.dart';
 
 class WhatIfApp extends StatelessWidget {
   const WhatIfApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    SystemChrome.setSystemUIOverlayStyle(WhatIfTheme.systemOverlay);
     return MaterialApp(
       title: 'WhatIf',
       debugShowCheckedModeBanner: false,
-      theme: WhatIfTheme.dark,
-      home: const _RootFlow(),
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: C.black,
+        colorScheme: const ColorScheme.dark(
+          primary: C.sig,
+          surface: C.char2,
+        ),
+        splashFactory: NoSplash.splashFactory,
+        highlightColor: Colors.transparent,
+      ),
+      home: const _Root(),
     );
   }
 }
 
-class _RootFlow extends StatefulWidget {
-  const _RootFlow();
+enum _Step { onboarding, home, finding, live }
 
+class _Root extends StatefulWidget {
+  const _Root();
   @override
-  State<_RootFlow> createState() => _RootFlowState();
+  State<_Root> createState() => _RootState();
 }
 
-class _RootFlowState extends State<_RootFlow> {
-  _Step _step = _Step.splash;
+class _RootState extends State<_Root> {
+  final _rng = Random();
+  _Step _step = _Step.onboarding;
+  Cell? _cell;
+  int _drop = 0; // reset live-screen state per drop
 
-  void _go(_Step s) => setState(() => _step = s);
+  void _to(_Step s) => setState(() => _step = s);
+
+  void _dropIntoCell() {
+    setState(() {
+      _cell = Cell.random(_rng);
+      _drop++;
+      _step = _Step.live;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final Widget screen = switch (_step) {
-      _Step.splash => SplashScreen(onDone: () => _go(_Step.onboarding)),
-      _Step.onboarding => OnboardingScreen(onFinish: () => _go(_Step.auth)),
-      _Step.auth => AuthScreen(onAuthed: () => _go(_Step.avatar)),
-      _Step.avatar => AvatarScreen(onDone: () => _go(_Step.home)),
-      _Step.home => const HomeScreen(),
+      _Step.onboarding => OnboardingScreen(onDone: () => _to(_Step.home)),
+      _Step.home => HomeScreen(onPlay: () => _to(_Step.finding)),
+      _Step.finding => FindingScreen(onDone: _dropIntoCell),
+      _Step.live => LiveScreen(
+          key: ValueKey(_drop),
+          cell: _cell!,
+          onNext: () => _to(_Step.finding),
+          onLeave: () => _to(_Step.home),
+        ),
     };
 
     return AnimatedSwitcher(
-      duration: Motion.slow,
-      switchInCurve: Motion.entrance,
-      switchOutCurve: Motion.exit,
-      transitionBuilder: (child, animation) {
-        return FadeTransition(
-          opacity: animation,
-          child: child,
-        );
-      },
-      child: KeyedSubtree(key: ValueKey(_step), child: screen),
+      duration: M.base,
+      switchInCurve: M.ease,
+      switchOutCurve: M.ease,
+      transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+      child: KeyedSubtree(key: ValueKey('${_step.name}$_drop'), child: screen),
     );
   }
 }
