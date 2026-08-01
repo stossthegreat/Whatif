@@ -202,7 +202,7 @@ class _PlayOrbState extends State<_PlayOrb> with SingleTickerProviderStateMixin 
       child: AnimatedBuilder(
         animation: _c,
         builder: (context, _) {
-          final glow = 0.45 + 0.35 * _c.value;
+          final glow = 0.22 + 0.14 * _c.value;
           return Container(
             width: 62,
             height: 62,
@@ -216,7 +216,7 @@ class _PlayOrbState extends State<_PlayOrb> with SingleTickerProviderStateMixin 
               ),
               border: Border.all(color: Colors.white.withOpacity(0.22), width: 1.5),
               boxShadow: [
-                BoxShadow(color: C.sig.withOpacity(glow), blurRadius: 26, spreadRadius: -2),
+                BoxShadow(color: C.sig.withOpacity(glow), blurRadius: 20, spreadRadius: -4),
                 const BoxShadow(color: Color(0x99000000), blurRadius: 18, offset: Offset(0, 8)),
               ],
             ),

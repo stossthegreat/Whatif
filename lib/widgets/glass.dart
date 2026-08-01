@@ -139,10 +139,11 @@ class _PressState extends State<Press> with SingleTickerProviderStateMixin {
   }
 }
 
-/// The signature call-to-action — a purple gradient key with a breathing glow.
-/// Every "go" moment in the app uses this instead of a flat white slab.
+/// The call-to-action. Elite means restraint: a clean white key, black type,
+/// no gradients, no glow. The button earns attention through contrast and
+/// space — never decoration.
 class Cta extends StatelessWidget {
-  const Cta({super.key, required this.label, this.onTap, this.height = 62});
+  const Cta({super.key, required this.label, this.onTap, this.height = 60});
   final String label;
   final VoidCallback? onTap;
   final double height;
@@ -153,25 +154,16 @@ class Cta extends StatelessWidget {
       haptic: false,
       onTap: onTap,
       child: Opacity(
-        opacity: onTap == null ? 0.45 : 1,
+        opacity: onTap == null ? 0.4 : 1,
         child: Container(
           height: height,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [C.sig, C.purpleDeep],
-            ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.18)),
-            boxShadow: [
-              BoxShadow(color: C.sigGlow, blurRadius: 30, spreadRadius: -6),
-              const BoxShadow(color: Color(0x66000000), blurRadius: 16, offset: Offset(0, 8)),
-            ],
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
           ),
           child: Text(label,
-              style: T.h3.copyWith(color: Colors.white, fontSize: 17, letterSpacing: -0.2)),
+              style: T.h3.copyWith(color: Colors.black, fontSize: 17, letterSpacing: -0.2)),
         ),
       ),
     );

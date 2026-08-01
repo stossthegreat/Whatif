@@ -71,23 +71,16 @@ class MeScreen extends StatelessWidget {
                 Center(
                   child: Column(
                     children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 44, spreadRadius: -12)],
-                        ),
-                        child: IdentityOrb(hue: s.myHue, size: 104, ring: C.sig),
-                      ),
+                      IdentityOrb(hue: s.myHue, size: 104, ring: C.sig),
                       const SizedBox(height: 16),
                       Text('@${s.myHandle}', style: T.big.copyWith(fontSize: 27)),
                       const SizedBox(height: 9),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                              colors: [C.sig.withOpacity(0.3), C.purpleDeep.withOpacity(0.25)]),
+                          color: C.glass,
                           borderRadius: BorderRadius.circular(100),
-                          border: Border.all(color: C.sig.withOpacity(0.5)),
+                          border: Border.all(color: C.hair2),
                         ),
                         child: Text(s.rankTitle,
                             style: T.body.copyWith(
@@ -219,7 +212,7 @@ class _BadgeChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: C.glass,
         borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: C.sig.withOpacity(0.45)),
+        border: Border.all(color: C.hair2),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

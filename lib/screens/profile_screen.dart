@@ -119,10 +119,7 @@ class _AgeStepper extends StatelessWidget {
         Expanded(
           child: Center(
             child: Text('$age',
-                style: T.mono.copyWith(
-                  fontSize: 56,
-                  shadows: [Shadow(color: C.sigGlow, blurRadius: 28)],
-                )),
+                style: T.mono.copyWith(fontSize: 56)),
           ),
         ),
         _round(Icons.add_rounded, age < 99 ? () => onChanged(age + 1) : null),

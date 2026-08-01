@@ -26,8 +26,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   final _rng = math.Random();
 
   late final List<_Particle> _particles =
-      List.generate(34, (_) => _Particle.random(_rng));
-  late final List<_Avatar> _avatars = List.generate(4, (i) => _Avatar.random(_rng, i));
+      List.generate(18, (_) => _Particle.random(_rng));
 
   @override
   void dispose() {
@@ -52,14 +51,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 isComplex: true,
                 willChange: true,
               ),
-            ),
-          ),
-          // drifting orbs — small, dim, and confined to the edges so the
-          // center column stays clean
-          RepaintBoundary(
-            child: AnimatedBuilder(
-              animation: _t,
-              builder: (context, _) => _AvatarLayer(t: _t.value, avatars: _avatars),
             ),
           ),
           // legibility scrim at the bottom so PLAY + text pop
@@ -108,12 +99,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   const _WorldTicker(),
                   const Spacer(flex: 4),
                   Text('you never know who you’ll get',
-                      style: T.body.copyWith(color: C.tx2, fontSize: 15)),
-                  const SizedBox(height: 8),
-                  Icon(Icons.keyboard_arrow_down_rounded, size: 22, color: C.sig.withOpacity(0.9)),
-                  const SizedBox(height: 4),
-                  Text('DROP IN', style: T.eyebrow.copyWith(color: C.sig, letterSpacing: 3, fontSize: 11)),
+                      style: T.body.copyWith(color: C.tx3, fontSize: 14)),
                   const SizedBox(height: 10),
+                  const Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: C.tx3),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -144,18 +133,19 @@ class _BigLive extends StatelessWidget {
                 _PulseDot(),
                 const SizedBox(width: 8),
                 Text('LIVE RIGHT NOW',
-                    style: T.eyebrow.copyWith(color: C.live, fontSize: 11, letterSpacing: 3)),
+                    style: T.eyebrow.copyWith(color: C.tx3, fontSize: 11, letterSpacing: 3.2)),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
+            // typography does the work — no glow, no decoration
             Text(
               n,
-              style: T.huge(64).copyWith(
+              style: T.huge(72).copyWith(
                 fontFeatures: const [FontFeature.tabularFigures()],
-                shadows: [Shadow(color: C.sigGlow, blurRadius: 40)],
+                letterSpacing: -2,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               count == 1 ? 'stranger on camera' : 'strangers on camera',
               style: T.body.copyWith(color: C.tx2, fontSize: 15),
@@ -255,29 +245,20 @@ class _ChaosHourState extends State<_ChaosHour> {
     final m = _left.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = _left.inSeconds.remainder(60).toString().padLeft(2, '0');
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        gradient: _live
-            ? LinearGradient(colors: [C.live.withOpacity(0.28), C.sig.withOpacity(0.22)])
-            : null,
-        color: _live ? null : C.glass,
+        color: _live ? Colors.white : Colors.transparent,
         borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: _live ? C.sig.withOpacity(0.6) : C.hair),
+        border: Border.all(color: _live ? Colors.white : C.hair2),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('🔥', style: TextStyle(fontSize: 13)),
-          const SizedBox(width: 7),
-          Text(
-            _live ? 'CHAOS HOUR · LIVE  $m:$s' : 'chaos hour in  $m:$s',
-            style: T.tiny.copyWith(
-              color: _live ? Colors.white : C.tx2,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ],
+      child: Text(
+        _live ? 'CHAOS HOUR · $m:$s' : 'Chaos hour in $m:$s',
+        style: T.tiny.copyWith(
+          color: _live ? Colors.black : C.tx2,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.2,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
       ),
     );
   }
@@ -314,18 +295,17 @@ class _TrendChipState extends State<_TrendChip> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: C.glass,
         borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: C.hair),
+        border: Border.all(color: C.hair2),
       ),
       child: AnimatedSwitcher(
         duration: M.base,
         child: Text(
-          '📈 $_game',
+          'Trending · $_game',
           key: ValueKey(_game),
-          style: T.tiny.copyWith(color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.w700),
+          style: T.tiny.copyWith(color: C.tx2, fontWeight: FontWeight.w700, letterSpacing: 0.2),
         ),
       ),
     );
@@ -351,11 +331,11 @@ class _WorldTickerState extends State<_WorldTicker> {
         final room = Cell.roomNames[_rng.nextInt(Cell.roomNames.length)];
         return '$room filling · ${2 + _rng.nextInt(4)}/6';
       case 1:
-        return '😂 ${180 + _rng.nextInt(600)} laughs this minute';
+        return '${180 + _rng.nextInt(600)} laughs this minute';
       case 2:
-        return '👀 ${2 + _rng.nextInt(7)} of your people online';
+        return '${2 + _rng.nextInt(7)} of your people online';
       default:
-        return '⚡ ${3 + _rng.nextInt(9)} rooms started just now';
+        return '${3 + _rng.nextInt(9)} rooms started just now';
     }
   }
 
@@ -388,16 +368,11 @@ class _WorldTickerState extends State<_WorldTicker> {
             child: child,
           ),
         ),
-        child: Container(
+        // one quiet line of type — no pill, no border. The words are enough.
+        child: Text(
+          _line,
           key: ValueKey(_line),
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0x59000000),
-            borderRadius: BorderRadius.circular(100),
-            border: Border.all(color: C.hair),
-          ),
-          child: Text(_line,
-              style: T.tiny.copyWith(color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.w700)),
+          style: T.tiny.copyWith(color: C.tx3, fontWeight: FontWeight.w600, letterSpacing: 0.2),
         ),
       ),
     );
@@ -431,8 +406,8 @@ class _LobbyPainter extends CustomPainter {
             .createShader(Rect.fromCircle(center: Offset(cx * size.width, cy * size.height), radius: rad));
       canvas.drawCircle(Offset(cx * size.width, cy * size.height), rad, paint);
     }
-    blob(C.purpleDeep, 0.28 + 0.1 * math.sin(t * tau), 0.30 + 0.06 * math.cos(t * tau), size.width * 0.7, 0.22);
-    blob(C.blue, 0.78 + 0.08 * math.cos(t * tau * 0.8), 0.22 + 0.05 * math.sin(t * tau), size.width * 0.5, 0.10);
+    blob(C.purpleDeep, 0.28 + 0.1 * math.sin(t * tau), 0.30 + 0.06 * math.cos(t * tau), size.width * 0.7, 0.10);
+    blob(C.blue, 0.78 + 0.08 * math.cos(t * tau * 0.8), 0.22 + 0.05 * math.sin(t * tau), size.width * 0.5, 0.04);
 
     // rising particles
     final p = Paint();
@@ -441,7 +416,7 @@ class _LobbyPainter extends CustomPainter {
       final yy = y < 0 ? y + 1 : y;
       final x = (part.x + 0.02 * math.sin((t * 6 + part.baseY) * tau)) % 1.0;
       final op = (math.sin(yy * math.pi)).clamp(0.0, 1.0) * 0.6;
-      p.color = (part.red ? C.live : C.sig).withOpacity(op * (part.red ? 0.55 : 0.4));
+      p.color = (part.red ? C.live : C.sig).withOpacity(op * (part.red ? 0.35 : 0.22));
       canvas.drawCircle(Offset(x * size.width, yy * size.height), part.size, p);
     }
   }
@@ -451,95 +426,6 @@ class _LobbyPainter extends CustomPainter {
 }
 
 // ---- floating avatars -----------------------------------------------------
-class _Avatar {
-  _Avatar(this.ax, this.ay, this.fx, this.fy, this.phase, this.scale);
-  final double ax, ay, fx, fy, phase, scale;
 
-  /// Anchored to the left/right EDGES and the upper band only — the center
-  /// column belongs to the type, and nothing ever drifts through it.
-  static _Avatar random(math.Random r, int i) {
-    final leftSide = i.isEven;
-    return _Avatar(
-      leftSide ? 0.06 + r.nextDouble() * 0.14 : 0.80 + r.nextDouble() * 0.14,
-      0.10 + r.nextDouble() * 0.22,
-      0.015 + r.nextDouble() * 0.02,
-      0.02 + r.nextDouble() * 0.03,
-      r.nextDouble(),
-      0.5 + r.nextDouble() * 0.5,
-    );
-  }
-}
 
-class _AvatarLayer extends StatelessWidget {
-  const _AvatarLayer({required this.t, required this.avatars});
-  final double t;
-  final List<_Avatar> avatars;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        final tau = math.pi * 2;
-        return Stack(
-          children: [
-            for (final a in avatars)
-              Positioned(
-                left: (a.ax + a.fx * math.sin((t + a.phase) * tau)) * c.maxWidth - 14 * a.scale,
-                top: (a.ay + a.fy * math.cos((t + a.phase) * tau * 0.8)) * c.maxHeight - 14 * a.scale,
-                child: Opacity(
-                  opacity: 0.4,
-                  child: _MiniOrb(size: 28 * a.scale),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// A polished obsidian marble — small, quiet, atmospheric. Never a bowling
-/// ball, never carrying a random emoji, never in the way of the type.
-class _MiniOrb extends StatelessWidget {
-  const _MiniOrb({required this.size});
-  final double size;
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: const RadialGradient(
-          center: Alignment(-0.45, -0.55),
-          radius: 1.05,
-          colors: [Color(0xFF23252B), Color(0xFF0B0C0F), Color(0xFF000000)],
-          stops: [0.0, 0.55, 1.0],
-        ),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
-        boxShadow: [
-          BoxShadow(color: C.sig.withOpacity(0.12), blurRadius: 14, spreadRadius: -6),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            left: size * 0.22,
-            top: size * 0.18,
-            child: Container(
-              width: size * 0.2,
-              height: size * 0.2,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [Colors.white.withOpacity(0.35), Colors.white.withOpacity(0)],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
