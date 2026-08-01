@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../core/haptics.dart';
+import '../core/sound.dart';
 import '../theme/tokens.dart';
 
 /// Finding — the roulette. Not a fade: a slot-machine reel of flags, faces,
@@ -49,6 +50,7 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
         _spin(); // keep the reel alive until the server matches us
       } else {
         Buzz.impact();
+        Sfx.match();
         setState(() => _matched = true);
         Future<void>.delayed(const Duration(milliseconds: 700), () {
           if (mounted) widget.onDone();
@@ -66,7 +68,10 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
     final center = ((w / 2 - x) / _itemW).round();
     if (center != _lastCenter) {
       _lastCenter = center;
-      if (_c.value > 0.5 && _c.value < 0.99) Buzz.tick();
+      if (_c.value > 0.5 && _c.value < 0.99) {
+        Buzz.tick();
+        Sfx.tick();
+      }
     }
     setState(() {});
   }

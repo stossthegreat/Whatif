@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
+import '../core/sound.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
 import 'home_screen.dart';
@@ -195,6 +196,7 @@ class _PlayOrbState extends State<_PlayOrb> with SingleTickerProviderStateMixin 
     return GestureDetector(
       onTap: () {
         Buzz.pop();
+        Sfx.pop();
         widget.onTap();
       },
       child: AnimatedBuilder(

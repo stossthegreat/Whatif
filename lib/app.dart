@@ -109,12 +109,7 @@ class _RootState extends State<_Root> {
     });
   }
 
-  Cell _cellFromServer(Map<String, dynamic> m) {
-    var people = ((m['people'] as List?) ?? const [])
-        .map((e) => Person.fromServer((e as Map).cast<String, dynamic>(), _rng))
-        .toList();
-    if (people.isEmpty) people = Person.group(_rng, 1); // solo test — show one tile
-    final g = ((m['game'] as Map?) ?? const {}).cast<String, dynamic>();
+  RoundDef _roundFromServer(Map<String, dynamic> g) {
     final kind = gameKindFrom((g['kind'] as String?) ?? 'poll');
     final base = GameDef.byKind(kind);
     // honour the server's game name/hint (it owns the wild variants like
@@ -128,7 +123,34 @@ class _RootState extends State<_Root> {
       prompts: base.prompts,
     );
     final prompt = ((g['prompt'] as List?) ?? const []).map((e) => e.toString()).toList();
-    return Cell(people: people, game: def, prompt: prompt.isEmpty ? def.prompts.first : prompt);
+    return RoundDef(game: def, prompt: prompt.isEmpty ? def.prompts.first : prompt);
+  }
+
+  Cell _cellFromServer(Map<String, dynamic> m) {
+    var people = ((m['people'] as List?) ?? const [])
+        .map((e) => Person.fromServer((e as Map).cast<String, dynamic>(), _rng))
+        .toList();
+    if (people.isEmpty) people = Person.group(_rng, 1); // solo test — show one tile
+
+    // prefer the server's full session (everyone plays the same rounds); an
+    // older server sends a single game — fill the session out locally.
+    var rounds = ((m['rounds'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => _roundFromServer(e.cast<String, dynamic>()))
+        .toList();
+    if (rounds.isEmpty && m['game'] is Map) {
+      rounds = [_roundFromServer((m['game'] as Map).cast<String, dynamic>())];
+    }
+    if (rounds.isEmpty) {
+      rounds = Cell.rollRounds(_rng, people.length);
+    } else if (rounds.length < 3) {
+      rounds = [
+        ...rounds,
+        ...Cell.rollRounds(_rng, people.length,
+            count: 3 - rounds.length, avoidKind: rounds.last.game.kind),
+      ];
+    }
+    return Cell(people: people, rounds: rounds);
   }
 
   // ---- simulated mode -------------------------------------------------------

@@ -96,13 +96,25 @@ async function formCell(memberIds: string[]) {
   if (live.length === 0) return;
 
   const strangers = live.length - 1;
-  const { game, prompt } = rollGame(strangers, lastKind, lastName);
-  lastKind = game.kind;
-  lastName = game.name;
+
+  // a room is a session — roll a full set of rounds so every client plays the
+  // same games in the same order (no kind/name repeats back-to-back)
+  const ROUNDS = 3;
+  const rounds: { kind: string; name: string; hint: string; prompt: string[] }[] = [];
+  let k = lastKind;
+  let n = lastName;
+  for (let i = 0; i < ROUNDS; i++) {
+    const r = rollGame(strangers, k, n);
+    k = r.game.kind;
+    n = r.game.name;
+    rounds.push({ kind: r.game.kind, name: r.game.name, hint: r.game.hint, prompt: r.prompt });
+  }
+  lastKind = k as typeof lastKind;
+  lastName = n;
 
   const cellId = randomUUID();
   const room = `cell_${cellId}`;
-  store.cells.set(cellId, { id: cellId, room, members: [...live], kind: game.kind });
+  store.cells.set(cellId, { id: cellId, room, members: [...live], kind: rounds[0].kind as any });
 
   for (const id of live) {
     const u = store.users.get(id);
@@ -115,9 +127,9 @@ async function formCell(memberIds: string[]) {
     });
     const token = await mintToken(room, id, u.name);
     send(u, { t: 'cell', room, url: LIVEKIT_URL, token, people: others,
-      game: { kind: game.kind, name: game.name, hint: game.hint, prompt } });
+      game: rounds[0], rounds });
   }
-  console.log(`[cell] ${cellId} · ${live.length} people · ${game.kind}`);
+  console.log(`[cell] ${cellId} · ${live.length} people · ${rounds.map((r) => r.name).join(' → ')}`);
 }
 
 function leaveCell(u: User) {

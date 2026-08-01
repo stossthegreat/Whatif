@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../core/haptics.dart';
+import '../core/sound.dart';
 import '../models/game.dart';
 import '../models/person.dart';
 import '../net/network_client.dart';
@@ -15,7 +16,7 @@ import '../widgets/presence_tile.dart';
 import '../widgets/self_view.dart';
 import '../widgets/video_view.dart';
 
-enum _Phase { drop, game, reveal, awards }
+enum _Phase { drop, game, reveal, awards, wheel }
 
 /// The room. TikTok-clean, FaceTime-exact.
 ///
@@ -95,19 +96,30 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     ['🌀', 'CHAOS — the rules just changed'],
   ];
 
+  // a room is a session — several rounds, then the ceremony, then the wheel
+  int _round = 0;
+  bool _stamp = true; // the room-name stamp on arrival
+  bool _wheelRevive = false; // decided once, when the wheel is armed
+
   Cell get cell => widget.cell;
-  GameDef get game => cell.game;
+  GameDef get game => cell.rounds[_round].game;
+  List<String> get _prompt => cell.rounds[_round].prompt;
 
   @override
   void initState() {
     super.initState();
     WakelockPlus.enable(); // never sleep on a live call
     Buzz.pop();
+    Sfx.match();
+    // the arrival stamp — the room's name slams across the faces, then clears
+    Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _stamp = false);
+    });
     _speak = Timer.periodic(const Duration(milliseconds: 1200), (_) {
       if (!mounted || cell.people.isEmpty) return;
       setState(() => _speakingIdx = _r.nextInt(cell.people.length));
     });
-    _startTimer = Timer(const Duration(milliseconds: 700), _startGame);
+    _startTimer = Timer(const Duration(milliseconds: 1300), _startGame);
     // the Director strikes somewhere in the first stretch — nobody knows when
     _director = Timer(Duration(milliseconds: 8000 + _r.nextInt(9000)), _dropChaos);
     if (widget.live) {
@@ -135,8 +147,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   }
 
   void _dropChaos() {
-    if (!mounted || _phase == _Phase.awards) return;
+    if (!mounted || _phase == _Phase.awards || _phase == _Phase.wheel) return;
     Buzz.impact();
+    Sfx.slam();
     setState(() => _chaos = _chaosCards[_r.nextInt(_chaosCards.length)]);
     Timer(const Duration(milliseconds: 3200), () {
       if (mounted) setState(() => _chaos = null);
@@ -151,12 +164,16 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _comboReset = Timer(const Duration(seconds: 4), () {
       if (mounted) setState(() => _combo = 0);
     });
-    if (_combo == 3 || _combo == 6 || _combo == 10) Buzz.impact();
+    if (_combo == 3 || _combo == 6 || _combo == 10) {
+      Buzz.impact();
+      Sfx.combo();
+    }
     setState(() {});
   }
 
   void _react() {
     Buzz.tap();
+    Sfx.pop();
     _bumpCombo();
     _float('😂');
     if (widget.live) NetworkClient.instance.react('😂');
@@ -179,7 +196,10 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     final left = (total * (1 - _timer.value)).ceil();
     if (left != _lastSec) {
       _lastSec = left;
-      if (left <= 3 && left > 0) Buzz.tick();
+      if (left <= 3 && left > 0) {
+        Buzz.tick();
+        Sfx.pip();
+      }
     }
     setState(() {});
   }
@@ -220,20 +240,82 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     }
   }
 
+  bool get _finalRound => _round >= cell.rounds.length - 1;
+
   void _toReveal() {
     _timer.stop();
     Buzz.commit();
-    AppSession.instance.captureMoment(
-      game: game.name,
-      result: _result,
-      hues: [...cell.people.map((p) => p.hue), AppSession.instance.myHue],
-    );
+    if (_finalRound) {
+      // only the session's climax becomes a shareable moment
+      AppSession.instance.captureMoment(
+        game: game.name,
+        result: _result,
+        hues: [...cell.people.map((p) => p.hue), AppSession.instance.myHue],
+      );
+    }
     setState(() => _phase = _Phase.reveal);
-    // the reveal breathes for a beat, then the room decides.
     _idle?.cancel();
-    _idle = Timer(const Duration(milliseconds: 3400), () {
-      if (mounted && _phase == _Phase.reveal) _toAwards();
+    if (_finalRound) {
+      // the reveal breathes, the room votes, then the ceremony
+      _idle = Timer(const Duration(milliseconds: 3400), () {
+        if (mounted && _phase == _Phase.reveal) _toAwards();
+      });
+    } else {
+      // quick beat — straight into the next round. A room is a session.
+      _idle = Timer(const Duration(milliseconds: 2400), () {
+        if (mounted && _phase == _Phase.reveal) _nextRound();
+      });
+    }
+  }
+
+  void _nextRound() {
+    setState(() {
+      _round++;
+      _answered = false;
+      _pointPick = null;
+      _selected = null;
+      _winnerIdx = null;
+      _split = const [];
+      _result = '';
+      _phase = _Phase.drop;
     });
+    Buzz.pop();
+    Sfx.pop();
+    _startTimer?.cancel();
+    _startTimer = Timer(const Duration(milliseconds: 900), _startGame);
+    // the Director may strike again between rounds
+    if (_r.nextDouble() < 0.4) {
+      _director?.cancel();
+      _director = Timer(Duration(milliseconds: 4000 + _r.nextInt(6000)), _dropChaos);
+    }
+  }
+
+  /// The wheel chose REVIVE — same room, same people, a fresh session.
+  void _revive() {
+    cell.reroll(_r);
+    setState(() {
+      _round = 0;
+      _answered = false;
+      _pointPick = null;
+      _selected = null;
+      _winnerIdx = null;
+      _split = const [];
+      _result = '';
+      _voteEmoji = null;
+      _awards = const [];
+      _phase = _Phase.drop;
+      _stamp = true;
+    });
+    Buzz.pop();
+    Sfx.match();
+    Timer(const Duration(milliseconds: 1200), () {
+      if (mounted) setState(() => _stamp = false);
+    });
+    _startTimer?.cancel();
+    _startTimer = Timer(const Duration(milliseconds: 1300), _startGame);
+    _director?.cancel();
+    _director = Timer(Duration(milliseconds: 6000 + _r.nextInt(8000)), _dropChaos);
+    _idle?.cancel();
   }
 
   void _toAwards() {
@@ -247,6 +329,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     }
     if (_golden && earned) AppSession.instance.earnBadge('🏆 Golden Room');
     Buzz.impact();
+    Sfx.fanfare();
     setState(() => _phase = _Phase.awards);
     // never a dead end — if you just sit there, the loop pulls you forward.
     _idle?.cancel();
@@ -505,6 +588,21 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           if (_chaos != null) _ChaosOverlay(emoji: _chaos![0], text: _chaos![1]),
           // 6 · the ceremony
           if (_phase == _Phase.awards) _awardsOverlay(),
+          // 7 · the wheel — revive or next, the wheel decides
+          if (_phase == _Phase.wheel)
+            _ReviveWheel(
+              revive: _wheelRevive,
+              onDone: (revive) {
+                if (!mounted) return;
+                if (revive) {
+                  _revive();
+                } else {
+                  widget.onNext();
+                }
+              },
+            ),
+          // 8 · arrival stamp — the room's name slams over the faces
+          if (_stamp) _RoomStamp(name: cell.roomName, golden: _golden),
         ],
       ),
     );
@@ -731,6 +829,17 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           else ...[
             Row(
               children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: C.sig.withOpacity(0.22),
+                    borderRadius: BorderRadius.circular(100),
+                    border: Border.all(color: C.sig.withOpacity(0.5)),
+                  ),
+                  child: Text('ROUND ${_round + 1}/${cell.rounds.length}',
+                      style: T.eyebrow.copyWith(color: Colors.white, letterSpacing: 1.2, fontSize: 9.5)),
+                ),
+                const SizedBox(width: 10),
                 Text(game.name.toUpperCase(),
                     style: T.eyebrow.copyWith(color: C.sig, letterSpacing: 1.8, fontSize: 11)),
                 const SizedBox(width: 10),
@@ -741,7 +850,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               ],
             ),
             const SizedBox(height: 8),
-            Text(cell.prompt.first,
+            Text(_prompt.first,
                 style: T.big.copyWith(fontSize: 24, height: 1.12, shadows: const [
                   Shadow(color: Color(0xCC000000), blurRadius: 12),
                 ])),
@@ -773,9 +882,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       case GameKind.poll:
       case GameKind.wouldRather:
         return [
-          _optBtn(cell.prompt[1], 0),
+          _optBtn(_prompt[1], 0),
           const SizedBox(height: 8),
-          _optBtn(cell.prompt[2], 1),
+          _optBtn(_prompt[2], 1),
         ];
       case GameKind.thumbs:
         return [
@@ -788,9 +897,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       case GameKind.same:
       case GameKind.twoTruths:
         return [
-          for (var i = 1; i < cell.prompt.length; i++) ...[
-            _optBtn(cell.prompt[i], i - 1),
-            if (i < cell.prompt.length - 1) const SizedBox(height: 8),
+          for (var i = 1; i < _prompt.length; i++) ...[
+            _optBtn(_prompt[i], i - 1),
+            if (i < _prompt.length - 1) const SizedBox(height: 8),
           ],
         ];
       case GameKind.freeze:
@@ -992,7 +1101,10 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                       haptic: false,
                       onTap: () {
                         Buzz.impact();
-                        widget.onNext();
+                        Sfx.pop();
+                        _idle?.cancel();
+                        _wheelRevive = _r.nextDouble() < 0.35;
+                        setState(() => _phase = _Phase.wheel);
                       },
                       child: Container(
                         height: 60,
@@ -1003,7 +1115,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                           borderRadius: BorderRadius.circular(18),
                           boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 34, spreadRadius: -8)],
                         ),
-                        child: Text('NEXT ROOM  ›', style: T.h3.copyWith(color: Colors.black, fontSize: 18)),
+                        child: Text('SPIN THE WHEEL  ›', style: T.h3.copyWith(color: Colors.black, fontSize: 18)),
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -1232,6 +1344,262 @@ class _FloatingEmojiState extends State<_FloatingEmoji> with SingleTickerProvide
       },
     );
   }
+}
+
+/// The arrival stamp — the room's name slams across the faces for a beat.
+/// This is the "where the hell am I" moment that makes rooms memorable.
+class _RoomStamp extends StatelessWidget {
+  const _RoomStamp({required this.name, required this.golden});
+  final String name;
+  final bool golden;
+
+  @override
+  Widget build(BuildContext context) {
+    const gold = Color(0xFFFFD54A);
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: const Color(0x66000000),
+          alignment: Alignment.center,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 420),
+            curve: Curves.easeOutBack,
+            builder: (context, v, child) => Opacity(
+              opacity: v.clamp(0, 1),
+              child: Transform.scale(scale: 1.6 - 0.6 * v, child: child),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  golden ? '🏆 GOLDEN ROOM' : 'YOU\'VE ENTERED',
+                  style: T.eyebrow.copyWith(
+                      color: golden ? gold : C.tx2, letterSpacing: 3.5, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                  child: Text(
+                    name,
+                    textAlign: TextAlign.center,
+                    style: T.huge(40).copyWith(
+                      shadows: [
+                        Shadow(color: golden ? gold.withOpacity(0.5) : C.sigGlow, blurRadius: 40),
+                        const Shadow(color: Color(0xCC000000), blurRadius: 16),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The wheel. You don't choose what happens next — it does. Lands on
+/// 🔁 REVIVE (same room, fresh games) or ➡️ NEXT (new strangers).
+class _ReviveWheel extends StatefulWidget {
+  const _ReviveWheel({required this.revive, required this.onDone});
+  final bool revive;
+  final ValueChanged<bool> onDone;
+
+  @override
+  State<_ReviveWheel> createState() => _ReviveWheelState();
+}
+
+class _ReviveWheelState extends State<_ReviveWheel> with SingleTickerProviderStateMixin {
+  static const _slices = 8;
+  static const _a = 2 * pi / _slices;
+
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 3300));
+  late final double _finalR;
+  int _lastTop = -1;
+  bool _landed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final r = Random();
+    // odd slices are REVIVE, even are NEXT — pick a target of the chosen kind
+    final candidates = [for (var i = 0; i < _slices; i++) if ((i.isOdd) == widget.revive) i];
+    final target = candidates[r.nextInt(candidates.length)];
+    final jitter = (r.nextDouble() - 0.5) * _a * 0.5;
+    _finalR = 5 * 2 * pi + (2 * pi - target * _a) + jitter;
+    _c.addListener(_tick);
+    _c.forward().whenComplete(() {
+      if (!mounted) return;
+      Buzz.impact();
+      Sfx.land();
+      setState(() => _landed = true);
+      Timer(const Duration(milliseconds: 1100), () {
+        if (mounted) widget.onDone(widget.revive);
+      });
+    });
+  }
+
+  void _tick() {
+    final rot = Curves.easeOutQuart.transform(_c.value) * _finalR;
+    final top = ((2 * pi - (rot % (2 * pi))) / _a).round() % _slices;
+    if (top != _lastTop) {
+      _lastTop = top;
+      if (_c.value > 0.1 && _c.value < 0.97) {
+        Buzz.tick();
+        Sfx.tick();
+      }
+    }
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rot = Curves.easeOutQuart.transform(_c.value) * _finalR;
+    return Positioned.fill(
+      child: Container(
+        color: const Color(0xF2000000),
+        child: SafeArea(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('THE WHEEL DECIDES', style: T.eyebrow.copyWith(color: C.sig, letterSpacing: 3, fontSize: 12)),
+              const SizedBox(height: 30),
+              SizedBox(
+                width: 300,
+                height: 300,
+                child: Stack(
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.none,
+                  children: [
+                    Transform.rotate(
+                      angle: rot,
+                      child: CustomPaint(size: const Size(300, 300), painter: _WheelPainter()),
+                    ),
+                    // hub
+                    Container(
+                      width: 62,
+                      height: 62,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF0A0B0D),
+                        border: Border.all(color: Colors.white.withOpacity(0.25), width: 1.5),
+                        boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 24, spreadRadius: -6)],
+                      ),
+                      child: const Text('🎰', style: TextStyle(fontSize: 26)),
+                    ),
+                    // pointer
+                    Positioned(
+                      top: -6,
+                      child: Container(
+                        width: 0,
+                        height: 0,
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            left: BorderSide(color: Colors.transparent, width: 13),
+                            right: BorderSide(color: Colors.transparent, width: 13),
+                            top: BorderSide(color: Colors.white, width: 22),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 34),
+              AnimatedSwitcher(
+                duration: M.quick,
+                child: _landed
+                    ? Column(
+                        key: const ValueKey('landed'),
+                        children: [
+                          Text(
+                            widget.revive ? '🔁 REVIVED' : '➡️ NEXT ROOM',
+                            style: T.huge(34).copyWith(color: widget.revive ? C.sig : Colors.white),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            widget.revive ? 'same room — run it back' : 'fresh strangers incoming',
+                            style: T.body.copyWith(color: C.tx2),
+                          ),
+                        ],
+                      )
+                    : Text('revive the room… or roll new strangers?',
+                        key: const ValueKey('spinning'), style: T.body.copyWith(color: C.tx2)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WheelPainter extends CustomPainter {
+  static const _slices = 8;
+  static const _a = 2 * pi / _slices;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    final rect = Rect.fromCircle(center: c, radius: radius);
+    final fill = Paint()..style = PaintingStyle.fill;
+    final line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..color = const Color(0xFF000000);
+
+    for (var i = 0; i < _slices; i++) {
+      // slice i centered at top when rotation is zero
+      final start = -pi / 2 - _a / 2 + i * _a;
+      final revive = i.isOdd;
+      fill.color = revive ? const Color(0xFF6D28D9) : const Color(0xFF17181C);
+      canvas.drawArc(rect, start, _a, true, fill);
+      canvas.drawArc(rect, start, _a, true, line);
+
+      // label along the slice
+      final tp = TextPainter(
+        text: TextSpan(
+          text: revive ? 'REVIVE' : 'NEXT',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1,
+            color: revive ? Colors.white : const Color(0x99FFFFFF),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      canvas.save();
+      canvas.translate(c.dx, c.dy);
+      canvas.rotate(start + _a / 2 + pi / 2);
+      tp.paint(canvas, Offset(-tp.width / 2, -radius + 16));
+      canvas.restore();
+    }
+
+    // outer ring
+    canvas.drawCircle(
+      c,
+      radius - 1,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..color = const Color(0x40FFFFFF),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_WheelPainter old) => false;
 }
 
 /// Purple / white / gold confetti raining through the ceremony.
