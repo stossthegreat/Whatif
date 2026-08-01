@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import '../core/camera_service.dart';
@@ -76,19 +77,45 @@ class SelfView extends StatelessWidget {
   }
 }
 
-class _Placeholder extends StatelessWidget {
+/// A living placeholder — used whenever the camera is unavailable. A soft cool
+/// light drifts slowly across near-black so even the camera-less screens breathe
+/// (never a dead, static panel).
+class _Placeholder extends StatefulWidget {
   const _Placeholder();
   @override
+  State<_Placeholder> createState() => _PlaceholderState();
+}
+
+class _PlaceholderState extends State<_Placeholder> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(seconds: 14))..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        color: C.char2,
-        gradient: RadialGradient(
-          center: Alignment(0, -0.2),
-          radius: 0.9,
-          colors: [Color(0x4D8CB4FF), Color(0x00000000)],
-        ),
-      ),
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        final t = _c.value * 6.28318;
+        final dx = 0.32 * math.sin(t);
+        final dy = -0.18 + 0.26 * math.cos(t * 0.8);
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: C.char2,
+            gradient: RadialGradient(
+              center: Alignment(dx, dy),
+              radius: 0.95,
+              colors: const [Color(0x4D8CB4FF), Color(0x00000000)],
+              stops: const [0.0, 0.72],
+            ),
+          ),
+        );
+      },
     );
   }
 }
