@@ -61,7 +61,41 @@ function enqueue(u: User) {
   u.queuedAt = Date.now();
   if (!store.queue.includes(u.id)) store.queue.push(u.id);
   send(u, { t: 'searching' });
+  // someone waiting alone in a room? walk straight in — their full-screen
+  // solo view shrinks to a PiP the moment you arrive
+  if (tryJoinLonelyCell(u)) return;
   tryMatch();
+}
+
+function tryJoinLonelyCell(u: User): boolean {
+  for (const cell of store.cells.values()) {
+    if (cell.members.length !== 1) continue;
+    const lone = store.users.get(cell.members[0]);
+    if (!lone || (cell.mode ?? 'hang') !== (u.mode ?? 'hang')) continue;
+    if (!compatible(lone, u)) continue;
+    void joinCell(cell, u);
+    return true;
+  }
+  return false;
+}
+
+async function joinCell(cell: Cell, u: User) {
+  dequeue(u.id);
+  u.state = 'incell';
+  u.cellId = cell.id;
+  cell.members.push(u.id);
+  // the room learns someone walked in
+  broadcastCell(cell.id, { t: 'peerJoined', id: u.id, uid: u.uid, name: u.name, hue: u.hue }, u.id);
+  // the newcomer gets the full room
+  const others = cell.members.filter((x) => x !== u.id).map((x) => {
+    const o = store.users.get(x)!;
+    return { id: x, uid: o.uid, name: o.name, hue: o.hue };
+  });
+  const token = await mintToken(cell.room, u.id, u.name);
+  send(u, { t: 'cell', room: cell.room, url: LIVEKIT_URL, token, people: others,
+    game: cell.rounds[0], rounds: cell.rounds, golden: cell.golden,
+    luckyId: cell.luckyId, mode: cell.mode });
+  notifyLive(u);
 }
 function dequeue(id: string) {
   const i = store.queue.indexOf(id);

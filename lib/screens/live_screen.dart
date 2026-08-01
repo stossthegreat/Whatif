@@ -203,7 +203,52 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         _onWheelMsg(m);
       case 'talk':
         if (_serverDriven && _phase != _Phase.wheel) _toTalk();
+      case 'peerJoined':
+        _onPeerJoined(m);
+      case 'peerLeft':
+        _onPeerLeft(m);
     }
+  }
+
+  /// Someone walked into the room — the solo full-screen shrinks to a PiP,
+  /// grids reflow, and the moment gets a beat of celebration.
+  void _onPeerJoined(Map<String, dynamic> m) {
+    final id = m['id'] as String?;
+    if (id == null || cell.people.any((p) => p.id == id)) return;
+    Buzz.pop();
+    Sfx.match();
+    final name = (m['name'] as String?) ?? 'someone';
+    setState(() {
+      cell.people.add(Person(
+        id: id,
+        uid: m['uid'] as String?,
+        name: name,
+        hue: ((m['hue'] as num?) ?? 210).toDouble(),
+        lx: 0.2 + _r.nextDouble() * 0.5,
+        ly: 0.22 + _r.nextDouble() * 0.4,
+      ));
+      // per-round tile indices can be stale after a reflow — clear them
+      _voteCounts = {};
+      _pointPick = null;
+      if (_winnerIdx != null && _winnerIdx! >= cell.people.length) _winnerIdx = null;
+    });
+    _toast('@$name just dropped in 👋');
+  }
+
+  void _onPeerLeft(Map<String, dynamic> m) {
+    final id = m['id'] as String?;
+    if (id == null) return;
+    final i = cell.people.indexWhere((p) => p.id == id);
+    if (i < 0) return;
+    final gone = cell.people[i];
+    setState(() {
+      cell.people.removeAt(i);
+      _voteCounts = {};
+      _pointPick = null;
+      _winnerIdx = null;
+      if (_target > cell.people.length) _target = cell.people.length;
+    });
+    _toast('@${gone.name} left the room');
   }
 
   void _onRoundMsg(Map<String, dynamic> m) {
