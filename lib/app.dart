@@ -80,6 +80,10 @@ class _RootState extends State<_Root> {
       case 'ended':
         RtcService.instance.leave();
         if (mounted && _step == _Step.live) _to(_Step.finding); // server re-queued us
+      case 'sparkMutual':
+        if (m['name'] is String) AppSession.instance.markMutual(m['name'] as String);
+      case 'sparkLive':
+        if (m['name'] is String) AppSession.instance.setSparkLive(m['name'] as String, true);
     }
   }
 

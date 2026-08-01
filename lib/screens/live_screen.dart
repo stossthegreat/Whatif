@@ -59,7 +59,19 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   Timer? _idle;
   Timer? _speak;
   Timer? _startTimer;
+  Timer? _director;
   StreamSubscription<Map<String, dynamic>>? _netSub;
+
+  // The Director — invisible, keeps the room from ever going awkward.
+  String? _twist;
+  static const _twists = [
+    '⚡  Everyone point at the funniest person',
+    '🔥  Next answer has to be a lie',
+    '😂  10 seconds to make the room laugh',
+    '❤️  Two of you — 30 seconds, go',
+    '👀  Everyone freeze. Hold it.',
+    '🌀  CHAOS — the rules just changed',
+  ];
 
   Cell get cell => widget.cell;
   GameDef get game => cell.game;
@@ -73,6 +85,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       setState(() => _speakingIdx = _r.nextInt(cell.people.length));
     });
     _startTimer = Timer(const Duration(milliseconds: 700), _startGame);
+    // the Director injects a twist a little way into the cell
+    _director = Timer(Duration(milliseconds: 9000 + _r.nextInt(7000)), _injectTwist);
     // relay peers' reactions in live mode
     if (widget.live) {
       _netSub = NetworkClient.instance.events.listen((m) {
@@ -88,8 +102,18 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _idle?.cancel();
     _speak?.cancel();
     _startTimer?.cancel();
+    _director?.cancel();
     _netSub?.cancel();
     super.dispose();
+  }
+
+  void _injectTwist() {
+    if (!mounted) return;
+    Buzz.impact();
+    setState(() => _twist = _twists[_r.nextInt(_twists.length)]);
+    Timer(const Duration(milliseconds: 3800), () {
+      if (mounted) setState(() => _twist = null);
+    });
   }
 
   // ---- game timer plumbing --------------------------------------------------
@@ -154,6 +178,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   void _toReveal() {
     _timer.stop();
     Buzz.commit();
+    // capture the moment — the shareable growth unit
+    AppSession.instance.captureMoment(
+      game: game.name,
+      result: _result,
+      hues: [...cell.people.map((p) => p.hue), AppSession.instance.myHue],
+    );
     setState(() => _phase = _Phase.reveal);
     // involuntary recompose if the user just sits there — the loop pulls.
     _idle?.cancel();
@@ -369,42 +399,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
-          // self PiP
-          Positioned(
-            right: 16,
-            bottom: MediaQuery.of(context).padding.bottom + (_phase == _Phase.game ? 220 : 96),
-            child: AnimatedContainer(
-              duration: M.base,
-              curve: M.ease,
-              width: r.isTablet ? 116 : 96,
-              height: r.isTablet ? 154 : 128,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: C.hair2),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 24, offset: const Offset(0, 10))],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: widget.live
-                    ? Stack(fit: StackFit.expand, children: [
-                        const DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: C.char2,
-                            gradient: RadialGradient(
-                              center: Alignment(0, -0.2), radius: 0.9,
-                              colors: [Color(0x4D8CB4FF), Color(0x00000000)], stops: [0.0, 0.72],
-                            ),
-                          ),
-                        ),
-                        VideoView(track: RtcService.instance.localTrack, mirror: true),
-                        const Positioned(
-                            left: 8, bottom: 7,
-                            child: Text('you', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w700))),
-                      ])
-                    : const SelfView(label: 'you'),
-              ),
-            ),
-          ),
           // top bar
           SafeArea(
             bottom: false,
@@ -443,6 +437,23 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
+          // Director twist banner
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 64,
+            left: 20, right: 20,
+            child: IgnorePointer(
+              child: AnimatedSwitcher(
+                duration: M.quick,
+                transitionBuilder: (child, anim) => FadeTransition(
+                  opacity: anim,
+                  child: ScaleTransition(scale: Tween(begin: 0.92, end: 1.0).animate(anim), child: child),
+                ),
+                child: _twist == null
+                    ? const SizedBox.shrink()
+                    : _TwistBanner(key: ValueKey<String>(_twist!), text: _twist!),
+              ),
+            ),
+          ),
           // game / reveal card
           Align(
             alignment: Alignment.bottomCenter,
@@ -462,29 +473,68 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     );
   }
 
+  /// The camera IS the interface. 1:1 stacks them over you; groups are an equal
+  /// FaceTime grid with you as one of the tiles (never a floating box).
   Widget _buildGrid() {
-    final n = cell.people.length;
-    final tiles = List.generate(n, (i) => _tile(i));
-    if (n == 1) return tiles.first;
-    if (n == 2) {
+    final n = cell.people.length; // strangers
+    final personTiles = List.generate(n, (i) => _tile(i));
+
+    if (n == 1) {
       return Column(children: [
-        Expanded(child: tiles[0]),
+        Expanded(child: personTiles[0]),
         const SizedBox(height: 8),
-        Expanded(child: tiles[1]),
+        Expanded(child: _selfTile()),
       ]);
     }
-    // rows of two; a lone last tile spans the row
+
+    final tiles = <Widget>[...personTiles, _selfTile()];
+    final cols = tiles.length <= 4 ? 2 : 3;
+    return _facetime(tiles, cols);
+  }
+
+  Widget _facetime(List<Widget> tiles, int cols) {
     final rows = <Widget>[];
-    for (var i = 0; i < n; i += 2) {
-      final rowTiles = <Widget>[Expanded(child: tiles[i])];
-      if (i + 1 < n) {
-        rowTiles.add(const SizedBox(width: 8));
-        rowTiles.add(Expanded(child: tiles[i + 1]));
+    for (var i = 0; i < tiles.length; i += cols) {
+      final rowKids = <Widget>[];
+      for (var j = 0; j < cols; j++) {
+        if (j > 0) rowKids.add(const SizedBox(width: 8));
+        final idx = i + j;
+        rowKids.add(Expanded(child: idx < tiles.length ? tiles[idx] : const SizedBox()));
       }
-      rows.add(Expanded(child: Row(children: rowTiles)));
-      if (i + 2 < n) rows.add(const SizedBox(height: 8));
+      rows.add(Expanded(child: Row(children: rowKids)));
+      if (i + cols < tiles.length) rows.add(const SizedBox(height: 8));
     }
     return Column(children: rows);
+  }
+
+  Widget _selfTile() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: C.char2,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0x1FFFFFFF)),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            widget.live
+                ? VideoView(track: RtcService.instance.localTrack, mirror: true)
+                : const SelfView(),
+            Positioned(
+              top: 0, left: 12, right: 12,
+              child: Container(height: 1, decoration: const BoxDecoration(
+                gradient: LinearGradient(colors: [Color(0x00FFFFFF), C.spec, Color(0x00FFFFFF)]))),
+            ),
+            const Positioned(
+              left: 12, bottom: 11,
+              child: Text('you', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _tile(int i) {
@@ -503,8 +553,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       onTap: canPoint ? () => _resolvePoint(i) : null,
       onReport: () => _openReport(p),
       onSave: () {
-        AppSession.instance.save(p.name);
-        _toast('saved @${p.name} — you’ll know when they’re live');
+        AppSession.instance.spark(p);
+        if (widget.live && p.id != null) NetworkClient.instance.save(p.id!);
+        _toast('✨ sparked @${p.name} — added to your people');
         Buzz.commit();
       },
     );
@@ -548,7 +599,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   List<Widget> _inputs() {
     switch (game.kind) {
       case GameKind.point:
-        return [Text('tap a face above ↑', style: T.sub.copyWith(color: C.tx2))];
+        return [Text('tap someone’s tile', style: T.sub.copyWith(color: C.tx2))];
       case GameKind.poll:
       case GameKind.wouldRather:
         return [
@@ -742,6 +793,33 @@ class _FloatingEmojiState extends State<_FloatingEmoji> with SingleTickerProvide
           ),
         );
       },
+    );
+  }
+}
+
+/// The Director's twist banner — a glass pill with a purple glow that drops in,
+/// tells the room what just changed, then fades. The room never goes awkward.
+class _TwistBanner extends StatelessWidget {
+  const _TwistBanner({super.key, required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+        decoration: BoxDecoration(
+          color: const Color(0xE6141018),
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(color: C.sig.withOpacity(0.6)),
+          boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 30, spreadRadius: -8)],
+        ),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+        ),
+      ),
     );
   }
 }

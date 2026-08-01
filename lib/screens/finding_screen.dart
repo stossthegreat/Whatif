@@ -1,18 +1,19 @@
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
+import '../models/person.dart';
 import '../theme/tokens.dart';
-import '../widgets/countdown_ring.dart';
-import '../widgets/self_view.dart';
 
-/// Finding — the held breath. Not a spinner: a reveal countdown with a finish
-/// line. The ring fills, the number ticks 2→1, haptics ramp — then it hands off
-/// to the drop. This ~1.5s is the most important surface in the product.
+/// Finding — the roulette. Not a fade: a slot-machine reel of flags, faces,
+/// games and emojis whips past a center reticle, motion-blurred, decelerating
+/// with ticking haptics, and lands on a face — CLICK. "MATCHED." This is the
+/// dopamine hit before the drop.
 class FindingScreen extends StatefulWidget {
   const FindingScreen({super.key, required this.onDone, this.waitForExternal = false});
   final VoidCallback onDone;
 
-  /// In live mode the match arrives from the server, so the ring fills and then
-  /// holds (a held breath) until the parent transitions — [onDone] isn't used.
+  /// Live mode: keep spinning until the server delivers a match (parent swaps us).
   final bool waitForExternal;
 
   @override
@@ -20,30 +21,59 @@ class FindingScreen extends StatefulWidget {
 }
 
 class _FindingScreenState extends State<FindingScreen> with SingleTickerProviderStateMixin {
+  static const _itemW = 96.0;
+  static const _count = 46;
+  static const _winner = 41; // index that lands in the reticle
+  final _rng = math.Random();
+
   late final AnimationController _c =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
-  bool _flipped = false;
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 2400));
+  late final List<_Item> _items;
+  int _lastCenter = -1;
+  bool _matched = false;
 
   @override
   void initState() {
     super.initState();
-    Buzz.ramp();
-    _c
-      ..addListener(() {
-        if (!_flipped && _c.value > 0.5) {
-          _flipped = true;
-          Buzz.tick();
-          setState(() {});
-        }
-      })
-      ..forward().whenComplete(() {
-        if (!mounted) return;
-        if (widget.waitForExternal) {
-          _c.repeat(min: 0.92, max: 1.0, reverse: true, period: const Duration(milliseconds: 900));
-        } else {
-          widget.onDone();
-        }
-      });
+    _items = List.generate(_count, (i) => _Item.build(i, i == _winner, _rng));
+    _c.addListener(_onTick);
+    _spin();
+  }
+
+  void _spin() {
+    _matched = false;
+    _c.forward(from: 0).whenComplete(() {
+      if (!mounted) return;
+      if (widget.waitForExternal) {
+        _spin(); // keep the reel alive until the server matches us
+      } else {
+        Buzz.impact();
+        setState(() => _matched = true);
+        Future<void>.delayed(const Duration(milliseconds: 700), () {
+          if (mounted) widget.onDone();
+        });
+      }
+    });
+  }
+
+  double get _curve => Curves.easeOutQuart.transform(_c.value);
+
+  void _onTick() {
+    // ticking that slows with the reel (only during the satisfying decel)
+    final w = context.size?.width ?? 400;
+    final x = _offsetFor(w);
+    final center = ((w / 2 - x) / _itemW).round();
+    if (center != _lastCenter) {
+      _lastCenter = center;
+      if (_c.value > 0.5 && _c.value < 0.99) Buzz.tick();
+    }
+    setState(() {});
+  }
+
+  double _offsetFor(double width) {
+    final endX = width / 2 - (_winner * _itemW + _itemW / 2);
+    final spin = 24 * _itemW;
+    return endX + spin - spin * _curve;
   }
 
   @override
@@ -56,38 +86,124 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: C.black,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedBuilder(
-              animation: _c,
-              builder: (context, _) => RingPaint(
-                progress: _c.value,
-                size: 224,
-                child: SizedBox(
-                  width: 122,
-                  height: 122,
-                  child: ClipOval(
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        const SelfView(),
-                        DecoratedBox(
-                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.15)),
-                        ),
-                      ],
+      body: LayoutBuilder(
+        builder: (context, box) {
+          final w = box.maxWidth;
+          final x = _offsetFor(w);
+          final blur = (1 - _curve) * 22 + 0.01;
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              // soft purple glow behind the reel
+              Center(
+                child: Container(
+                  width: w, height: 180,
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      colors: [C.sig.withOpacity(0.18), Colors.transparent],
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 30),
-            Text('CONNECTING', style: T.eyebrow),
-            const SizedBox(height: 10),
-            Text(_flipped ? '1' : '2', style: T.mono.copyWith(fontSize: 22, letterSpacing: 1)),
-          ],
-        ),
+              // the reel
+              SizedBox(
+                height: 150,
+                width: w,
+                child: ClipRect(
+                  child: ImageFiltered(
+                    imageFilter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: 0.4),
+                    child: Transform.translate(
+                      offset: Offset(x, 0),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: _items.map((it) => SizedBox(width: _itemW, height: 150, child: Center(child: it.widget))).toList(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // edge fades to focus the center
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [C.black, Colors.transparent, Colors.transparent, C.black],
+                        stops: const [0.0, 0.22, 0.78, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // reticle
+              Center(
+                child: Container(
+                  width: _itemW + 8,
+                  height: 128,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: C.sig.withOpacity(0.85), width: 2),
+                    boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 26, spreadRadius: -6)],
+                  ),
+                ),
+              ),
+              // label
+              Positioned(
+                bottom: 120,
+                child: _matched
+                    ? TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.6, end: 1),
+                        duration: const Duration(milliseconds: 360),
+                        curve: Curves.easeOutBack,
+                        builder: (context, v, _) => Transform.scale(
+                          scale: v,
+                          child: Text('MATCHED', style: T.huge(30).copyWith(letterSpacing: 2, color: C.sig)),
+                        ),
+                      )
+                    : Text('FINDING…', style: T.eyebrow.copyWith(letterSpacing: 4, color: C.tx2)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _Item {
+  _Item(this.widget);
+  final Widget widget;
+
+  static const _flags = ['🇬🇧', '🇺🇸', '🇯🇵', '🇧🇷', '🇮🇹', '🇫🇷', '🇰🇷', '🇪🇸', '🇩🇪', '🇮🇳', '🇲🇽', '🇨🇦', '🇳🇬', '🇦🇺'];
+  static const _emoji = ['😂', '🔥', '💀', '❤️', '😳', '👏', '⚡️', '🎭', '🌶️', '👀'];
+
+  static _Item build(int i, bool winner, math.Random r) {
+    if (winner) return _Item(_Face(person: Person.random(r), winner: true));
+    switch (i % 3) {
+      case 0:
+        return _Item(Text(_flags[r.nextInt(_flags.length)], style: const TextStyle(fontSize: 46)));
+      case 1:
+        return _Item(_Face(person: Person.random(r), winner: false));
+      default:
+        return _Item(Text(_emoji[r.nextInt(_emoji.length)], style: const TextStyle(fontSize: 40)));
+    }
+  }
+}
+
+class _Face extends StatelessWidget {
+  const _Face({required this.person, required this.winner});
+  final Person person;
+  final bool winner;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: winner ? 82 : 70,
+      height: winner ? 82 : 70,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(colors: [person.light.withOpacity(1), C.char2], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        border: Border.all(color: winner ? C.sig : Colors.white.withOpacity(0.15), width: winner ? 2.5 : 1),
+        boxShadow: [BoxShadow(color: person.light.withOpacity(winner ? 0.7 : 0.3), blurRadius: winner ? 22 : 10, spreadRadius: -3)],
       ),
     );
   }

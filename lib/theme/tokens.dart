@@ -22,9 +22,11 @@ class C {
   static const tx2 = Color(0x9EFFFFFF); // 62%
   static const tx3 = Color(0x57FFFFFF); // 34%
 
-  static const live = Color(0xFFFF453A); // the "you are live" red — used <5%
-  static const sig = Color(0xFF9CC4FF); // the single cool signal light
-  static Color sigGlow = const Color(0xFF78AFFF).withOpacity(0.55);
+  static const live = Color(0xFFFF3B5C); // the "you are live" / activity red
+  static const sig = Color(0xFFA36BFF); // the signature purple accent
+  static Color sigGlow = const Color(0xFF8B3DFF).withOpacity(0.6);
+  static const blue = Color(0xFF4DA6FF); // rare secondary glow (occasional)
+  static const purpleDeep = Color(0xFF6D28D9);
 }
 
 class T {
