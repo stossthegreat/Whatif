@@ -13,6 +13,8 @@ import 'screens/signin_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/main_shell.dart';
+import 'screens/party_screen.dart';
+import 'screens/rules_screen.dart';
 import 'screens/finding_screen.dart';
 import 'screens/live_screen.dart';
 
@@ -37,7 +39,7 @@ class RivlrApp extends StatelessWidget {
   }
 }
 
-enum _Step { boot, welcome, signin, profile, permission, home, finding, live }
+enum _Step { boot, welcome, signin, profile, rules, permission, home, party, finding, live }
 
 class _Root extends StatefulWidget {
   const _Root();
@@ -90,7 +92,9 @@ class _RootState extends State<_Root> {
         RtcService.instance.leave();
         if (mounted && _step == _Step.live) _to(_Step.finding); // server re-queued us
       case 'sparkMutual':
-        if (m['name'] is String) AppSession.instance.markMutual(m['name'] as String);
+        if (m['name'] is String) {
+          AppSession.instance.markMutual(m['name'] as String, uid: m['uid'] as String?);
+        }
       case 'sparkLive':
         if (m['name'] is String) AppSession.instance.setSparkLive(m['name'] as String, true);
     }
@@ -123,14 +127,18 @@ class _RootState extends State<_Root> {
       prompts: base.prompts,
     );
     final prompt = ((g['prompt'] as List?) ?? const []).map((e) => e.toString()).toList();
-    return RoundDef(game: def, prompt: prompt.isEmpty ? def.prompts.first : prompt);
+    return RoundDef(
+      game: def,
+      prompt: prompt.isEmpty ? def.prompts.first : prompt,
+      targetId: g['targetId'] as String?,
+      lieIdx: (g['lieIdx'] as num?)?.toInt(),
+    );
   }
 
   Cell _cellFromServer(Map<String, dynamic> m) {
     var people = ((m['people'] as List?) ?? const [])
         .map((e) => Person.fromServer((e as Map).cast<String, dynamic>(), _rng))
         .toList();
-    if (people.isEmpty) people = Person.group(_rng, 1); // solo test — show one tile
 
     // prefer the server's full session (everyone plays the same rounds); an
     // older server sends a single game — fill the session out locally.
@@ -150,7 +158,12 @@ class _RootState extends State<_Root> {
             count: 5 - rounds.length, avoidKind: rounds.last.game.kind),
       ];
     }
-    return Cell(people: people, rounds: rounds);
+    return Cell(
+      people: people,
+      rounds: rounds,
+      golden: m['golden'] as bool?,
+      luckyId: m['luckyId'] as String?,
+    );
   }
 
   // ---- simulated mode -------------------------------------------------------
@@ -196,12 +209,17 @@ class _RootState extends State<_Root> {
       _Step.boot => const ColoredBox(color: C.black),
       _Step.welcome => WelcomeScreen(onNext: () => _to(_Step.signin)),
       _Step.signin => SignInScreen(onContinue: () => _to(_Step.profile)),
-      _Step.profile => ProfileScreen(onDone: () => _to(_Step.permission)),
+      _Step.profile => ProfileScreen(onDone: () => _to(_Step.rules)),
+      _Step.rules => RulesScreen(onAgree: () => _to(_Step.permission)),
       _Step.permission => OnboardingScreen(onDone: () {
           AppSession.instance.completeOnboarding();
           _to(_Step.home);
         }),
-      _Step.home => MainShell(onPlay: _play, onSignOut: () => _to(_Step.welcome)),
+      _Step.home => MainShell(
+          onPlay: _play,
+          onParty: () => _to(_Step.party),
+          onSignOut: () => _to(_Step.welcome)),
+      _Step.party => PartyScreen(onBack: () => _to(_Step.home)),
       _Step.finding => FindingScreen(onDone: _dropSimulated, waitForExternal: live),
       _Step.live => LiveScreen(
           key: ValueKey(_drop),

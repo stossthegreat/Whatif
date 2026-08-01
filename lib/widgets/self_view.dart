@@ -49,7 +49,7 @@ class SelfView extends StatelessWidget {
           // of the camera boot are never visible
           inner = TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 450),
+            duration: const Duration(milliseconds: 700),
             curve: Curves.easeOut,
             builder: (context, v, child) => Stack(
               fit: StackFit.expand,

@@ -16,7 +16,7 @@ import '../widgets/presence_tile.dart';
 import '../widgets/self_view.dart';
 import '../widgets/video_view.dart';
 
-enum _Phase { drop, game, reveal, awards, wheel }
+enum _Phase { drop, talk, game, reveal, awards, wheel }
 
 /// The room. TikTok-clean, FaceTime-exact.
 ///
@@ -69,12 +69,30 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   List<_Award> _awards = const [];
   String? _voteEmoji;
 
-  // the unpredictability engine
-  late final bool _golden = _r.nextDouble() < 0.04; // golden rooms — people chase these
-  late final int _lucky = _r.nextInt(cell.people.length + 1); // ⭐ main character seat
+  // the unpredictability engine — server-rolled when available, local otherwise
+  late final bool _golden = widget.cell.golden ?? (_r.nextDouble() < 0.04);
+  late final int _lucky = _idxOf(widget.cell.luckyId) ?? _r.nextInt(cell.people.length + 1);
   int _reactCount = 0;
   int _combo = 0;
   Timer? _comboReset;
+
+  // server-authoritative mode: a sync-capable server stamps targetId on every
+  // round. When present, the server owns timing/results/awards/wheel and the
+  // local machinery becomes the fail-soft fallback.
+  bool get _serverDriven => widget.live && cell.rounds.first.targetId != null;
+  Timer? _resultGrace;
+  Timer? _wheelTimeout;
+  bool _wheelArming = false;
+  DateTime? _roundEndsAt;
+
+  /// Resolve a member conn-id to a tile index ('you' == people.length).
+  /// Always resolved at use time — indices shift when someone leaves.
+  int? _idxOf(String? id) {
+    if (id == null) return null;
+    if (id == NetworkClient.instance.myId) return cell.people.length;
+    final i = cell.people.indexWhere((p) => p.id == id);
+    return i >= 0 ? i : null;
+  }
 
   int _speakingIdx = -1;
   Timer? _idle;
@@ -106,6 +124,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   int _target = 0;
   bool _bottleDone = true;
 
+  // your PiP in 1:1 — draggable; null = default anchor (bottom-right)
+  Offset? _pipPos;
+
+  // talk-first: games played this hang (simulated ceremony every 3rd)
+  int _gamesPlayed = 0;
+
   Cell get cell => widget.cell;
   GameDef get game => cell.rounds[_round].game;
   List<String> get _prompt => cell.rounds[_round].prompt;
@@ -131,18 +155,229 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       if (!mounted || cell.people.isEmpty) return;
       setState(() => _speakingIdx = _r.nextInt(cell.people.length));
     });
-    _startTimer = Timer(const Duration(milliseconds: 1300), _startGame);
-    // the Director strikes somewhere in the first stretch — nobody knows when
-    _director = Timer(Duration(milliseconds: 8000 + _r.nextInt(9000)), _dropChaos);
+    _startTimer = Timer(const Duration(milliseconds: 1300), _toTalk);
+    // the Director strikes somewhere in the first stretch — nobody knows when.
+    // (In server-driven rooms chaos is pushed by the server so all phones
+    // flash the same card at the same moment.)
+    if (!_serverDriven) {
+      _director = Timer(Duration(milliseconds: 8000 + _r.nextInt(9000)), _dropChaos);
+    }
     if (widget.live) {
-      _netSub = NetworkClient.instance.events.listen((m) {
-        if (!mounted) return;
-        if (m['t'] == 'react' && m['e'] is String) {
+      _netSub = NetworkClient.instance.events.listen(_onNet);
+    }
+  }
+
+  // ---- server events (the shared room) --------------------------------------
+  void _onNet(Map<String, dynamic> m) {
+    if (!mounted) return;
+    switch (m['t']) {
+      case 'react':
+        if (m['e'] is String) {
           _bumpCombo();
           _float(m['e'] as String);
         }
-      });
+      case 'round':
+        _onRoundMsg(m);
+      case 'result':
+        _onResultMsg(m);
+      case 'chaos':
+        if (_serverDriven && m['e'] is String && m['x'] is String) {
+          Buzz.impact();
+          Sfx.slam();
+          setState(() => _chaos = [m['e'] as String, m['x'] as String]);
+          Timer(const Duration(milliseconds: 3200), () {
+            if (mounted) setState(() => _chaos = null);
+          });
+        }
+      case 'awards':
+        _onAwardsMsg(m);
+      case 'wheel':
+        _onWheelMsg(m);
+      case 'talk':
+        if (_serverDriven && _phase != _Phase.wheel) _toTalk();
     }
+  }
+
+  void _onRoundMsg(Map<String, dynamic> m) {
+    if (!_serverDriven || _phase == _Phase.wheel) return;
+    final idx = (m['idx'] as num?)?.toInt();
+    if (idx == null || idx < 0) return;
+    // the round now carries its game — the room picked it live
+    if (m['game'] is Map) {
+      final wire = _roundFromWire((m['game'] as Map).cast<String, dynamic>());
+      while (cell.rounds.length <= idx) {
+        cell.rounds.add(wire);
+      }
+      cell.rounds[idx] = wire;
+    }
+    if (idx >= cell.rounds.length) return;
+    final ends = (m['endsAt'] as num?)?.toInt();
+    _roundEndsAt = ends != null ? DateTime.fromMillisecondsSinceEpoch(ends) : null;
+    // hard-sync to the server's clock: cancel every local fallback
+    _idle?.cancel();
+    _startTimer?.cancel();
+    _resultGrace?.cancel();
+    _revealTick?.cancel();
+    setState(() {
+      _revealCount = null;
+      _round = idx;
+      _answered = false;
+      _pointPick = null;
+      _selected = null;
+      _winnerIdx = null;
+      _split = const [];
+      _result = '';
+      _voteCounts = {};
+    });
+    _startGame();
+  }
+
+  void _onResultMsg(Map<String, dynamic> m) {
+    if (!_serverDriven) return;
+    final rIdx = (m['round'] as num?)?.toInt();
+    if (rIdx != _round || _phase != _Phase.game) return;
+    _resultGrace?.cancel();
+    _timer.stop();
+    _answered = true;
+
+    final winnerIdx = _idxOf(m['winnerId'] as String?);
+    final isYou = winnerIdx != null && winnerIdx >= cell.people.length;
+    String nameOf(int i) => '@${cell.people[i].name}';
+
+    setState(() {
+      switch (game.kind) {
+        case GameKind.point:
+          final tally = (m['tally'] as Map?) ?? const {};
+          _voteCounts = {};
+          for (final e in tally.entries) {
+            final ti = _idxOf(e.key as String?);
+            final c = (e.value as num?)?.toInt() ?? 0;
+            if (ti != null && c > 0) _voteCounts[ti] = c;
+          }
+          if (isYou) {
+            _result = 'the room pointed at YOU 😳';
+          } else if (winnerIdx != null) {
+            _winnerIdx = winnerIdx;
+            _result = 'the room pointed at ${nameOf(winnerIdx)}';
+          } else {
+            _result = 'the room couldn’t decide 🤝';
+          }
+        case GameKind.spin:
+          _result = isYou
+              ? 'you took it on the chin 😎'
+              : '$_targetName said what they said 💅';
+          if (winnerIdx != null && winnerIdx < cell.people.length) _winnerIdx = winnerIdx;
+        case GameKind.freeze:
+          _result = isYou ? 'you held it 😐 ice cold' : 'you cracked 😂 ${winnerIdx != null ? nameOf(winnerIdx) : 'they'} won';
+        case GameKind.rapidFire:
+          _result = 'quick hands — the room felt that';
+        case GameKind.thumbs:
+          final g = (m['guilty'] as num?)?.toInt() ?? 0;
+          _result = g == 0 ? 'not one guilty soul 😇 (cap)' : '$g in the room ${g == 1 ? 'is' : 'are'} guilty 👀';
+        case GameKind.poll:
+        case GameKind.wouldRather:
+          final counts = ((m['counts'] as List?) ?? const []).map((e) => (e as num).toInt()).toList();
+          final total = counts.fold<int>(0, (a, b) => a + b);
+          final a = total > 0 && counts.isNotEmpty ? (counts[0] * 100 / total).round() : 50;
+          _split = [a, 100 - a];
+          if (_selected != null && _selected! < _split.length) {
+            _result = 'the room split ${_split[_selected!]}% your way';
+          } else {
+            _result = 'the room split $a / ${100 - a}';
+          }
+        case GameKind.same:
+          final counts = ((m['counts'] as List?) ?? const []).map((e) => (e as num).toInt()).toList();
+          final matches = _selected != null && _selected! < counts.length
+              ? (counts[_selected!] - 1).clamp(0, 99)
+              : 0;
+          _result = matches > 0 ? '$matches of you said the same thing 🧠' : 'nobody matched you — iconic';
+        case GameKind.twoTruths:
+          final lie = (m['lieIdx'] as num?)?.toInt() ?? cell.rounds[_round].lieIdx;
+          if (_selected == null) {
+            _result = 'the lie slipped past everyone 👀';
+          } else if (lie != null && _selected == lie) {
+            _result = 'you read them 😏 nailed the lie';
+          } else {
+            _result = 'they fooled you 😵 slippery';
+          }
+      }
+    });
+    _toReveal();
+  }
+
+  void _onAwardsMsg(Map<String, dynamic> m) {
+    if (!_serverDriven || _phase == _Phase.wheel) return;
+    final list = (m['list'] as List?) ?? const [];
+    final awards = <_Award>[];
+    for (final e in list.whereType<Map>()) {
+      final idx = _idxOf(e['winnerId'] as String?);
+      final winner = idx == null
+          ? 'someone'
+          : (idx >= cell.people.length ? 'you' : '@${cell.people[idx].name}');
+      awards.add(_Award((e['emoji'] as String?) ?? '🏆', (e['label'] as String?) ?? '', winner));
+    }
+    if (awards.isEmpty) return;
+    if (_phase == _Phase.awards) {
+      // local fallback fired first — replace with the room's real verdict
+      setState(() => _awards = awards);
+      return;
+    }
+    _idle?.cancel();
+    _awards = awards;
+    var earned = false;
+    for (final a in _awards) {
+      if (a.winner == 'you') {
+        AppSession.instance.earnBadge('${a.emoji} ${a.label}');
+        earned = true;
+      }
+    }
+    if (_golden && earned) AppSession.instance.earnBadge('🏆 Golden Room');
+    Buzz.impact();
+    Sfx.fanfare();
+    setState(() => _phase = _Phase.awards);
+    _idle = Timer(const Duration(seconds: 30), () {
+      if (mounted && _phase == _Phase.awards) widget.onNext();
+    });
+  }
+
+  RoundDef _roundFromWire(Map<String, dynamic> g) {
+    final kind = gameKindFrom((g['kind'] as String?) ?? 'poll');
+    final base = GameDef.byKind(kind);
+    final def = GameDef(
+      kind: kind,
+      name: (g['name'] as String?) ?? base.name,
+      hint: (g['hint'] as String?) ?? base.hint,
+      minStrangers: base.minStrangers,
+      maxStrangers: base.maxStrangers,
+      prompts: base.prompts,
+    );
+    final prompt = ((g['prompt'] as List?) ?? const []).map((e) => e.toString()).toList();
+    return RoundDef(
+      game: def,
+      prompt: prompt.isEmpty ? def.prompts.first : prompt,
+      targetId: g['targetId'] as String?,
+      lieIdx: (g['lieIdx'] as num?)?.toInt(),
+    );
+  }
+
+  void _onWheelMsg(Map<String, dynamic> m) {
+    if (!_wheelArming) return;
+    _wheelTimeout?.cancel();
+    _wheelRevive = m['revive'] == true;
+    final rw = (m['rounds'] as List?) ?? const [];
+    if (_wheelRevive && rw.isNotEmpty) {
+      cell.rounds = rw
+          .whereType<Map>()
+          .map((e) => _roundFromWire(e.cast<String, dynamic>()))
+          .toList();
+    }
+    _enterWheel();
+  }
+
+  void _enterWheel() {
+    _wheelArming = false;
+    _idle?.cancel();
+    setState(() => _phase = _Phase.wheel);
   }
 
   @override
@@ -154,6 +389,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _startTimer?.cancel();
     _director?.cancel();
     _comboReset?.cancel();
+    _resultGrace?.cancel();
+    _wheelTimeout?.cancel();
+    _revealTick?.cancel();
     _netSub?.cancel();
     super.dispose();
   }
@@ -219,27 +457,176 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   double get _timerProgress => 1 - _timer.value;
 
   // ---- phase machine --------------------------------------------------------
+
+  /// The room's resting state: faces + conversation. Games are something the
+  /// room chooses to do, not a conveyor belt.
+  void _toTalk() {
+    if (!mounted || _phase == _Phase.wheel) return;
+    _timer.stop();
+    _idle?.cancel();
+    _resultGrace?.cancel();
+    setState(() {
+      _phase = _Phase.talk;
+      _answered = false;
+      _result = '';
+      _voteCounts = {};
+    });
+  }
+
+  /// Anyone starts a game — a chosen one or the dice.
+  void _requestGame([String? name]) {
+    Buzz.commit();
+    Sfx.pop();
+    if (_serverDriven) {
+      NetworkClient.instance.pickGame(name);
+      return; // the {t:'round'} broadcast starts it for everyone
+    }
+    // simulated / old server: roll locally
+    final strangers = cell.people.length;
+    GameDef? g;
+    if (name != null) {
+      for (final def in GameDef.pack) {
+        if (def.name == name && def.fits(strangers)) g = def;
+      }
+    }
+    final round = g != null
+        ? _localRound(g)
+        : Cell.rollRounds(_r, strangers, count: 1,
+            avoidKind: cell.rounds.isEmpty ? null : game.kind).first;
+    cell.rounds.add(round);
+    setState(() {
+      _round = cell.rounds.length - 1;
+      _pointPick = null;
+      _selected = null;
+      _winnerIdx = null;
+      _split = const [];
+      _voteCounts = {};
+    });
+    _startGame();
+  }
+
+  RoundDef _localRound(GameDef g) {
+    final chosen = [...g.prompts[_r.nextInt(g.prompts.length)]];
+    final head = chosen.removeAt(0);
+    chosen.shuffle(_r);
+    return RoundDef(game: g, prompt: [head, ...chosen]);
+  }
+
+  /// The game picker — warm openers up top, spark at the bottom.
+  void _openPicker() {
+    Buzz.tick();
+    final strangers = cell.people.length;
+    final fits = GameDef.pack.where((g) => g.fits(strangers) || strangers == 0).toList();
+    const order = ['warm', 'wild', 'spark'];
+    fits.sort((a, b) => order.indexOf(a.vibe).compareTo(order.indexOf(b.vibe)));
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: Container(
+          margin: const EdgeInsets.all(12),
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.72),
+          decoration: BoxDecoration(
+            color: const Color(0xF20B0C10),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: C.hair2),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 16),
+              Text('PICK A GAME', style: T.eyebrow.copyWith(letterSpacing: 3, fontSize: 11)),
+              const SizedBox(height: 8),
+              Flexible(
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+                  shrinkWrap: true,
+                  itemCount: fits.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, color: C.hair, indent: 18, endIndent: 18),
+                  itemBuilder: (ctx2, i) {
+                    final g = fits[i];
+                    return InkWell(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _requestGame(g.name);
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(g.name,
+                                      style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+                                  const SizedBox(height: 2),
+                                  Text(g.hint, style: T.tiny),
+                                ],
+                              ),
+                            ),
+                            if (g.vibe == 'spark')
+                              Text('SPARK', style: T.eyebrow.copyWith(color: C.sig, fontSize: 9, letterSpacing: 1.6)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _startGame() {
     setState(() {
       _phase = _Phase.game;
       _answered = false;
-      // roll this round's target; the bottle animates the pick for spin games
-      _target = _r.nextInt(cell.people.length + 1);
+      // this round's target: the server's pick when synced, else a local roll.
+      // The bottle animates the pick for spin games either way.
+      _target = _idxOf(cell.rounds[_round].targetId) ?? _r.nextInt(cell.people.length + 1);
       _bottleDone = game.kind != GameKind.spin;
     });
-    final secs = switch (game.kind) {
-      GameKind.freeze => 5,
-      GameKind.rapidFire => 10,
-      GameKind.spin => 13, // the bottle eats the first ~2.5s
-      _ => 9,
+    // mirrors the server's conversation-first table exactly
+    var secs = switch (game.kind) {
+      GameKind.point => 75, // talk/perform games — they need real time
+      GameKind.spin => 45,
+      GameKind.freeze => 15,
+      GameKind.rapidFire => 20,
+      _ => 30, // tap-answer kinds — answer, then chat
     };
-    _runTimer(secs, _autoResolve);
+    if (_serverDriven && _roundEndsAt != null) {
+      // ride the server's clock so every phone's countdown agrees
+      final left = _roundEndsAt!.difference(DateTime.now()).inMilliseconds / 1000;
+      secs = left.clamp(3, 90).round();
+    }
+    // in server-driven rooms the deadline resolution belongs to the server;
+    // the grace timer fabricates locally only if the server goes silent.
+    _runTimer(secs, _serverDriven ? () {} : _autoResolve);
+    if (_serverDriven) {
+      _resultGrace?.cancel();
+      _resultGrace = Timer(Duration(seconds: secs + 2), () {
+        if (mounted && _phase == _Phase.game) {
+          _answered = false;
+          _autoResolve();
+        }
+      });
+    }
   }
 
   void _autoResolve() {
     switch (game.kind) {
       case GameKind.point:
-        _resolvePoint(_r.nextInt(cell.people.length));
+        if (cell.people.isEmpty) {
+          _resolveFreeze(); // solo warm-up — no one to crown yet
+        } else {
+          _resolvePoint(_r.nextInt(cell.people.length));
+        }
       case GameKind.poll:
       case GameKind.wouldRather:
         _resolveSplit(0);
@@ -275,59 +662,70 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     Timer(const Duration(milliseconds: 650), _toReveal);
   }
 
-  bool get _finalRound => _round >= cell.rounds.length - 1;
+  // the signature beat: answers stay hidden, then 3…2…1 — everything flips at
+  // once. The suspense before the flip is the dopamine.
+  int? _revealCount;
+  Timer? _revealTick;
+
+  /// point-game vote counts per tile index (people.length == you), shown as
+  /// chips on the faces when the reveal flips.
+  Map<int, int> _voteCounts = {};
 
   void _toReveal() {
+    if (_revealCount != null) return; // countdown already running
     _timer.stop();
-    Buzz.commit();
-    if (_finalRound) {
-      // only the session's climax becomes a shareable moment
-      AppSession.instance.captureMoment(
-        game: game.name,
-        result: _result,
-        hues: [...cell.people.map((p) => p.hue), AppSession.instance.myHue],
-      );
-    }
-    setState(() => _phase = _Phase.reveal);
-    _idle?.cancel();
-    if (_finalRound) {
-      // the reveal breathes, the room votes, then the ceremony
-      _idle = Timer(const Duration(milliseconds: 3400), () {
-        if (mounted && _phase == _Phase.reveal) _toAwards();
-      });
-    } else {
-      // quick beat — straight into the next round. A room is a session.
-      _idle = Timer(const Duration(milliseconds: 2400), () {
-        if (mounted && _phase == _Phase.reveal) _nextRound();
-      });
-    }
+    _revealCount = 3;
+    Buzz.tick();
+    Sfx.pip();
+    setState(() {});
+    _revealTick?.cancel();
+    _revealTick = Timer.periodic(const Duration(milliseconds: 420), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      final next = (_revealCount ?? 1) - 1;
+      if (next <= 0) {
+        t.cancel();
+        setState(() => _revealCount = null);
+        Sfx.match();
+        _doReveal();
+      } else {
+        Buzz.tick();
+        Sfx.pip();
+        setState(() => _revealCount = next);
+      }
+    });
   }
 
-  void _nextRound() {
-    setState(() {
-      _round++;
-      _answered = false;
-      _pointPick = null;
-      _selected = null;
-      _winnerIdx = null;
-      _split = const [];
-      _result = '';
-      _phase = _Phase.drop;
+  void _doReveal() {
+    Buzz.commit();
+    AppSession.instance.captureMoment(
+      game: game.name,
+      result: _result,
+      hues: [...cell.people.map((p) => p.hue), AppSession.instance.myHue],
+    );
+    setState(() => _phase = _Phase.reveal);
+    _gamesPlayed++;
+    _idle?.cancel();
+    // after the reveal breathes, the room goes back to talking. Every 3rd game
+    // earns the ceremony. (Server rooms: 'talk'/'awards' messages drive this —
+    // the local timers are only the safety net.)
+    final ceremonyDue = !_serverDriven && _gamesPlayed % 3 == 0;
+    _idle = Timer(Duration(milliseconds: _serverDriven ? 11000 : 6500), () {
+      if (!mounted || _phase != _Phase.reveal) return;
+      if (ceremonyDue) {
+        _toAwards();
+      } else {
+        _toTalk();
+      }
     });
-    Buzz.pop();
-    Sfx.pop();
-    _startTimer?.cancel();
-    _startTimer = Timer(const Duration(milliseconds: 900), _startGame);
-    // the Director may strike again between rounds
-    if (_r.nextDouble() < 0.4) {
-      _director?.cancel();
-      _director = Timer(Duration(milliseconds: 4000 + _r.nextInt(6000)), _dropChaos);
-    }
   }
 
   /// The wheel chose REVIVE — same room, same people, a fresh session.
   void _revive() {
-    cell.reroll(_r);
+    // server-driven: the shared reroll already arrived with the wheel reply
+    if (!_serverDriven) cell.reroll(_r);
     setState(() {
       _round = 0;
       _answered = false;
@@ -338,6 +736,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _result = '';
       _voteEmoji = null;
       _awards = const [];
+      _voteCounts = {};
       _phase = _Phase.drop;
       _stamp = true;
     });
@@ -347,9 +746,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       if (mounted) setState(() => _stamp = false);
     });
     _startTimer?.cancel();
-    _startTimer = Timer(const Duration(milliseconds: 1300), _startGame);
-    _director?.cancel();
-    _director = Timer(Duration(milliseconds: 6000 + _r.nextInt(8000)), _dropChaos);
+    _startTimer = Timer(const Duration(milliseconds: 1300), _toTalk);
+    if (!_serverDriven) {
+      _director?.cancel();
+      _director = Timer(Duration(milliseconds: 6000 + _r.nextInt(8000)), _dropChaos);
+    }
     _idle?.cancel();
   }
 
@@ -368,7 +769,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     setState(() => _phase = _Phase.awards);
     // never a dead end — if you just sit there, the loop pulls you forward.
     _idle?.cancel();
-    _idle = Timer(const Duration(seconds: 14), () {
+    _idle = Timer(const Duration(seconds: 30), () {
       if (mounted && _phase == _Phase.awards) widget.onNext();
     });
   }
@@ -406,6 +807,15 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   // ---- resolvers ------------------------------------------------------------
   void _resolvePoint(int userPick) {
     if (_answered) return;
+    if (_serverDriven) {
+      // real vote: tell the server who you tapped, then wait for the tally
+      _answered = true;
+      Buzz.commit();
+      setState(() => _pointPick = userPick);
+      final id = cell.people[userPick].id;
+      if (id != null) NetworkClient.instance.answer(_round, id);
+      return;
+    }
     _answered = true;
     Buzz.commit();
     final winner = cell.people.length == 1 ? 0 : _r.nextInt(cell.people.length);
@@ -419,6 +829,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   void _resolveSplit(int choice) {
     if (_answered) return;
+    if (_serverDriven) {
+      _answered = true;
+      Buzz.commit();
+      setState(() => _selected = choice);
+      NetworkClient.instance.answer(_round, choice);
+      return;
+    }
     _answered = true;
     Buzz.commit();
     final a = 40 + _r.nextInt(30);
@@ -432,6 +849,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   void _resolveThumbs(bool guilty) {
     if (_answered) return;
+    if (_serverDriven) {
+      _answered = true;
+      Buzz.commit();
+      setState(() => _selected = guilty ? 1 : 0);
+      NetworkClient.instance.answer(_round, guilty);
+      return;
+    }
     _answered = true;
     Buzz.commit();
     final n = 1 + _r.nextInt(cell.people.length + 1);
@@ -444,6 +868,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   void _resolveSame(int choice) {
     if (_answered) return;
+    if (_serverDriven) {
+      _answered = true;
+      Buzz.commit();
+      setState(() => _selected = choice);
+      NetworkClient.instance.answer(_round, choice);
+      return;
+    }
     _answered = true;
     Buzz.commit();
     final m = _r.nextInt(cell.people.length + 1);
@@ -456,6 +887,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   void _resolveTwoTruths(int choice) {
     if (_answered) return;
+    if (_serverDriven) {
+      _answered = true;
+      Buzz.commit();
+      setState(() => _selected = choice);
+      NetworkClient.instance.answer(_round, choice);
+      return;
+    }
     _answered = true;
     Buzz.commit();
     final correct = _r.nextBool();
@@ -471,7 +909,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _answered = true;
     final survived = _r.nextBool();
     setState(() {
-      _result = survived ? 'you held it 😐 ice cold' : 'you cracked 😂 @${cell.people[0].name} won';
+      _result = survived
+          ? 'you held it 😐 ice cold'
+          : cell.people.isEmpty
+              ? 'you cracked 😂 first'
+              : 'you cracked 😂 @${cell.people[0].name} won';
     });
     Buzz.pop();
     _toReveal();
@@ -479,10 +921,18 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   void _resolveRapid() {
     if (_answered) return;
+    if (_serverDriven) {
+      _answered = true;
+      Buzz.commit();
+      NetworkClient.instance.answer(_round, 'done');
+      return;
+    }
     _answered = true;
     Buzz.commit();
     setState(() {
-      _result = 'quick hands — @${cell.people[0].name} liked that';
+      _result = cell.people.isEmpty
+          ? 'quick hands 👏'
+          : 'quick hands — @${cell.people[0].name} liked that';
     });
     Timer(const Duration(milliseconds: 400), _toReveal);
   }
@@ -490,7 +940,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   // ---- save / report / block ------------------------------------------------
   void _save(Person p) {
     AppSession.instance.spark(p);
-    if (widget.live && p.id != null) NetworkClient.instance.save(p.id!);
+    // the server keys saves by the STABLE uid — never the connection id
+    final target = p.uid ?? p.id;
+    if (widget.live && target != null) NetworkClient.instance.save(target);
     _toast('✨ sparked @${p.name} — they’re in your people now');
     Buzz.commit();
     setState(() {});
@@ -619,6 +1071,32 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               ],
             ),
           ),
+          // 4.4 · the flip — 3…2…1, everything reveals at once
+          if (_revealCount != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Container(
+                  color: const Color(0x59000000),
+                  alignment: Alignment.center,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    transitionBuilder: (child, anim) => FadeTransition(
+                      opacity: anim,
+                      child: ScaleTransition(
+                          scale: Tween(begin: 1.6, end: 1.0).animate(anim), child: child),
+                    ),
+                    child: Text(
+                      '$_revealCount',
+                      key: ValueKey(_revealCount),
+                      style: T.huge(120).copyWith(
+                        color: Colors.white,
+                        shadows: const [Shadow(color: Color(0xCC000000), blurRadius: 24)],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           // 4.5 · the bottle — spins over the faces, picks its victim
           if (_phase == _Phase.game && game.kind == GameKind.spin && !_bottleDone)
             _BottleOverlay(
@@ -659,19 +1137,61 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   Widget _stage() {
     final n = cell.people.length;
 
-    // 1:1 — them full screen, you as a floating PiP. Pure FaceTime.
-    if (n == 1) {
+    // solo (waiting) — no fake tiles, ever. You, full bleed, and the truth.
+    if (n == 0) {
       return Stack(
         fit: StackFit.expand,
         children: [
-          _face(0, radius: 0),
+          _selfFace(),
           Positioned(
-            right: 12,
-            top: MediaQuery.of(context).padding.top + 58,
-            child: _pip(),
+            left: 0,
+            right: 0,
+            top: MediaQuery.of(context).padding.top + 64,
+            child: IgnorePointer(
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: const Color(0x8C000000),
+                    borderRadius: BorderRadius.circular(100),
+                    border: Border.all(color: C.hair2),
+                  ),
+                  child: Text('you’re live — waiting for someone real to drop in…',
+                      style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ),
           ),
         ],
       );
+    }
+
+    // 1:1 — them full screen, you as a draggable PiP (default bottom-right).
+    if (n == 1) {
+      return LayoutBuilder(builder: (context, box) {
+        const pw = 128.0, ph = 184.0;
+        final pad = MediaQuery.of(context).padding;
+        final def = Offset(box.maxWidth - pw - 12, box.maxHeight - ph - 220);
+        var pos = _pipPos ?? def;
+        pos = Offset(
+          pos.dx.clamp(8.0, box.maxWidth - pw - 8.0),
+          pos.dy.clamp(pad.top + 56.0, box.maxHeight - ph - 12.0),
+        );
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            _face(0, radius: 0),
+            Positioned(
+              left: pos.dx,
+              top: pos.dy,
+              child: GestureDetector(
+                onPanUpdate: (d) => setState(() => _pipPos = pos + d.delta),
+                child: _pip(),
+              ),
+            ),
+          ],
+        );
+      });
     }
 
     // groups — perfect 2-column grid, you are one of the tiles.
@@ -692,10 +1212,10 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   Widget _pip() {
     return Container(
-      width: 108,
-      height: 152,
+      width: 128,
+      height: 184,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withOpacity(0.25)),
         boxShadow: const [BoxShadow(color: Color(0xB3000000), blurRadius: 22, offset: Offset(0, 8))],
       ),
@@ -704,9 +1224,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            widget.live
-                ? VideoView(track: RtcService.instance.localTrack, mirror: true)
-                : const SelfView(),
+            widget.live ? _selfVideo() : const SelfView(),
             if (_lucky == cell.people.length)
               const Positioned(left: 6, top: 6, child: _StarChip()),
           ],
@@ -726,19 +1244,36 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       picked: _pointPick == i || _winnerIdx == i,
       win: _winnerIdx == i && _phase == _Phase.reveal,
       dimmed: _phase == _Phase.reveal && _winnerIdx != null && _winnerIdx != i && game.kind == GameKind.point,
-      saved: AppSession.instance.isSaved(p.name),
+      saved: AppSession.instance.isSaved(p.sparkKey),
       videoChild: widget.live ? VideoView(track: RtcService.instance.trackFor(p.id)) : null,
+      connecting: widget.live && RtcService.instance.trackFor(p.id) == null,
       onTap: canPoint ? () => _resolvePoint(i) : null,
       onReport: () => _openReport(p),
       onSave: () => _save(p),
     );
-    if (_lucky != i) return tile;
+    final votes = _voteCounts[i] ?? 0;
+    if (_lucky != i && votes == 0) return tile;
+    // full-bleed tiles reach under the status bar — keep chips clear of it
+    final chipTop = radius == 0 ? MediaQuery.of(context).padding.top + 56.0 : 10.0;
     return Stack(
       fit: StackFit.expand,
       children: [
         tile,
-        const Positioned(left: 10, top: 10, child: _StarChip()),
+        if (_lucky == i) Positioned(left: 10, top: chipTop, child: const _StarChip()),
+        if (votes > 0) Positioned(right: 10, top: chipTop, child: _VoteChip(count: votes)),
       ],
+    );
+  }
+
+  /// Local LiveKit video with a fade-in that hides the first frames (they can
+  /// arrive rotated before orientation metadata applies).
+  Widget _selfVideo() {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOut,
+      builder: (context, v, child) => Opacity(opacity: v, child: child),
+      child: VideoView(track: RtcService.instance.localTrack),
     );
   }
 
@@ -748,9 +1283,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          widget.live
-              ? VideoView(track: RtcService.instance.localTrack, mirror: true)
-              : const SelfView(),
+          widget.live ? _selfVideo() : const SelfView(),
           const Positioned(
             left: 0, right: 0, bottom: 0, height: 54,
             child: IgnorePointer(
@@ -770,6 +1303,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           ),
           if (_lucky == cell.people.length)
             const Positioned(left: 10, top: 10, child: _StarChip()),
+          if ((_voteCounts[cell.people.length] ?? 0) > 0)
+            Positioned(
+                right: 10, top: 10, child: _VoteChip(count: _voteCounts[cell.people.length]!)),
         ],
       ),
     );
@@ -863,6 +1399,63 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   // ---- bottom caption -------------------------------------------------------
   Widget _caption() {
     if (_phase == _Phase.drop) return const SizedBox.shrink();
+    if (_phase == _Phase.talk) {
+      return Positioned(
+        left: 16,
+        right: 16,
+        bottom: 14,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('just talk — or play something',
+                style: T.sub.copyWith(color: Colors.white70, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.only(right: 52),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Press(
+                      haptic: false,
+                      onTap: () => _requestGame(),
+                      child: Container(
+                        height: 52,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text('🎲  Random game',
+                            style: T.body.copyWith(color: Colors.black, fontWeight: FontWeight.w800, fontSize: 15)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Press(
+                      haptic: false,
+                      onTap: _openPicker,
+                      child: Container(
+                        height: 52,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color(0x59000000),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0x40FFFFFF)),
+                        ),
+                        child: Text('Pick a game',
+                            style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return Positioned(
       left: 16,
       right: 16,
@@ -883,7 +1476,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                     borderRadius: BorderRadius.circular(100),
                     border: Border.all(color: C.sig.withOpacity(0.5)),
                   ),
-                  child: Text('ROUND ${_round + 1}/${cell.rounds.length}',
+                  child: Text('GAME ${_gamesPlayed + 1}',
                       style: T.eyebrow.copyWith(color: Colors.white, letterSpacing: 1.2, fontSize: 9.5)),
                 ),
                 const SizedBox(width: 10),
@@ -911,11 +1504,18 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             const SizedBox(height: 14),
             Padding(
               padding: const EdgeInsets.only(right: 52),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: _inputs(),
-              ),
+              child: _answered && _serverDriven
+                  ? Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.lock_rounded, size: 15, color: C.sig),
+                      const SizedBox(width: 8),
+                      Text('locked in — waiting for the room…',
+                          style: T.sub.copyWith(color: Colors.white70, fontWeight: FontWeight.w600)),
+                    ])
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: _inputs(),
+                    ),
             ),
           ],
         ],
@@ -1055,7 +1655,10 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                     Buzz.commit();
                     setState(() => _voteEmoji = e);
                     _float(e);
-                    if (widget.live) NetworkClient.instance.react(e);
+                    if (widget.live) {
+                      NetworkClient.instance.react(e);
+                      NetworkClient.instance.vote(e); // a real award vote
+                    }
                   },
                   child: AnimatedContainer(
                     duration: M.quick,
@@ -1167,9 +1770,23 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                       onTap: () {
                         Buzz.impact();
                         Sfx.pop();
-                        _idle?.cancel();
-                        _wheelRevive = _r.nextDouble() < 0.35;
-                        setState(() => _phase = _Phase.wheel);
+                        if (_serverDriven) {
+                          // the server's wheel decides — ask, with a fast local
+                          // fallback so the button never feels dead
+                          if (_wheelArming) return;
+                          setState(() => _wheelArming = true);
+                          NetworkClient.instance.spinWheel();
+                          _wheelTimeout?.cancel();
+                          _wheelTimeout = Timer(const Duration(milliseconds: 900), () {
+                            if (mounted && _wheelArming) {
+                              _wheelRevive = _r.nextDouble() < 0.35;
+                              _enterWheel();
+                            }
+                          });
+                        } else {
+                          _wheelRevive = _r.nextDouble() < 0.35;
+                          _enterWheel();
+                        }
                       },
                       child: Container(
                         height: 60,
@@ -1187,7 +1804,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (mvpPerson != null && !AppSession.instance.isSaved(mvpPerson.name)) ...[
+                        if (mvpPerson != null && !AppSession.instance.isSaved(mvpPerson.sparkKey)) ...[
                           Press(
                             onTap: () => _save(mvpPerson!),
                             child: Container(
@@ -1203,6 +1820,22 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                           ),
                           const SizedBox(width: 12),
                         ],
+                        Press(
+                          onTap: () {
+                            Buzz.tick();
+                            _toTalk();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(100),
+                              border: Border.all(color: C.hair2),
+                            ),
+                            child: Text('keep hanging',
+                                style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
                         Press(
                           onTap: widget.onLeave,
                           child: Padding(
@@ -1254,6 +1887,30 @@ class _StarChip extends StatelessWidget {
       ),
       child: const Text('⭐ main character',
           style: TextStyle(fontSize: 10.5, color: Color(0xFFFFD54A), fontWeight: FontWeight.w800)),
+    );
+  }
+}
+
+/// Real vote count on a face after the flip — "👉 3".
+class _VoteChip extends StatelessWidget {
+  const _VoteChip({required this.count});
+  final int count;
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 1.4, end: 1),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutBack,
+      builder: (context, v, child) => Transform.scale(scale: v, child: child),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: Text('👉 $count',
+            style: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.w900)),
+      ),
     );
   }
 }

@@ -13,8 +13,9 @@ import 'settings_screen.dart';
 /// centerpiece is the living headcount — proof something is happening right
 /// now — and the ▶ orb in the tab bar is the only way in.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.onSignOut});
+  const HomeScreen({super.key, required this.onSignOut, required this.onParty});
   final VoidCallback onSignOut;
+  final VoidCallback onParty;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -98,6 +99,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   const SizedBox(height: 12),
                   const _WorldTicker(),
                   const Spacer(flex: 4),
+                  Center(
+                    child: Press(
+                      onTap: () { Buzz.tick(); widget.onParty(); },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(100),
+                          border: Border.all(color: C.hair2),
+                        ),
+                        child: Text('Room with friends  ›',
+                            style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   Text('you never know who you’ll get',
                       style: T.body.copyWith(color: C.tx3, fontSize: 14)),
                   const SizedBox(height: 10),
@@ -325,18 +341,23 @@ class _WorldTickerState extends State<_WorldTicker> {
   Timer? _t;
   late String _line = _next();
 
+  // ambient flavor only — never fabricated numbers. The count above is real;
+  // everything down here is vibe.
+  static const _lines = [
+    'Spin the Bottle hits different after dark',
+    'new tonight · Scam Call',
+    'the wheel decides who stays',
+    'chaos hour doubles the badges',
+    'rooms are never recorded — ever',
+    'someone in there is your kind of weird',
+  ];
+
   String _next() {
-    switch (_rng.nextInt(4)) {
-      case 0:
-        final room = Cell.roomNames[_rng.nextInt(Cell.roomNames.length)];
-        return '$room filling · ${2 + _rng.nextInt(4)}/6';
-      case 1:
-        return '${180 + _rng.nextInt(600)} laughs this minute';
-      case 2:
-        return '${2 + _rng.nextInt(7)} of your people online';
-      default:
-        return '${3 + _rng.nextInt(9)} rooms started just now';
+    if (_rng.nextBool()) {
+      final room = Cell.roomNames[_rng.nextInt(Cell.roomNames.length)];
+      return '$room is open';
     }
+    return _lines[_rng.nextInt(_lines.length)];
   }
 
   @override

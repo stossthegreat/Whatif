@@ -8,7 +8,11 @@ import '../models/person.dart';
 /// Someone you vibed with and saved. The quiet "meeting people" layer — never
 /// called dating, but this is the seed of it. Mutual sparks are the payoff.
 class Spark {
-  Spark({required this.name, required this.hue, required this.mutual, required this.vibe, this.liveNow = false});
+  Spark({required this.name, required this.hue, required this.mutual, required this.vibe, this.liveNow = false, String? key})
+      : key = key ?? name;
+
+  /// Stable identity key (uid in live mode) — never collides with display names.
+  final String key;
   final String name;
   final double hue;
   bool mutual;
@@ -32,8 +36,6 @@ class Moment {
 class AppSession extends ChangeNotifier {
   AppSession._() {
     _initIdentity();
-    _seedSparks();
-    _seedMoments();
     _drift = Timer.periodic(const Duration(milliseconds: 1600), (_) {
       if (serverDriven) return;
       liveCount = (liveCount + (_r.nextDouble() * 10 - 3).round()).clamp(8000, 99000);
@@ -52,6 +54,9 @@ class AppSession extends ChangeNotifier {
   late String myHandle;
   late double myHue;
   late String myUid; // stable id sent to the backend
+
+  /// The vibes picked in onboarding — shapes matchmaking + game selection later.
+  List<String> myVibes = [];
   static const _handleWords = [
     'wildcard', 'menace', 'ghost', 'goblin', 'sunny', 'chaos', 'riot',
     'maple', 'nova', 'zephyr', 'biscuit', 'vortex', 'gremlin', 'echo',
@@ -81,6 +86,8 @@ class AppSession extends ChangeNotifier {
       lookingFor = p.getString('lookingFor');
       final a = p.getInt('age');
       if (a != null) age = a;
+      myVibes = p.getStringList('vibes') ?? myVibes;
+      rulesAccepted = p.getBool('rulesAccepted') ?? false;
       // persist the freshly-generated identity the first time
       if (p.getString('uid') == null) await _persist();
     } catch (_) {/* first run / no store — defaults are fine */}
@@ -97,6 +104,26 @@ class AppSession extends ChangeNotifier {
     if (gender != null) await p.setString('gender', gender!);
     if (lookingFor != null) await p.setString('lookingFor', lookingFor!);
     if (age != null) await p.setInt('age', age!);
+    await p.setStringList('vibes', myVibes);
+  }
+
+  /// A fresh handle suggestion (onboarding shuffle).
+  String suggestHandle() =>
+      '${_handleWords[_r.nextInt(_handleWords.length)]}${10 + _r.nextInt(89)}';
+
+  void setHandle(String h) {
+    final clean = h.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
+    if (clean.length < 3) return;
+    myHandle = clean.substring(0, clean.length.clamp(0, 14));
+    _persist();
+    notifyListeners();
+  }
+
+  bool rulesAccepted = false;
+  void acceptRules() {
+    rulesAccepted = true;
+    _prefs?.setBool('rulesAccepted', true);
+    notifyListeners();
   }
 
   /// Onboarding finished — remember it so we never show it again.
@@ -108,13 +135,14 @@ class AppSession extends ChangeNotifier {
   }
 
   /// A saved person and you both saved each other → mark it mutual (or add).
-  void markMutual(String name, {double hue = 210}) {
-    final i = sparks.indexWhere((s) => s.name == name);
+  /// Matches on the stable uid first, display name as fallback.
+  void markMutual(String name, {String? uid, double hue = 210}) {
+    final i = sparks.indexWhere((s) => (uid != null && s.key == uid) || s.name == name);
     if (i >= 0) {
       sparks[i].mutual = true;
     } else {
-      sparks.insert(0, Spark(name: name, hue: hue, mutual: true, vibe: 'a whole vibe', liveNow: true));
-      saved.add(name);
+      sparks.insert(0, Spark(key: uid, name: name, hue: hue, mutual: true, vibe: 'a whole vibe', liveNow: true));
+      saved.add(uid ?? name);
     }
     notifyListeners();
   }
@@ -128,15 +156,6 @@ class AppSession extends ChangeNotifier {
     }
   }
 
-  void _seedSparks() {
-    sparks.addAll([
-      Spark(name: 'nova', hue: 212, mutual: true, vibe: 'a whole vibe', liveNow: true),
-      Spark(name: 'ghost', hue: 196, mutual: false, vibe: 'unhinged'),
-      Spark(name: 'maple', hue: 220, mutual: true, vibe: 'so real'),
-    ]);
-    saved.addAll(['nova', 'ghost', 'maple']);
-  }
-
   // ---- onboarding answers ----
   bool signedIn = false;
   int? age;
@@ -147,12 +166,12 @@ class AppSession extends ChangeNotifier {
   bool soundOn = true;
   bool hapticsOn = true;
 
-  // ---- funny stats ----
-  int streak = 3;
-  int matchesPlayed = 27;
-  int laughs = 118;
-  int lies = 9;
-  int chaosScore = 340;
+  // ---- stats (all real — they start at zero and you earn them) ----
+  int streak = 1;
+  int matchesPlayed = 0;
+  int laughs = 0;
+  int lies = 0;
+  int chaosScore = 0;
 
   String get rankTitle {
     if (chaosScore < 150) return 'Fresh Chaos';
@@ -163,10 +182,7 @@ class AppSession extends ChangeNotifier {
   }
 
   // ---- badges (the room voted — you earned it) ----
-  final Map<String, int> badges = {
-    '😂 Funniest': 2,
-    '🔥 Main Character': 1,
-  };
+  final Map<String, int> badges = {};
 
   void earnBadge(String key) {
     badges[key] = (badges[key] ?? 0) + 1;
@@ -183,33 +199,22 @@ class AppSession extends ChangeNotifier {
   int get mutualCount => sparks.where((s) => s.mutual).length;
 
   void spark(Person p) {
-    if (saved.add(p.name)) {
+    if (saved.add(p.sparkKey)) {
       sparks.insert(0, Spark(
+        key: p.sparkKey,
         name: p.name, hue: p.hue,
-        mutual: _r.nextDouble() < 0.45,
+        mutual: false, // mutual is REAL — the server tells us via sparkMutual
         vibe: _vibes[_r.nextInt(_vibes.length)],
-        liveNow: _r.nextBool(),
       ));
       chaosScore += 15;
       notifyListeners();
     }
   }
 
-  bool isSaved(String name) => saved.contains(name);
+  bool isSaved(String key) => saved.contains(key);
 
   // ---- moments (the shareable growth loop) ----
   final List<Moment> moments = <Moment>[];
-  void _seedMoments() {
-    moments.addAll([
-      Moment(game: 'Point Party', result: 'the room pointed at @sol', hues: [212, 196, 220, 205], laughs: 31, ago: '2h'),
-      Moment(game: 'Two Truths', result: 'you read them 😏 nailed the lie', hues: [205, 216], laughs: 24, ago: '5h'),
-      Moment(game: 'Hot Take', result: 'the room split 68% your way', hues: [196, 220, 208], laughs: 17, ago: 'yesterday'),
-      Moment(game: 'Freeze Face', result: 'you cracked 😂 @nova won', hues: [220, 208], laughs: 12, ago: 'yesterday'),
-      Moment(game: 'Confession Cam', result: '4 in the room are guilty 👀', hues: [212, 190, 200, 216, 205], laughs: 42, ago: '2d'),
-      Moment(game: 'Survival', result: 'the room crowned @maple', hues: [220, 196, 205], laughs: 28, ago: '2d'),
-    ]);
-  }
-
   void captureMoment({required String game, required String result, required List<double> hues}) {
     moments.insert(0, Moment(game: game, result: result, hues: hues, laughs: 3 + _r.nextInt(40), ago: 'just now'));
     while (moments.length > 40) {
@@ -242,10 +247,11 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setProfile({int? age, String? gender, String? lookingFor}) {
+  void setProfile({int? age, String? gender, String? lookingFor, List<String>? vibes}) {
     if (age != null) this.age = age;
     if (gender != null) this.gender = gender;
     if (lookingFor != null) this.lookingFor = lookingFor;
+    if (vibes != null) myVibes = vibes;
     _persist();
     notifyListeners();
   }

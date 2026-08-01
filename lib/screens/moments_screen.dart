@@ -1,4 +1,9 @@
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../core/haptics.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
@@ -183,9 +188,9 @@ class _EmptyMoments extends StatelessWidget {
   }
 }
 
-/// The shareable card — a TikTok-ready graphic. In production this renders to a
-/// short watermarked video/image; here it's the pixel-perfect card + share.
-class ShareCardScreen extends StatelessWidget {
+/// The shareable card — a TikTok-ready graphic. Share renders the card to a
+/// real PNG (3x) and hands it to the native share sheet: the growth loop.
+class ShareCardScreen extends StatefulWidget {
   const ShareCardScreen({super.key, required this.moment});
   final Moment moment;
 
@@ -193,17 +198,49 @@ class ShareCardScreen extends StatelessWidget {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => ShareCardScreen(moment: m)));
   }
 
-  void _toast(BuildContext c, String m) {
-    ScaffoldMessenger.of(c)
+  @override
+  State<ShareCardScreen> createState() => _ShareCardScreenState();
+}
+
+class _ShareCardScreenState extends State<ShareCardScreen> {
+  final GlobalKey _cardKey = GlobalKey();
+  bool _sharing = false;
+
+  void _toast(String m) {
+    ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(SnackBar(
         behavior: SnackBarBehavior.floating, backgroundColor: C.char3,
         content: Text(m, style: T.sub.copyWith(color: Colors.white))));
   }
 
+  Future<void> _share() async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    Buzz.impact();
+    try {
+      final boundary = _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) throw StateError('card not ready');
+      final image = await boundary.toImage(pixelRatio: 3);
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (bytes == null) throw StateError('encode failed');
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/rivlr_moment_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(bytes.buffer.asUint8List());
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'image/png')],
+        text: 'the room decided 😂 — Rivlr',
+      );
+    } catch (_) {
+      _toast('couldn’t export the card — try again');
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final m = moment;
+    final m = widget.moment;
     return Scaffold(
       backgroundColor: C.black,
       body: SafeArea(
@@ -227,45 +264,14 @@ class ShareCardScreen extends StatelessWidget {
                 child: Center(
                   child: AspectRatio(
                     aspectRatio: 9 / 15,
-                    child: _ShareCard(m),
+                    child: RepaintBoundary(key: _cardKey, child: _ShareCard(m)),
                   ),
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Press(
-                      onTap: () { Buzz.commit(); _toast(context, 'link copied — paste it anywhere 🔗'); },
-                      child: Container(
-                        height: 56, alignment: Alignment.center,
-                        decoration: BoxDecoration(color: C.glass, borderRadius: BorderRadius.circular(18), border: Border.all(color: C.hair2)),
-                        child: Text('Copy link', style: T.body.copyWith(color: C.tx, fontWeight: FontWeight.w700)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: Press(
-                      haptic: false,
-                      onTap: () { Buzz.impact(); _toast(context, 'sharing to your story ✨'); },
-                      child: Container(
-                        height: 56, alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(colors: [C.sig, C.purpleDeep]),
-                          borderRadius: BorderRadius.circular(18),
-                          boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 26, spreadRadius: -6)],
-                        ),
-                        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          const Icon(Icons.ios_share_rounded, size: 20, color: Colors.white),
-                          const SizedBox(width: 8),
-                          Text('Share', style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
-                        ]),
-                      ),
-                    ),
-                  ),
-                ],
+              Cta(
+                label: _sharing ? 'Exporting…' : 'Share',
+                onTap: _sharing ? null : _share,
               ),
               const SizedBox(height: 16),
             ],

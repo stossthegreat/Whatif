@@ -51,6 +51,7 @@ class NetworkClient {
       'name': s.myHandle,
       'gender': s.gender,
       'meet': s.lookingFor ?? 'Everyone',
+      'vibes': s.myVibes,
     });
   }
 
@@ -70,7 +71,15 @@ class NetworkClient {
   void play() => send({'t': 'play'});
   void next() => send({'t': 'next'});
   void leaveCell() => send({'t': 'leave'});
-  void answer(dynamic v) => send({'t': 'answer', 'v': v});
+  void host() => send({'t': 'host'});
+  void joinParty(String code) => send({'t': 'joinParty', 'code': code});
+  void startParty() => send({'t': 'startParty'});
+  void leaveParty() => send({'t': 'leaveParty'});
+  void answer(int round, dynamic v) => send({'t': 'answer', 'round': round, 'v': v});
+  void vote(String e) => send({'t': 'vote', 'e': e});
+  void spinWheel() => send({'t': 'spinWheel'});
+  void pickGame([String? name]) =>
+      send({'t': 'pickGame', if (name != null) 'name': name});
   void react(String e) => send({'t': 'react', 'e': e});
   void report(String target) => send({'t': 'report', 'target': target});
   void block(String target) => send({'t': 'block', 'target': target});

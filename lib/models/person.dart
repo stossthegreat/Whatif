@@ -5,10 +5,16 @@ import 'package:flutter/material.dart';
 /// live video tile; in this build it's an elegant "presence" tile (a cool light
 /// pooled on black) so the app runs and feels alive without a video backend.
 class Person {
-  Person({required this.name, required this.hue, required this.lx, required this.ly, this.id});
+  Person({required this.name, required this.hue, required this.lx, required this.ly, this.id, this.uid});
 
   /// LiveKit participant identity in live mode (null when simulated).
   final String? id;
+
+  /// Stable identity (survives reconnects) — the key for sparks/saves.
+  final String? uid;
+
+  /// The key sparks/saves are stored under.
+  String get sparkKey => uid ?? id ?? name;
   final String name;
   final double hue; // cool range, tells people apart without breaking monochrome
   final double lx; // light pool x (0..1)
@@ -17,6 +23,7 @@ class Person {
   /// Build from a server `people` entry: {id, name, hue}.
   factory Person.fromServer(Map<String, dynamic> m, Random r) => Person(
         id: m['id'] as String?,
+        uid: m['uid'] as String?,
         name: (m['name'] as String?) ?? 'someone',
         hue: ((m['hue'] as num?)?.toDouble()) ?? 210,
         lx: 0.20 + r.nextDouble() * 0.50,
