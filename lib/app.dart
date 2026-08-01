@@ -87,7 +87,11 @@ class _RootState extends State<_Root> {
     switch (m['t']) {
       case 'presence':
         final n = (m['live'] as num?)?.toInt();
-        if (n != null) AppSession.instance.setLiveCount(n);
+        if (n != null) {
+          AppSession.instance.setLiveCount(n,
+              rooms: (m['rooms'] as num?)?.toInt(),
+              matches: (m['matches'] as num?)?.toInt());
+        }
       case 'cell':
         _onCell(m);
       case 'ended':
