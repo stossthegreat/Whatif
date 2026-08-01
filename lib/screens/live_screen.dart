@@ -69,12 +69,30 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   List<_Award> _awards = const [];
   String? _voteEmoji;
 
-  // the unpredictability engine
-  late final bool _golden = _r.nextDouble() < 0.04; // golden rooms — people chase these
-  late final int _lucky = _r.nextInt(cell.people.length + 1); // ⭐ main character seat
+  // the unpredictability engine — server-rolled when available, local otherwise
+  late final bool _golden = widget.cell.golden ?? (_r.nextDouble() < 0.04);
+  late final int _lucky = _idxOf(widget.cell.luckyId) ?? _r.nextInt(cell.people.length + 1);
   int _reactCount = 0;
   int _combo = 0;
   Timer? _comboReset;
+
+  // server-authoritative mode: a sync-capable server stamps targetId on every
+  // round. When present, the server owns timing/results/awards/wheel and the
+  // local machinery becomes the fail-soft fallback.
+  bool get _serverDriven => widget.live && cell.rounds.first.targetId != null;
+  Timer? _resultGrace;
+  Timer? _wheelTimeout;
+  bool _wheelArming = false;
+  DateTime? _roundEndsAt;
+
+  /// Resolve a member conn-id to a tile index ('you' == people.length).
+  /// Always resolved at use time — indices shift when someone leaves.
+  int? _idxOf(String? id) {
+    if (id == null) return null;
+    if (id == NetworkClient.instance.myId) return cell.people.length;
+    final i = cell.people.indexWhere((p) => p.id == id);
+    return i >= 0 ? i : null;
+  }
 
   int _speakingIdx = -1;
   Timer? _idle;
@@ -132,17 +150,207 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       setState(() => _speakingIdx = _r.nextInt(cell.people.length));
     });
     _startTimer = Timer(const Duration(milliseconds: 1300), _startGame);
-    // the Director strikes somewhere in the first stretch — nobody knows when
-    _director = Timer(Duration(milliseconds: 8000 + _r.nextInt(9000)), _dropChaos);
+    // the Director strikes somewhere in the first stretch — nobody knows when.
+    // (In server-driven rooms chaos is pushed by the server so all phones
+    // flash the same card at the same moment.)
+    if (!_serverDriven) {
+      _director = Timer(Duration(milliseconds: 8000 + _r.nextInt(9000)), _dropChaos);
+    }
     if (widget.live) {
-      _netSub = NetworkClient.instance.events.listen((m) {
-        if (!mounted) return;
-        if (m['t'] == 'react' && m['e'] is String) {
+      _netSub = NetworkClient.instance.events.listen(_onNet);
+    }
+  }
+
+  // ---- server events (the shared room) --------------------------------------
+  void _onNet(Map<String, dynamic> m) {
+    if (!mounted) return;
+    switch (m['t']) {
+      case 'react':
+        if (m['e'] is String) {
           _bumpCombo();
           _float(m['e'] as String);
         }
-      });
+      case 'round':
+        _onRoundMsg(m);
+      case 'result':
+        _onResultMsg(m);
+      case 'chaos':
+        if (_serverDriven && m['e'] is String && m['x'] is String) {
+          Buzz.impact();
+          Sfx.slam();
+          setState(() => _chaos = [m['e'] as String, m['x'] as String]);
+          Timer(const Duration(milliseconds: 3200), () {
+            if (mounted) setState(() => _chaos = null);
+          });
+        }
+      case 'awards':
+        _onAwardsMsg(m);
+      case 'wheel':
+        _onWheelMsg(m);
     }
+  }
+
+  void _onRoundMsg(Map<String, dynamic> m) {
+    if (!_serverDriven || _phase == _Phase.wheel) return;
+    final idx = (m['idx'] as num?)?.toInt();
+    if (idx == null || idx < 0 || idx >= cell.rounds.length) return;
+    final ends = (m['endsAt'] as num?)?.toInt();
+    _roundEndsAt = ends != null ? DateTime.fromMillisecondsSinceEpoch(ends) : null;
+    // hard-sync to the server's clock: cancel every local fallback
+    _idle?.cancel();
+    _startTimer?.cancel();
+    _resultGrace?.cancel();
+    setState(() {
+      _round = idx;
+      _answered = false;
+      _pointPick = null;
+      _selected = null;
+      _winnerIdx = null;
+      _split = const [];
+      _result = '';
+    });
+    _startGame();
+  }
+
+  void _onResultMsg(Map<String, dynamic> m) {
+    if (!_serverDriven) return;
+    final rIdx = (m['round'] as num?)?.toInt();
+    if (rIdx != _round || _phase != _Phase.game) return;
+    _resultGrace?.cancel();
+    _timer.stop();
+    _answered = true;
+
+    final winnerIdx = _idxOf(m['winnerId'] as String?);
+    final isYou = winnerIdx != null && winnerIdx >= cell.people.length;
+    String nameOf(int i) => '@${cell.people[i].name}';
+
+    setState(() {
+      switch (game.kind) {
+        case GameKind.point:
+          if (isYou) {
+            _result = 'the room pointed at YOU 😳';
+          } else if (winnerIdx != null) {
+            _winnerIdx = winnerIdx;
+            _result = 'the room pointed at ${nameOf(winnerIdx)}';
+          } else {
+            _result = 'the room couldn’t decide 🤝';
+          }
+        case GameKind.spin:
+          _result = isYou
+              ? 'you took it on the chin 😎'
+              : '$_targetName said what they said 💅';
+          if (winnerIdx != null && winnerIdx < cell.people.length) _winnerIdx = winnerIdx;
+        case GameKind.freeze:
+          _result = isYou ? 'you held it 😐 ice cold' : 'you cracked 😂 ${winnerIdx != null ? nameOf(winnerIdx) : 'they'} won';
+        case GameKind.rapidFire:
+          _result = 'quick hands — the room felt that';
+        case GameKind.thumbs:
+          final g = (m['guilty'] as num?)?.toInt() ?? 0;
+          _result = g == 0 ? 'not one guilty soul 😇 (cap)' : '$g in the room ${g == 1 ? 'is' : 'are'} guilty 👀';
+        case GameKind.poll:
+        case GameKind.wouldRather:
+          final counts = ((m['counts'] as List?) ?? const []).map((e) => (e as num).toInt()).toList();
+          final total = counts.fold<int>(0, (a, b) => a + b);
+          final a = total > 0 && counts.isNotEmpty ? (counts[0] * 100 / total).round() : 50;
+          _split = [a, 100 - a];
+          if (_selected != null && _selected! < _split.length) {
+            _result = 'the room split ${_split[_selected!]}% your way';
+          } else {
+            _result = 'the room split $a / ${100 - a}';
+          }
+        case GameKind.same:
+          final counts = ((m['counts'] as List?) ?? const []).map((e) => (e as num).toInt()).toList();
+          final matches = _selected != null && _selected! < counts.length
+              ? (counts[_selected!] - 1).clamp(0, 99)
+              : 0;
+          _result = matches > 0 ? '$matches of you said the same thing 🧠' : 'nobody matched you — iconic';
+        case GameKind.twoTruths:
+          final lie = (m['lieIdx'] as num?)?.toInt() ?? cell.rounds[_round].lieIdx;
+          if (_selected == null) {
+            _result = 'the lie slipped past everyone 👀';
+          } else if (lie != null && _selected == lie) {
+            _result = 'you read them 😏 nailed the lie';
+          } else {
+            _result = 'they fooled you 😵 slippery';
+          }
+      }
+    });
+    _toReveal();
+  }
+
+  void _onAwardsMsg(Map<String, dynamic> m) {
+    if (!_serverDriven || _phase == _Phase.wheel) return;
+    final list = (m['list'] as List?) ?? const [];
+    final awards = <_Award>[];
+    for (final e in list.whereType<Map>()) {
+      final idx = _idxOf(e['winnerId'] as String?);
+      final winner = idx == null
+          ? 'someone'
+          : (idx >= cell.people.length ? 'you' : '@${cell.people[idx].name}');
+      awards.add(_Award((e['emoji'] as String?) ?? '🏆', (e['label'] as String?) ?? '', winner));
+    }
+    if (awards.isEmpty) return;
+    if (_phase == _Phase.awards) {
+      // local fallback fired first — replace with the room's real verdict
+      setState(() => _awards = awards);
+      return;
+    }
+    _idle?.cancel();
+    _awards = awards;
+    var earned = false;
+    for (final a in _awards) {
+      if (a.winner == 'you') {
+        AppSession.instance.earnBadge('${a.emoji} ${a.label}');
+        earned = true;
+      }
+    }
+    if (_golden && earned) AppSession.instance.earnBadge('🏆 Golden Room');
+    Buzz.impact();
+    Sfx.fanfare();
+    setState(() => _phase = _Phase.awards);
+    _idle = Timer(const Duration(seconds: 14), () {
+      if (mounted && _phase == _Phase.awards) widget.onNext();
+    });
+  }
+
+  RoundDef _roundFromWire(Map<String, dynamic> g) {
+    final kind = gameKindFrom((g['kind'] as String?) ?? 'poll');
+    final base = GameDef.byKind(kind);
+    final def = GameDef(
+      kind: kind,
+      name: (g['name'] as String?) ?? base.name,
+      hint: (g['hint'] as String?) ?? base.hint,
+      minStrangers: base.minStrangers,
+      maxStrangers: base.maxStrangers,
+      prompts: base.prompts,
+    );
+    final prompt = ((g['prompt'] as List?) ?? const []).map((e) => e.toString()).toList();
+    return RoundDef(
+      game: def,
+      prompt: prompt.isEmpty ? def.prompts.first : prompt,
+      targetId: g['targetId'] as String?,
+      lieIdx: (g['lieIdx'] as num?)?.toInt(),
+    );
+  }
+
+  void _onWheelMsg(Map<String, dynamic> m) {
+    if (!_wheelArming) return;
+    _wheelTimeout?.cancel();
+    _wheelRevive = m['revive'] == true;
+    final rw = (m['rounds'] as List?) ?? const [];
+    if (_wheelRevive && rw.isNotEmpty) {
+      cell.rounds = rw
+          .whereType<Map>()
+          .map((e) => _roundFromWire(e.cast<String, dynamic>()))
+          .toList();
+    }
+    _enterWheel();
+  }
+
+  void _enterWheel() {
+    _wheelArming = false;
+    _idle?.cancel();
+    setState(() => _phase = _Phase.wheel);
   }
 
   @override
@@ -154,6 +362,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _startTimer?.cancel();
     _director?.cancel();
     _comboReset?.cancel();
+    _resultGrace?.cancel();
+    _wheelTimeout?.cancel();
     _netSub?.cancel();
     super.dispose();
   }
@@ -223,17 +433,34 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     setState(() {
       _phase = _Phase.game;
       _answered = false;
-      // roll this round's target; the bottle animates the pick for spin games
-      _target = _r.nextInt(cell.people.length + 1);
+      // this round's target: the server's pick when synced, else a local roll.
+      // The bottle animates the pick for spin games either way.
+      _target = _idxOf(cell.rounds[_round].targetId) ?? _r.nextInt(cell.people.length + 1);
       _bottleDone = game.kind != GameKind.spin;
     });
-    final secs = switch (game.kind) {
+    var secs = switch (game.kind) {
       GameKind.freeze => 5,
       GameKind.rapidFire => 10,
       GameKind.spin => 13, // the bottle eats the first ~2.5s
       _ => 9,
     };
-    _runTimer(secs, _autoResolve);
+    if (_serverDriven && _roundEndsAt != null) {
+      // ride the server's clock so every phone's countdown agrees
+      final left = _roundEndsAt!.difference(DateTime.now()).inMilliseconds / 1000;
+      secs = left.clamp(3, 20).round();
+    }
+    // in server-driven rooms the deadline resolution belongs to the server;
+    // the grace timer fabricates locally only if the server goes silent.
+    _runTimer(secs, _serverDriven ? () {} : _autoResolve);
+    if (_serverDriven) {
+      _resultGrace?.cancel();
+      _resultGrace = Timer(Duration(seconds: secs + 2), () {
+        if (mounted && _phase == _Phase.game) {
+          _answered = false;
+          _autoResolve();
+        }
+      });
+    }
   }
 
   void _autoResolve() {
@@ -290,14 +517,14 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     }
     setState(() => _phase = _Phase.reveal);
     _idle?.cancel();
+    // in server-driven rooms the server sends 'round'/'awards' to advance us —
+    // these local timers are only the safety net if it goes quiet.
     if (_finalRound) {
-      // the reveal breathes, the room votes, then the ceremony
-      _idle = Timer(const Duration(milliseconds: 3400), () {
+      _idle = Timer(Duration(milliseconds: _serverDriven ? 7000 : 3400), () {
         if (mounted && _phase == _Phase.reveal) _toAwards();
       });
     } else {
-      // quick beat — straight into the next round. A room is a session.
-      _idle = Timer(const Duration(milliseconds: 2400), () {
+      _idle = Timer(Duration(milliseconds: _serverDriven ? 6500 : 2400), () {
         if (mounted && _phase == _Phase.reveal) _nextRound();
       });
     }
@@ -318,8 +545,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     Sfx.pop();
     _startTimer?.cancel();
     _startTimer = Timer(const Duration(milliseconds: 900), _startGame);
-    // the Director may strike again between rounds
-    if (_r.nextDouble() < 0.4) {
+    // the Director may strike again between rounds (local mode only —
+    // server-driven rooms get synced chaos pushed to every phone)
+    if (!_serverDriven && _r.nextDouble() < 0.4) {
       _director?.cancel();
       _director = Timer(Duration(milliseconds: 4000 + _r.nextInt(6000)), _dropChaos);
     }
@@ -327,7 +555,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   /// The wheel chose REVIVE — same room, same people, a fresh session.
   void _revive() {
-    cell.reroll(_r);
+    // server-driven: the shared reroll already arrived with the wheel reply
+    if (!_serverDriven) cell.reroll(_r);
     setState(() {
       _round = 0;
       _answered = false;
@@ -348,8 +577,10 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     });
     _startTimer?.cancel();
     _startTimer = Timer(const Duration(milliseconds: 1300), _startGame);
-    _director?.cancel();
-    _director = Timer(Duration(milliseconds: 6000 + _r.nextInt(8000)), _dropChaos);
+    if (!_serverDriven) {
+      _director?.cancel();
+      _director = Timer(Duration(milliseconds: 6000 + _r.nextInt(8000)), _dropChaos);
+    }
     _idle?.cancel();
   }
 
@@ -406,6 +637,15 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   // ---- resolvers ------------------------------------------------------------
   void _resolvePoint(int userPick) {
     if (_answered) return;
+    if (_serverDriven) {
+      // real vote: tell the server who you tapped, then wait for the tally
+      _answered = true;
+      Buzz.commit();
+      setState(() => _pointPick = userPick);
+      final id = cell.people[userPick].id;
+      if (id != null) NetworkClient.instance.answer(_round, id);
+      return;
+    }
     _answered = true;
     Buzz.commit();
     final winner = cell.people.length == 1 ? 0 : _r.nextInt(cell.people.length);
@@ -419,6 +659,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   void _resolveSplit(int choice) {
     if (_answered) return;
+    if (_serverDriven) {
+      _answered = true;
+      Buzz.commit();
+      setState(() => _selected = choice);
+      NetworkClient.instance.answer(_round, choice);
+      return;
+    }
     _answered = true;
     Buzz.commit();
     final a = 40 + _r.nextInt(30);
@@ -432,6 +679,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   void _resolveThumbs(bool guilty) {
     if (_answered) return;
+    if (_serverDriven) {
+      _answered = true;
+      Buzz.commit();
+      setState(() => _selected = guilty ? 1 : 0);
+      NetworkClient.instance.answer(_round, guilty);
+      return;
+    }
     _answered = true;
     Buzz.commit();
     final n = 1 + _r.nextInt(cell.people.length + 1);
@@ -444,6 +698,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   void _resolveSame(int choice) {
     if (_answered) return;
+    if (_serverDriven) {
+      _answered = true;
+      Buzz.commit();
+      setState(() => _selected = choice);
+      NetworkClient.instance.answer(_round, choice);
+      return;
+    }
     _answered = true;
     Buzz.commit();
     final m = _r.nextInt(cell.people.length + 1);
@@ -456,6 +717,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   void _resolveTwoTruths(int choice) {
     if (_answered) return;
+    if (_serverDriven) {
+      _answered = true;
+      Buzz.commit();
+      setState(() => _selected = choice);
+      NetworkClient.instance.answer(_round, choice);
+      return;
+    }
     _answered = true;
     Buzz.commit();
     final correct = _r.nextBool();
@@ -479,6 +747,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   void _resolveRapid() {
     if (_answered) return;
+    if (_serverDriven) {
+      _answered = true;
+      Buzz.commit();
+      NetworkClient.instance.answer(_round, 'done');
+      return;
+    }
     _answered = true;
     Buzz.commit();
     setState(() {
@@ -1055,7 +1329,10 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                     Buzz.commit();
                     setState(() => _voteEmoji = e);
                     _float(e);
-                    if (widget.live) NetworkClient.instance.react(e);
+                    if (widget.live) {
+                      NetworkClient.instance.react(e);
+                      NetworkClient.instance.vote(e); // a real award vote
+                    }
                   },
                   child: AnimatedContainer(
                     duration: M.quick,
@@ -1167,9 +1444,23 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                       onTap: () {
                         Buzz.impact();
                         Sfx.pop();
-                        _idle?.cancel();
-                        _wheelRevive = _r.nextDouble() < 0.35;
-                        setState(() => _phase = _Phase.wheel);
+                        if (_serverDriven) {
+                          // the server's wheel decides — ask, with a fast local
+                          // fallback so the button never feels dead
+                          if (_wheelArming) return;
+                          setState(() => _wheelArming = true);
+                          NetworkClient.instance.spinWheel();
+                          _wheelTimeout?.cancel();
+                          _wheelTimeout = Timer(const Duration(milliseconds: 900), () {
+                            if (mounted && _wheelArming) {
+                              _wheelRevive = _r.nextDouble() < 0.35;
+                              _enterWheel();
+                            }
+                          });
+                        } else {
+                          _wheelRevive = _r.nextDouble() < 0.35;
+                          _enterWheel();
+                        }
                       },
                       child: Container(
                         height: 60,

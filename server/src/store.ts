@@ -17,11 +17,31 @@ export interface User {
   lastPong: number;
 }
 
+/// One round as sent on the wire (and replayed on revive).
+export interface RoundWire {
+  kind: GameKind;
+  name: string;
+  hint: string;
+  prompt: string[];
+  targetId: string | null; // member conn-id "on the spot" (spin / {target}); null = nobody
+  lieIdx?: number;         // twoTruths: which option is the lie
+}
+
 export interface Cell {
   id: string;
   room: string;
   members: string[]; // connection ids
   kind: GameKind;
+  // ---- server-authoritative session state ----
+  rounds: RoundWire[];
+  roundIdx: number;
+  answers: Map<string, unknown>; // current round only, keyed by conn-id
+  votes: Map<string, string>;    // award votes, voter conn-id -> emoji
+  lastWinnerId?: string;
+  golden: boolean;
+  luckyId: string;
+  reviveRounds?: RoundWire[];    // shared reroll once any member revives
+  timers: NodeJS.Timeout[];      // everything scheduled for this cell
 }
 
 /// In-memory store. Deliberately behind one object so it can be swapped for

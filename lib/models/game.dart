@@ -551,18 +551,26 @@ class GameDef {
 }
 
 /// One round of a room's session: a game and its (pre-shuffled) prompt.
+/// [targetId] / [lieIdx] arrive only from a sync-capable server — their
+/// presence is what switches the room into server-authoritative mode.
 class RoundDef {
-  RoundDef({required this.game, required this.prompt});
+  RoundDef({required this.game, required this.prompt, this.targetId, this.lieIdx});
   final GameDef game;
   final List<String> prompt; // [head, ...options], options already shuffled
+  final String? targetId; // conn-id of the member "on the spot"
+  final int? lieIdx; // twoTruths: which option is the lie
 }
 
 /// One live cell: who's here, a full session of rounds — and a personality.
 /// Rooms are never "Room #421"; they're places you remember being thrown into.
 class Cell {
-  Cell({required this.people, required this.rounds, String? roomName})
+  Cell({required this.people, required this.rounds, String? roomName, this.golden, this.luckyId})
       : roomName = roomName ?? roomNames[_rn.nextInt(roomNames.length)];
   final List<Person> people;
+
+  /// Server-rolled room state (null in simulated mode → client rolls locally).
+  final bool? golden;
+  final String? luckyId;
 
   /// A proper game session — several rounds before the ceremony, never a
   /// single question. The revive wheel can re-roll these to run it back.

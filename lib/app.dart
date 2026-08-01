@@ -123,7 +123,12 @@ class _RootState extends State<_Root> {
       prompts: base.prompts,
     );
     final prompt = ((g['prompt'] as List?) ?? const []).map((e) => e.toString()).toList();
-    return RoundDef(game: def, prompt: prompt.isEmpty ? def.prompts.first : prompt);
+    return RoundDef(
+      game: def,
+      prompt: prompt.isEmpty ? def.prompts.first : prompt,
+      targetId: g['targetId'] as String?,
+      lieIdx: (g['lieIdx'] as num?)?.toInt(),
+    );
   }
 
   Cell _cellFromServer(Map<String, dynamic> m) {
@@ -150,7 +155,12 @@ class _RootState extends State<_Root> {
             count: 5 - rounds.length, avoidKind: rounds.last.game.kind),
       ];
     }
-    return Cell(people: people, rounds: rounds);
+    return Cell(
+      people: people,
+      rounds: rounds,
+      golden: m['golden'] as bool?,
+      luckyId: m['luckyId'] as String?,
+    );
   }
 
   // ---- simulated mode -------------------------------------------------------
