@@ -377,6 +377,16 @@ function sendAwards(cell: Cell) {
   broadcastCell(cell.id, { t: 'awards', list });
 }
 
+// real "matches today" counter — resets at UTC midnight. Never fabricated:
+// every increment is an actual cell that actually formed.
+let matchesToday = 0;
+let matchesDay = new Date().toISOString().slice(0, 10);
+function noteMatch() {
+  const day = new Date().toISOString().slice(0, 10);
+  if (day !== matchesDay) { matchesDay = day; matchesToday = 0; }
+  matchesToday += 1;
+}
+
 async function formCell(memberIds: string[]) {
   const live = memberIds.filter((id) => store.users.get(id)?.ws.readyState === WebSocket.OPEN);
   if (live.length === 0) return;
@@ -395,6 +405,7 @@ async function formCell(memberIds: string[]) {
     gamesPlayed: 0, inRound: false, mode, seqPos: 0,
   };
   store.cells.set(cellId, cell);
+  noteMatch();
 
   for (const id of live) {
     const u = store.users.get(id);
@@ -485,7 +496,11 @@ setInterval(() => {
 
 setInterval(() => {
   const live = LIVE_BASELINE + store.onlineCount;
-  for (const u of store.users.values()) send(u, { t: 'presence', live });
+  // rooms + matches are real counts — the client hides anything too small to
+  // impress, so low numbers never reach the screen.
+  for (const u of store.users.values()) {
+    send(u, { t: 'presence', live, rooms: store.cells.size, matches: matchesToday });
+  }
 }, 4000);
 
 // heartbeat — drop dead sockets

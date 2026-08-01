@@ -9,9 +9,9 @@ import 'me_screen.dart';
 
 /// Three tabs. That's the whole philosophy:
 ///
-///   LIVE  —  the world. Everything moving, rooms filling, chaos hour ticking.
-///    ▶    —  drop in. The button IS the company. It dominates the bar.
-///   YOU   —  profile, badges, sparks, moments, settings. One page.
+///   HOME    —  the action. One huge Start, trending games, chaos hour.
+///    PLAY   —  drop in. The button IS the company. It dominates the bar.
+///   PROFILE —  badges, sparks, moments, settings. One page.
 ///
 /// People don't open Rivlr to browse — they open it to get dropped into chaos.
 class MainShell extends StatefulWidget {
@@ -49,7 +49,10 @@ class _MainShellState extends State<MainShell> {
             child: IndexedStack(
               index: _tab,
               children: [
-                HomeScreen(onSignOut: widget.onSignOut, onParty: widget.onParty),
+                HomeScreen(
+                    onSignOut: widget.onSignOut,
+                    onParty: widget.onParty,
+                    onPlay: widget.onPlay),
                 MeScreen(embedded: true, onSignOut: widget.onSignOut),
               ],
             ),
@@ -73,8 +76,8 @@ class _MainShellState extends State<MainShell> {
                     children: [
                       Expanded(
                         child: _NavCell(
-                          icon: Icons.sensors_rounded,
-                          label: 'Live',
+                          icon: Icons.home_rounded,
+                          label: 'Home',
                           selected: _tab == 0,
                           onTap: () => _go(0),
                         ),
@@ -85,7 +88,7 @@ class _MainShellState extends State<MainShell> {
                           animation: AppSession.instance,
                           builder: (context, _) => _NavCell(
                             icon: _tab == 1 ? Icons.person_rounded : Icons.person_outline_rounded,
-                            label: 'You',
+                            label: 'Profile',
                             selected: _tab == 1,
                             badge: AppSession.instance.mutualCount,
                             onTap: () => _go(1),
@@ -98,11 +101,21 @@ class _MainShellState extends State<MainShell> {
               ),
             ),
           ),
-          // the orb — floats above the bar, dominates it
+          // the orb — floats above the bar, dominates it. "Play" sits under it
+          // on the same baseline as the other tab labels.
           Positioned(
             left: 0,
             right: 0,
-            bottom: mq.padding.bottom + 14,
+            bottom: mq.padding.bottom + 11,
+            child: Center(
+              child: Text('Play',
+                  style: T.tiny.copyWith(fontSize: 10.5, color: C.tx3, fontWeight: FontWeight.w600)),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: mq.padding.bottom + 28,
             child: Center(child: _PlayOrb(onTap: widget.onPlay)),
           ),
         ],

@@ -50,6 +50,12 @@ class AppSession extends ChangeNotifier {
   int liveCount = 12438;
   bool serverDriven = false;
 
+  /// Real activity from the server (0 until the first presence message).
+  /// The home screen only surfaces these when they're big enough to impress —
+  /// low numbers are never shown, but shown numbers are never invented.
+  int roomsLive = 0;
+  int matchesToday = 0;
+
   // ---- your identity (anonymous, fun) ----
   late String myHandle;
   late double myHue;
@@ -241,9 +247,11 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setLiveCount(int n) {
+  void setLiveCount(int n, {int? rooms, int? matches}) {
     serverDriven = true;
     liveCount = n;
+    if (rooms != null) roomsLive = rooms;
+    if (matches != null) matchesToday = matches;
     notifyListeners();
   }
 
