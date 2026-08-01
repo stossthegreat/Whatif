@@ -15,6 +15,15 @@ import 'package:livekit_client/livekit_client.dart';
 /// NOTE: livekit_client is pinned to 2.3.1+hotfix.1, where the renderer's fit
 /// type is flutter_webrtc's RTCVideoViewObjectFit (the VideoViewFit enum only
 /// exists in later SDK versions). If the pin is ever bumped past 2.4, revisit.
+///
+/// RENDER MODE — MUST STAY texture. On iOS the SDK's default ("auto") uses a
+/// native platform view that applies frame rotation by rotating the whole
+/// layer: a full-screen portrait view rotated 90° collapses into a horizontal
+/// band one screen-width tall (the "letterboxed zoomed face"), it ignores our
+/// cover fit, and its 270° branch literally divides by zero. The texture path
+/// bakes rotation into the pixels natively and computes cover-fit in Flutter
+/// from the rotation-aware aspect ratio — verified against flutter_webrtc
+/// 0.12.12+hotfix.1 source. Do not remove renderMode.
 class VideoView extends StatelessWidget {
   const VideoView({super.key, required this.track});
   final Object? track;
@@ -26,6 +35,7 @@ class VideoView extends StatelessWidget {
     return VideoTrackRenderer(
       t,
       fit: rtc.RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+      renderMode: VideoRenderMode.texture,
     );
   }
 }
