@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
+import '../models/game.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
@@ -100,6 +101,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   const _LiveCounter(),
                   const SizedBox(height: 10),
                   const _ChaosHour(),
+                  const SizedBox(height: 10),
+                  const _WorldTicker(),
                   const Spacer(),
                   PlayButton(onTap: widget.onPlay, size: 150),
                   const SizedBox(height: 26),
@@ -261,6 +264,82 @@ class _ChaosHourState extends State<_ChaosHour> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The world, breathing — one line at a time. Rooms filling, laughs counting,
+/// friends going live, a trending game. Nothing on this screen is static.
+class _WorldTicker extends StatefulWidget {
+  const _WorldTicker();
+  @override
+  State<_WorldTicker> createState() => _WorldTickerState();
+}
+
+class _WorldTickerState extends State<_WorldTicker> {
+  final _rng = math.Random();
+  Timer? _t;
+  late String _line = _next();
+
+  static const _games = ['Red Flag', 'Caption This', 'Roast Me', 'Freeze Face', 'Odd One Out', 'Sell It'];
+
+  String _next() {
+    switch (_rng.nextInt(5)) {
+      case 0:
+        final room = Cell.roomNames[_rng.nextInt(Cell.roomNames.length)];
+        return '$room filling · ${2 + _rng.nextInt(4)}/6';
+      case 1:
+        return '😂 ${180 + _rng.nextInt(600)} laughs this minute';
+      case 2:
+        return '👀 ${2 + _rng.nextInt(7)} of your people online';
+      case 3:
+        return '📈 trending · ${_games[_rng.nextInt(_games.length)]}';
+      default:
+        return '⚡ ${3 + _rng.nextInt(9)} rooms started just now';
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _t = Timer.periodic(const Duration(milliseconds: 2700), (_) {
+      if (mounted) setState(() => _line = _next());
+    });
+  }
+
+  @override
+  void dispose() {
+    _t?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 30,
+      child: AnimatedSwitcher(
+        duration: M.base,
+        switchInCurve: M.ease,
+        switchOutCurve: M.ease,
+        transitionBuilder: (child, anim) => FadeTransition(
+          opacity: anim,
+          child: SlideTransition(
+            position: Tween(begin: const Offset(0, 0.5), end: Offset.zero).animate(anim),
+            child: child,
+          ),
+        ),
+        child: Container(
+          key: ValueKey(_line),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0x59000000),
+            borderRadius: BorderRadius.circular(100),
+            border: Border.all(color: C.hair),
+          ),
+          child: Text(_line,
+              style: T.tiny.copyWith(color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.w700)),
+        ),
       ),
     );
   }

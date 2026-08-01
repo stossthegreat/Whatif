@@ -162,6 +162,18 @@ class AppSession extends ChangeNotifier {
     return 'Chaos Lord 👑';
   }
 
+  // ---- badges (the room voted — you earned it) ----
+  final Map<String, int> badges = {
+    '😂 Funniest': 2,
+    '🔥 Main Character': 1,
+  };
+
+  void earnBadge(String key) {
+    badges[key] = (badges[key] ?? 0) + 1;
+    chaosScore += 25;
+    notifyListeners();
+  }
+
   // ---- sparks (people you vibed with) ----
   final Set<String> saved = <String>{};
   final List<Spark> sparks = <Spark>[];

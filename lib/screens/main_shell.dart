@@ -4,14 +4,15 @@ import '../core/haptics.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
 import 'home_screen.dart';
-import 'sparks_screen.dart';
-import 'moments_screen.dart';
 import 'me_screen.dart';
 
-/// The app's home base once you're in — a persistent bottom tab bar over four
-/// surfaces: Live (the lobby + PLAY), Sparks (your people), Moments (your
-/// reveals), and Me. Tabs are kept alive (IndexedStack) so state and the live
-/// lobby never reset when you switch.
+/// Three tabs. That's the whole philosophy:
+///
+///   LIVE  —  the world. Everything moving, rooms filling, chaos hour ticking.
+///    ▶    —  drop in. The button IS the company. It dominates the bar.
+///   YOU   —  profile, badges, sparks, moments, settings. One page.
+///
+/// People don't open Rivlr to browse — they open it to get dropped into chaos.
 class MainShell extends StatefulWidget {
   const MainShell({super.key, required this.onPlay, required this.onSignOut});
   final VoidCallback onPlay;
@@ -22,9 +23,9 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  int _tab = 0;
+  int _tab = 0; // 0 = LIVE, 1 = YOU
 
-  static const double _barHeight = 62;
+  static const double _barHeight = 64;
 
   void _go(int i) {
     if (i == _tab) return;
@@ -37,35 +38,70 @@ class _MainShellState extends State<MainShell> {
     final mq = MediaQuery.of(context);
     final navTotal = _barHeight + mq.padding.bottom;
 
-    final pages = <Widget>[
-      HomeScreen(onPlay: widget.onPlay, onSignOut: widget.onSignOut),
-      const SparksScreen(embedded: true),
-      const MomentsScreen(embedded: true),
-      const MeScreen(embedded: true),
-    ];
-
     return Scaffold(
       backgroundColor: C.black,
       body: Stack(
         children: [
-          // give every tab enough bottom room to clear the floating bar
           MediaQuery(
-            data: mq.copyWith(
-              padding: mq.padding.copyWith(bottom: navTotal),
+            data: mq.copyWith(padding: mq.padding.copyWith(bottom: navTotal)),
+            child: IndexedStack(
+              index: _tab,
+              children: [
+                HomeScreen(onPlay: widget.onPlay, onSignOut: widget.onSignOut),
+                MeScreen(embedded: true, onSignOut: widget.onSignOut),
+              ],
             ),
-            child: IndexedStack(index: _tab, children: pages),
           ),
+          // the bar
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
-            child: _NavBar(
-              index: _tab,
-              onTap: _go,
-              onPlay: widget.onPlay,
-              height: _barHeight,
-              bottomInset: mq.padding.bottom,
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                child: Container(
+                  height: _barHeight + mq.padding.bottom,
+                  padding: EdgeInsets.only(bottom: mq.padding.bottom),
+                  decoration: const BoxDecoration(
+                    color: Color(0xE6060709),
+                    border: Border(top: BorderSide(color: C.hair)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _NavCell(
+                          icon: Icons.sensors_rounded,
+                          label: 'Live',
+                          selected: _tab == 0,
+                          onTap: () => _go(0),
+                        ),
+                      ),
+                      const Expanded(child: SizedBox()), // lane for the orb
+                      Expanded(
+                        child: AnimatedBuilder(
+                          animation: AppSession.instance,
+                          builder: (context, _) => _NavCell(
+                            icon: _tab == 1 ? Icons.person_rounded : Icons.person_outline_rounded,
+                            label: 'You',
+                            selected: _tab == 1,
+                            badge: AppSession.instance.mutualCount,
+                            onTap: () => _go(1),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
+          ),
+          // the orb — floats above the bar, dominates it
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: mq.padding.bottom + 14,
+            child: Center(child: _PlayOrb(onTap: widget.onPlay)),
           ),
         ],
       ),
@@ -73,149 +109,23 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-class _NavItem {
-  const _NavItem(this.icon, this.activeIcon, this.label);
-  final IconData icon;
-  final IconData activeIcon;
-  final String label;
-}
-
-class _NavBar extends StatelessWidget {
-  const _NavBar({
-    required this.index,
-    required this.onTap,
-    required this.onPlay,
-    required this.height,
-    required this.bottomInset,
-  });
-  final int index;
-  final ValueChanged<int> onTap;
-  final VoidCallback onPlay;
-  final double height;
-  final double bottomInset;
-
-  static const _items = <_NavItem>[
-    _NavItem(Icons.sensors_rounded, Icons.sensors_rounded, 'Live'),
-    _NavItem(Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'Sparks'),
-    _NavItem(Icons.auto_awesome_motion_outlined, Icons.auto_awesome_motion_rounded, 'Moments'),
-    _NavItem(Icons.person_outline_rounded, Icons.person_rounded, 'Me'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Container(
-          height: height + bottomInset,
-          padding: EdgeInsets.only(bottom: bottomInset),
-          decoration: const BoxDecoration(
-            color: Color(0xE60A0B0D),
-            border: Border(top: BorderSide(color: C.hair)),
-          ),
-          child: AnimatedBuilder(
-            animation: AppSession.instance,
-            builder: (context, _) {
-              final mutuals = AppSession.instance.mutualCount;
-              return Row(
-                children: [
-                  Expanded(child: _NavCell(item: _items[0], selected: index == 0, onTap: () => onTap(0))),
-                  Expanded(
-                    child: _NavCell(
-                      item: _items[1],
-                      selected: index == 1,
-                      badge: mutuals > 0 ? mutuals : 0,
-                      onTap: () => onTap(1),
-                    ),
-                  ),
-                  // center: drop into a live room from anywhere
-                  Expanded(child: _CenterPlay(onTap: onPlay)),
-                  Expanded(child: _NavCell(item: _items[2], selected: index == 2, onTap: () => onTap(2))),
-                  Expanded(child: _NavCell(item: _items[3], selected: index == 3, onTap: () => onTap(3))),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The center drop-in button — our take on TikTok's "+" — a black key with a
-/// purple/blue split glow. Tap it from any tab to go live.
-class _CenterPlay extends StatelessWidget {
-  const _CenterPlay({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          Buzz.pop();
-          onTap();
-        },
-        child: SizedBox(
-          width: 60,
-          height: 40,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // left purple edge
-              Positioned(
-                left: 6,
-                child: Container(
-                  width: 46,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: C.sig,
-                    borderRadius: BorderRadius.circular(11),
-                    boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 12, spreadRadius: -3)],
-                  ),
-                ),
-              ),
-              // right blue edge
-              Positioned(
-                right: 6,
-                child: Container(
-                  width: 46,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: C.blue,
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                ),
-              ),
-              // black key
-              Container(
-                width: 48,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0A0B0D),
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: const Icon(Icons.play_arrow_rounded, size: 24, color: Colors.white),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _NavCell extends StatelessWidget {
-  const _NavCell({required this.item, required this.selected, required this.onTap, this.badge = 0});
-  final _NavItem item;
+  const _NavCell({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.badge = 0,
+  });
+  final IconData icon;
+  final String label;
   final bool selected;
   final VoidCallback onTap;
   final int badge;
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? C.sig : C.tx3;
+    final color = selected ? Colors.white : C.tx3;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -225,7 +135,7 @@ class _NavCell extends StatelessWidget {
           Stack(
             clipBehavior: Clip.none,
             children: [
-              Icon(selected ? item.activeIcon : item.icon, size: 24, color: color),
+              Icon(icon, size: 25, color: color),
               if (badge > 0)
                 Positioned(
                   right: -7,
@@ -240,21 +150,77 @@ class _NavCell extends StatelessWidget {
                     ),
                     child: Text('$badge',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 9.5, color: Colors.white, fontWeight: FontWeight.w800)),
+                        style: const TextStyle(
+                            fontSize: 9.5, color: Colors.white, fontWeight: FontWeight.w800)),
                   ),
                 ),
             ],
           ),
           const SizedBox(height: 4),
-          Text(
-            item.label,
-            style: T.tiny.copyWith(
-              fontSize: 10.5,
-              color: color,
-              fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-            ),
-          ),
+          Text(label,
+              style: T.tiny.copyWith(
+                fontSize: 10.5,
+                color: color,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+              )),
         ],
+      ),
+    );
+  }
+}
+
+/// The drop-in orb. Breathing purple glow — the single most important pixel in
+/// the app. One tap from anywhere and you're in a room.
+class _PlayOrb extends StatefulWidget {
+  const _PlayOrb({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_PlayOrb> createState() => _PlayOrbState();
+}
+
+class _PlayOrbState extends State<_PlayOrb> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 2200))
+        ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        Buzz.pop();
+        widget.onTap();
+      },
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          final glow = 0.45 + 0.35 * _c.value;
+          return Container(
+            width: 62,
+            height: 62,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [C.sig, C.purpleDeep],
+              ),
+              border: Border.all(color: Colors.white.withOpacity(0.22), width: 1.5),
+              boxShadow: [
+                BoxShadow(color: C.sig.withOpacity(glow), blurRadius: 26, spreadRadius: -2),
+                const BoxShadow(color: Color(0x99000000), blurRadius: 18, offset: Offset(0, 8)),
+              ],
+            ),
+            child: const Icon(Icons.play_arrow_rounded, size: 34, color: Colors.white),
+          );
+        },
       ),
     );
   }
