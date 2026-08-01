@@ -9,8 +9,13 @@
 class AppConfig {
   AppConfig._();
 
-  static const String backend =
-      String.fromEnvironment('RIVLR_BACKEND', defaultValue: '');
+  // Defaults to the live Railway backend, so every build is live with no
+  // Codemagic changes. Override for a simulated build with:
+  //   --dart-define=RIVLR_BACKEND=
+  static const String backend = String.fromEnvironment(
+    'RIVLR_BACKEND',
+    defaultValue: 'wss://whatif-production-051b.up.railway.app/ws',
+  );
 
   static bool get isLive => backend.isNotEmpty;
 }

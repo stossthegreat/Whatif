@@ -14,8 +14,8 @@ class PresenceTile extends StatefulWidget {
     this.picked = false,
     this.win = false,
     this.dimmed = false,
-    this.showSave = false,
     this.saved = false,
+    this.radius = 20,
     this.popDelay = Duration.zero,
     this.videoChild,
     this.onTap,
@@ -25,6 +25,9 @@ class PresenceTile extends StatefulWidget {
 
   final Person person;
 
+  /// Corner radius. 0 for the full-bleed live wall.
+  final double radius;
+
   /// When set (live mode), this fills the tile (the participant's video) instead
   /// of the placeholder light pool.
   final Widget? videoChild;
@@ -32,7 +35,6 @@ class PresenceTile extends StatefulWidget {
   final bool picked;
   final bool win;
   final bool dimmed;
-  final bool showSave;
   final bool saved;
   final Duration popDelay;
   final VoidCallback? onTap;
@@ -81,12 +83,12 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
         curve: M.ease,
         decoration: BoxDecoration(
           color: const Color(0xFF0B0C0F),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(widget.radius),
           border: border,
           boxShadow: boxShadow,
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(widget.radius),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -102,6 +104,20 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
                       ),
                     ),
                   ),
+              // bottom legibility scrim so the handle always reads over video
+              const Positioned(
+                left: 0, right: 0, bottom: 0, height: 56,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                        colors: [Color(0x99000000), Color(0x00000000)],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               // specular top edge
               Positioned(
                 top: 0,
@@ -123,7 +139,7 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
                   curve: M.ease,
                   builder: (context, v, __) => DecoratedBox(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(widget.radius),
                       border: Border.all(color: Colors.white.withOpacity(v), width: 2),
                     ),
                   ),
@@ -131,16 +147,16 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
               // handle
               Positioned(
                 left: 12,
-                bottom: 11,
+                bottom: 10,
                 child: Text('@${p.name}',
-                    style: T.tiny.copyWith(color: Colors.white.withOpacity(0.92), fontWeight: FontWeight.w600)),
+                    style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12.5)),
               ),
-              // save (reconnect)
-              if (widget.showSave)
+              // save — always available, on every person (bottom-right heart)
+              if (widget.onSave != null)
                 Positioned(
-                  right: 10,
-                  top: 10,
-                  child: _SaveChip(saved: widget.saved, onTap: widget.onSave),
+                  right: 9,
+                  bottom: 8,
+                  child: _SaveHeart(saved: widget.saved, onTap: widget.onSave),
                 ),
             ],
           ),
@@ -167,23 +183,34 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
   }
 }
 
-class _SaveChip extends StatelessWidget {
-  const _SaveChip({required this.saved, this.onTap});
+/// A compact circular save/spark control that sits on every person's tile.
+/// Tap to spark them; fills purple once saved.
+class _SaveHeart extends StatelessWidget {
+  const _SaveHeart({required this.saved, this.onTap});
   final bool saved;
   final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: AnimatedContainer(
+        duration: M.quick,
+        width: 34,
+        height: 34,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: const Color(0x66000000),
-          borderRadius: BorderRadius.circular(100),
+          shape: BoxShape.circle,
+          color: saved ? C.sig : const Color(0x59000000),
           border: Border.all(color: saved ? C.sig : C.hair2),
+          boxShadow: saved
+              ? [BoxShadow(color: C.sigGlow, blurRadius: 14, spreadRadius: -4)]
+              : null,
         ),
-        child: Text(saved ? '✓ saved' : '♡ save',
-            style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+        child: Icon(
+          saved ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+          size: 17,
+          color: Colors.white,
+        ),
       ),
     );
   }

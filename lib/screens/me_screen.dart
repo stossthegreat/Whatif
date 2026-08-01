@@ -8,7 +8,11 @@ import 'moments_screen.dart';
 /// Your profile — funny, not serious. Your glow, your rank, and the stats that
 /// matter here: streak, laughs, biggest-liar, chaos score, sparks.
 class MeScreen extends StatelessWidget {
-  const MeScreen({super.key});
+  const MeScreen({super.key, this.embedded = false});
+
+  /// When shown as a bottom-nav tab there's nothing to pop, so the back button
+  /// is hidden.
+  final bool embedded;
 
   static void push(BuildContext context) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MeScreen()));
@@ -28,14 +32,17 @@ class MeScreen extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Press(
-                      onTap: () => Navigator.of(context).maybePop(),
-                      child: Container(
-                        width: 38, height: 38,
-                        decoration: BoxDecoration(shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
-                        child: const Icon(Icons.arrow_back_rounded, size: 20, color: C.tx2),
+                    if (embedded)
+                      Text('you', style: T.h3)
+                    else
+                      Press(
+                        onTap: () => Navigator.of(context).maybePop(),
+                        child: Container(
+                          width: 38, height: 38,
+                          decoration: BoxDecoration(shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
+                          child: const Icon(Icons.arrow_back_rounded, size: 20, color: C.tx2),
+                        ),
                       ),
-                    ),
                     const Spacer(),
                     Press(
                       onTap: () {},
