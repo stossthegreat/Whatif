@@ -375,6 +375,8 @@ That combination doesn't exist yet. That's the opening.
    edge states.
 4. Then: real-time / WebRTC video / moderation / matching architecture.
 
-> The earlier `lib/` Flutter build and `docs/preview.html` are the retired
-> party-game exploration — kept in history, not reflective of this direction. New
-> screens are built fresh against this spec.
+> The earlier `lib/` Flutter build is the retired party-game exploration (kept in
+> history, not reflective of this direction). `docs/preview.html` is now the
+> **Black-glass interactive prototype** built against this spec — Home (already
+> alive) → Finding (the reveal countdown) → the Live canvas with unpredictable
+> games, the reveal beat, NEXT re-roll, opt-in reconnect, and Report/Block.
