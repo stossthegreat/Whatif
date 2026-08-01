@@ -1,6 +1,6 @@
-# WhatIf Server
+# Rivlr Server
 
-Matchmaking + live-video signaling for WhatIf. One PLAY → the server composes an
+Matchmaking + live-video signaling for Rivlr. One PLAY → the server composes an
 unpredictable **cell** (group size + game), mints a **LiveKit** room token per
 member (the live group video), and relays game events between members.
 
@@ -64,10 +64,10 @@ dependencies:
    ```dart
    class AppConfig {
      // empty = simulated; set to your Railway wss URL to go live
-     static const backend = String.fromEnvironment('WHATIF_BACKEND', defaultValue: '');
+     static const backend = String.fromEnvironment('RIVLR_BACKEND', defaultValue: '');
    }
    ```
-   Run live with: `flutter run --dart-define=WHATIF_BACKEND=wss://<domain>/ws`
+   Run live with: `flutter run --dart-define=RIVLR_BACKEND=wss://<domain>/ws`
 
 2. **Matchmaking** — connect on Finding, wait for `cell`, then build the `Cell`
    from `people` + `game.prompt` and go to Live. On NEXT send `{t:'next'}` and

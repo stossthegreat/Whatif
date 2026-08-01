@@ -1,10 +1,10 @@
-// WhatIf — matchmaking + live-video signaling server.
+// Rivlr — matchmaking + live-video signaling server.
 //
 // One PLAY drops a user into the queue; the server composes an unpredictable
 // "cell" (group size + game), mints a LiveKit room token per member (the live
 // group video), and relays lightweight game events between members. Fail-soft:
 // with no LiveKit keys it still matches people (video disabled); with ALLOW_SOLO
-// a lone tester is dropped in solo after a short wait. WhatIf never fabricates
+// a lone tester is dropped in solo after a short wait. Rivlr never fabricates
 // fake humans in production.
 
 import 'dotenv/config';
@@ -175,7 +175,7 @@ setInterval(() => {
 
 // ---- http + ws -------------------------------------------------------------
 const app = express();
-app.get('/', (_req, res) => res.json({ ok: true, service: 'whatif', live: LIVE_BASELINE + clients.size }));
+app.get('/', (_req, res) => res.json({ ok: true, service: 'rivlr', live: LIVE_BASELINE + clients.size }));
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 const server = createServer(app);
@@ -237,5 +237,5 @@ wss.on('connection', (ws) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`WhatIf server on :${PORT}  (livekit ${LIVEKIT_URL ? 'ON' : 'OFF'}, solo ${ALLOW_SOLO})`);
+  console.log(`Rivlr server on :${PORT}  (livekit ${LIVEKIT_URL ? 'ON' : 'OFF'}, solo ${ALLOW_SOLO})`);
 });

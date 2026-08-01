@@ -10,6 +10,7 @@ import '../models/game.dart';
 class AppSession extends ChangeNotifier {
   AppSession._() {
     _drift = Timer.periodic(const Duration(milliseconds: 1600), (_) {
+      if (serverDriven) return; // real presence comes from the server
       final delta = (_r.nextDouble() * 10 - 3).round();
       liveCount = (liveCount + delta).clamp(8000, 99000);
       notifyListeners();
@@ -21,7 +22,39 @@ class AppSession extends ChangeNotifier {
   Timer? _drift;
 
   int liveCount = 12438;
+  bool serverDriven = false;
   final Set<String> saved = <String>{};
+
+  // ---- profile (from onboarding questions) ----
+  bool signedIn = false;
+  int? age;
+  String? gender; // Woman / Man / Nonbinary / Other
+  String? lookingFor; // Everyone / Women / Men
+
+  // ---- settings ----
+  bool soundOn = true;
+  bool hapticsOn = true;
+
+  void setProfile({int? age, String? gender, String? lookingFor}) {
+    if (age != null) this.age = age;
+    if (gender != null) this.gender = gender;
+    if (lookingFor != null) this.lookingFor = lookingFor;
+    notifyListeners();
+  }
+
+  void signOut() {
+    signedIn = false;
+    age = null;
+    gender = null;
+    lookingFor = null;
+    notifyListeners();
+  }
+
+  void setLiveCount(int n) {
+    serverDriven = true;
+    liveCount = n;
+    notifyListeners();
+  }
 
   // unpredictability memory
   GameKind? lastKind;

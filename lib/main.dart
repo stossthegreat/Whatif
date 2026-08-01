@@ -13,5 +13,5 @@ void main() {
     systemNavigationBarColor: Colors.transparent,
     systemNavigationBarIconBrightness: Brightness.light,
   ));
-  runApp(const WhatIfApp());
+  runApp(const RivlrApp());
 }

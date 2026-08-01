@@ -17,12 +17,17 @@ class PresenceTile extends StatefulWidget {
     this.showSave = false,
     this.saved = false,
     this.popDelay = Duration.zero,
+    this.videoChild,
     this.onTap,
     this.onSave,
     this.onReport,
   });
 
   final Person person;
+
+  /// When set (live mode), this fills the tile (the participant's video) instead
+  /// of the placeholder light pool.
+  final Widget? videoChild;
   final bool speaking;
   final bool picked;
   final bool win;
@@ -85,17 +90,18 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // pooled light
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment(p.lx * 2 - 1, p.ly * 2 - 1),
-                    radius: 0.9,
-                    colors: [p.light, const Color(0x00000000)],
-                    stops: const [0.0, 0.72],
+              // live video (if any) else the pooled-light placeholder
+              widget.videoChild ??
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: Alignment(p.lx * 2 - 1, p.ly * 2 - 1),
+                        radius: 0.9,
+                        colors: [p.light, const Color(0x00000000)],
+                        stops: const [0.0, 0.72],
+                      ),
+                    ),
                   ),
-                ),
-              ),
               // specular top edge
               Positioned(
                 top: 0,

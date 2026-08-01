@@ -4,7 +4,7 @@
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.front" android:required="false"/>
     <application
-        android:label="WhatIf"
+        android:label="Rivlr"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

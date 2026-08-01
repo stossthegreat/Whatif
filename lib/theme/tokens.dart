@@ -2,7 +2,7 @@ import 'package:flutter/animation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
-/// WhatIf — "Black glass".
+/// Rivlr — "Black glass".
 /// True black. One cool sliver of light. Huge type. Massive space.
 /// Motion stays silent until it matters. The faces are the only content.
 class C {

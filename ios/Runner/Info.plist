@@ -5,11 +5,11 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>WhatIf</string>
+	<string>Rivlr</string>
 	<key>NSCameraUsageDescription</key>
-	<string>WhatIf uses your camera so you can meet and talk to people live.</string>
+	<string>Rivlr uses your camera so you can meet and talk to people live.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>WhatIf uses your microphone so people can hear you on live calls.</string>
+	<string>Rivlr uses your microphone so people can hear you on live calls.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
