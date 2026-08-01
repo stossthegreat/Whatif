@@ -130,6 +130,76 @@ class GameDef {
         ['Last thing you ate — quick'], ['Say a red thing, a blue thing, a green thing'],
       ],
     ),
+    // ---- the wild ones (perform, then the room crowns someone) ----
+    GameDef(
+      kind: GameKind.point, name: 'Red Flag', hint: 'point at your suspect',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['Most likely to forget your birthday'], ['Most likely to cry first in a movie'],
+        ['Most likely to text back in 3 days'], ['Most likely to get arrested for something dumb'],
+        ['Most likely to ghost after one date'], ['Biggest red-flag energy'],
+        ['Most likely to start drama'], ['Most likely to fake their own disappearance'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Voice Swap', hint: 'do the voice — then point at who nailed it',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Everyone talk like a PIRATE 🏴‍☠️'], ['Talk like a ROBOT 🤖'],
+        ['Talk like your GRANDMA 👵'], ['Talk like a CEO on a podcast 💼'],
+        ['Talk like a BABY 👶'], ['Talk like a movie VILLAIN 😈'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Sell It', hint: '30 seconds — then crown the best pitch',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Sell a single sock to the room'], ['Sell a banana like it’s a supercar'],
+        ['Sell this app to a stranger'], ['Sell a rock as a life-changing product'],
+        ['Convince the room to give you £100'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Survival', hint: 'argue your case — then vote the survivor',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['Zombie apocalypse — who survives? Make your case'], ['Plane crash on an island — who’s useful?'],
+        ['Last one in the bunker — why you?'], ['Prison break — who’s the brains?'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Fake Flex', hint: 'one of you is secretly rich — find them',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['Convince everyone you’re secretly a millionaire — point at the real one'],
+        ['One of you has a private jet — point at who’s telling the truth'],
+        ['Spot the secret genius in the room'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Sound Effect', hint: 'recreate it — funniest wins',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['Everyone make a COW 🐄 — point at the best'], ['Make a police SIREN 🚨'],
+        ['Make a phone RINGTONE 📱'], ['Do your best EVIL LAUGH 😈'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'First Impression', hint: 'first 5 seconds — vote your fave',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['Who’s the main character of this room?'], ['Who would you grab a drink with?'],
+        ['Who’s got the best energy?'], ['Who’s the most chaotic?'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.freeze, name: 'Laugh Lock', hint: 'do NOT laugh first',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Laugh Lock — first to laugh loses'], ['Straightest face wins. Go.'],
+        ['Try not to smile. Impossible.'],
+      ],
+    ),
   ];
 
   static const bag = [1, 1, 1, 2, 2, 3, 3, 5];

@@ -17,14 +17,15 @@ class Wordmark extends StatelessWidget {
       TextSpan(
         style: TextStyle(
           fontSize: size,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -size * 0.035,
+          fontWeight: FontWeight.w900,
+          letterSpacing: -size * 0.045,
           color: color,
           height: 1.0,
         ),
         children: const [
-          TextSpan(text: 'Rivlr'),
-          TextSpan(text: '.', style: TextStyle(color: C.sig)),
+          TextSpan(text: 'rivlr'),
+          // a small purple beat — the one accent
+          TextSpan(text: '•', style: TextStyle(color: C.sig)),
         ],
       ),
     );

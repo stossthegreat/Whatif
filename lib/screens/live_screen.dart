@@ -369,42 +369,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
-          // self PiP
-          Positioned(
-            right: 16,
-            bottom: MediaQuery.of(context).padding.bottom + (_phase == _Phase.game ? 220 : 96),
-            child: AnimatedContainer(
-              duration: M.base,
-              curve: M.ease,
-              width: r.isTablet ? 116 : 96,
-              height: r.isTablet ? 154 : 128,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: C.hair2),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 24, offset: const Offset(0, 10))],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: widget.live
-                    ? Stack(fit: StackFit.expand, children: [
-                        const DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: C.char2,
-                            gradient: RadialGradient(
-                              center: Alignment(0, -0.2), radius: 0.9,
-                              colors: [Color(0x4D8CB4FF), Color(0x00000000)], stops: [0.0, 0.72],
-                            ),
-                          ),
-                        ),
-                        VideoView(track: RtcService.instance.localTrack, mirror: true),
-                        const Positioned(
-                            left: 8, bottom: 7,
-                            child: Text('you', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w700))),
-                      ])
-                    : const SelfView(label: 'you'),
-              ),
-            ),
-          ),
           // top bar
           SafeArea(
             bottom: false,
@@ -462,29 +426,68 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     );
   }
 
+  /// The camera IS the interface. 1:1 stacks them over you; groups are an equal
+  /// FaceTime grid with you as one of the tiles (never a floating box).
   Widget _buildGrid() {
-    final n = cell.people.length;
-    final tiles = List.generate(n, (i) => _tile(i));
-    if (n == 1) return tiles.first;
-    if (n == 2) {
+    final n = cell.people.length; // strangers
+    final personTiles = List.generate(n, (i) => _tile(i));
+
+    if (n == 1) {
       return Column(children: [
-        Expanded(child: tiles[0]),
+        Expanded(child: personTiles[0]),
         const SizedBox(height: 8),
-        Expanded(child: tiles[1]),
+        Expanded(child: _selfTile()),
       ]);
     }
-    // rows of two; a lone last tile spans the row
+
+    final tiles = <Widget>[...personTiles, _selfTile()];
+    final cols = tiles.length <= 4 ? 2 : 3;
+    return _facetime(tiles, cols);
+  }
+
+  Widget _facetime(List<Widget> tiles, int cols) {
     final rows = <Widget>[];
-    for (var i = 0; i < n; i += 2) {
-      final rowTiles = <Widget>[Expanded(child: tiles[i])];
-      if (i + 1 < n) {
-        rowTiles.add(const SizedBox(width: 8));
-        rowTiles.add(Expanded(child: tiles[i + 1]));
+    for (var i = 0; i < tiles.length; i += cols) {
+      final rowKids = <Widget>[];
+      for (var j = 0; j < cols; j++) {
+        if (j > 0) rowKids.add(const SizedBox(width: 8));
+        final idx = i + j;
+        rowKids.add(Expanded(child: idx < tiles.length ? tiles[idx] : const SizedBox()));
       }
-      rows.add(Expanded(child: Row(children: rowTiles)));
-      if (i + 2 < n) rows.add(const SizedBox(height: 8));
+      rows.add(Expanded(child: Row(children: rowKids)));
+      if (i + cols < tiles.length) rows.add(const SizedBox(height: 8));
     }
     return Column(children: rows);
+  }
+
+  Widget _selfTile() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: C.char2,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0x1FFFFFFF)),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            widget.live
+                ? VideoView(track: RtcService.instance.localTrack, mirror: true)
+                : const SelfView(),
+            Positioned(
+              top: 0, left: 12, right: 12,
+              child: Container(height: 1, decoration: const BoxDecoration(
+                gradient: LinearGradient(colors: [Color(0x00FFFFFF), C.spec, Color(0x00FFFFFF)]))),
+            ),
+            const Positioned(
+              left: 12, bottom: 11,
+              child: Text('you', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _tile(int i) {
@@ -548,7 +551,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   List<Widget> _inputs() {
     switch (game.kind) {
       case GameKind.point:
-        return [Text('tap a face above ↑', style: T.sub.copyWith(color: C.tx2))];
+        return [Text('tap someone’s tile', style: T.sub.copyWith(color: C.tx2))];
       case GameKind.poll:
       case GameKind.wouldRather:
         return [
