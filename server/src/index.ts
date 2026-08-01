@@ -10,7 +10,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'crypto';
-import { rollGame, rollMemberCount, type GameKind } from './games.js';
+import { rollGame, rollMemberCount, PACK, type GameKind } from './games.js';
 import { store, type User, type Meet, type Cell, type RoundWire } from './store.js';
 import { mintToken, LIVEKIT_URL } from './livekit.js';
 
@@ -206,13 +206,48 @@ function assignTargets(rounds: RoundWire[], members: string[]) {
   for (const r of rounds) r.targetId = pick(members);
 }
 
-function startRound(cell: Cell, idx: number) {
-  if (idx >= cell.rounds.length) return;
+/// Start one game, chosen by the room ('name') or random. The round message
+/// carries the full game payload so the client never depends on pre-rolls.
+function startPickedGame(cell: Cell, name?: string) {
+  if (cell.inRound) return; // one game at a time
+  const strangers = Math.max(1, cell.members.length - 1);
+  let wire: RoundWire;
+  const chosen = name
+    ? PACK.find((g) => g.name === name && strangers >= g.minStrangers && strangers <= g.maxStrangers)
+    : undefined;
+  if (chosen) {
+    const prompt = [...chosen.prompts[Math.floor(Math.random() * chosen.prompts.length)]];
+    const head = prompt.shift()!;
+    for (let i = prompt.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [prompt[i], prompt[j]] = [prompt[j], prompt[i]];
+    }
+    wire = {
+      kind: chosen.kind, name: chosen.name, hint: chosen.hint, prompt: [head, ...prompt],
+      targetId: pick(cell.members),
+      lieIdx: chosen.kind === 'twoTruths'
+        ? Math.floor(Math.random() * Math.max(1, prompt.length)) : undefined,
+    };
+  } else {
+    const last = cell.rounds[cell.roundIdx];
+    const r = rollGame(strangers, last?.kind as GameKind | undefined, last?.name);
+    wire = {
+      kind: r.game.kind, name: r.game.name, hint: r.game.hint, prompt: r.prompt,
+      targetId: pick(cell.members),
+      lieIdx: r.game.kind === 'twoTruths'
+        ? Math.floor(Math.random() * Math.max(1, r.prompt.length - 1)) : undefined,
+    };
+  }
+
+  const idx = cell.roundIdx + 1;
   cell.roundIdx = idx;
+  if (idx < cell.rounds.length) cell.rounds[idx] = wire; else cell.rounds.push(wire);
   cell.answers = new Map();
-  const secs = secsFor(cell.rounds[idx].kind);
+  cell.inRound = true;
+
+  const secs = secsFor(wire.kind);
   const endsAt = Date.now() + secs * 1000;
-  broadcastCell(cell.id, { t: 'round', idx, endsAt });
+  broadcastCell(cell.id, { t: 'round', idx, endsAt, game: wire });
   if (cell.roundTimer) clearTimeout(cell.roundTimer);
   cell.roundTimer = setTimeout(() => {
     const c = store.cells.get(cell.id);
@@ -258,12 +293,15 @@ function endRound(cell: Cell) {
     if (round.lieIdx != null) msg.lieIdx = round.lieIdx;
   }
 
+  cell.inRound = false;
+  cell.gamesPlayed += 1;
   broadcastCell(cell.id, msg);
-  // the reveal breathes — people need a beat to laugh and talk about it
-  if (idx + 1 < cell.rounds.length) {
-    later(cell.id, 7000, (c) => startRound(c, idx + 1));
-  } else {
+  // the reveal breathes, then the room goes back to talking. Every 3rd game
+  // earns a ceremony first.
+  if (cell.gamesPlayed % 3 === 0) {
     later(cell.id, 7000, (c) => sendAwards(c));
+  } else {
+    later(cell.id, 7000, (c) => broadcastCell(c.id, { t: 'talk' }));
   }
 }
 
@@ -306,6 +344,7 @@ async function formCell(memberIds: string[]) {
     id: cellId, room, members: [...live], kind: rounds[0].kind as GameKind,
     rounds, roundIdx: -1, answers: new Map(), votes: new Map(),
     golden: Math.random() < 0.04, luckyId: pick(live), timers: [],
+    gamesPlayed: 0, inRound: false,
   };
   store.cells.set(cellId, cell);
 
@@ -323,9 +362,9 @@ async function formCell(memberIds: string[]) {
       game: rounds[0], rounds, golden: cell.golden, luckyId: cell.luckyId });
   }
 
-  // the server drives the session: arrival beat, then round 1; chaos strikes
-  // once or twice at unpredictable moments mid-session
-  later(cellId, 1300, (c) => startRound(c, 0));
+  // talk-first: the room opens as a hang. Games start when the room picks one
+  // (or hits Random). Chaos still strikes on its own.
+  later(cellId, 1300, (c) => broadcastCell(c.id, { t: 'talk' }));
   const chaosCount = 1 + Math.floor(Math.random() * 2);
   for (let i = 0; i < chaosCount; i++) {
     const [e, x] = pick(CHAOS_CARDS);
@@ -473,6 +512,11 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'leaveParty': leaveParty(id); break;
+      case 'pickGame': {
+        const cell = user.cellId ? store.cells.get(user.cellId) : undefined;
+        if (cell) startPickedGame(cell, typeof m.name === 'string' ? m.name : undefined);
+        break;
+      }
       case 'startParty': {
         const code = partyByUser.get(id);
         const p = code ? parties.get(code) : undefined;
@@ -526,7 +570,8 @@ wss.on('connection', (ws) => {
             cell.lastWinnerId = undefined;
             later(cell.id, 4200, (c) => {
               c.reviveRounds = undefined; // allow a fresh reroll next ceremony
-              startRound(c, 0);
+              c.inRound = false;
+              broadcastCell(c.id, { t: 'talk' }); // revived room = fresh hang
             });
             const [e, x] = pick(CHAOS_CARDS);
             later(cell.id, 12000 + Math.floor(Math.random() * 20000), (c) =>

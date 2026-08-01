@@ -4,10 +4,7 @@ import 'package:flutter/physics.dart';
 import '../core/haptics.dart';
 import '../theme/tokens.dart';
 
-/// The Rivlr wordmark — clean white with a single cool-signal period. The one
-/// brand flourish, used across onboarding and Home.
-/// The brand. Capital R, confident size, tight tracking — a name, not a
-/// username. The single purple beat after it is the only decoration.
+/// The Rivlr wordmark — white type, purple R. The brand's one accent.
 class Wordmark extends StatelessWidget {
   const Wordmark({super.key, this.size = 28, this.color = C.tx});
   final double size;
@@ -25,9 +22,9 @@ class Wordmark extends StatelessWidget {
           height: 1.0,
         ),
         children: const [
-          TextSpan(text: 'Rivlr'),
-          // a small purple beat — the one accent
-          TextSpan(text: '.', style: TextStyle(color: C.sig, fontWeight: FontWeight.w900)),
+          // the purple R is the brand's one accent
+          TextSpan(text: 'R', style: TextStyle(color: C.sig)),
+          TextSpan(text: 'ivlr'),
         ],
       ),
     );

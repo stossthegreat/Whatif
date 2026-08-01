@@ -78,6 +78,8 @@ class NetworkClient {
   void answer(int round, dynamic v) => send({'t': 'answer', 'round': round, 'v': v});
   void vote(String e) => send({'t': 'vote', 'e': e});
   void spinWheel() => send({'t': 'spinWheel'});
+  void pickGame([String? name]) =>
+      send({'t': 'pickGame', if (name != null) 'name': name});
   void react(String e) => send({'t': 'react', 'e': e});
   void report(String target) => send({'t': 'report', 'target': target});
   void block(String target) => send({'t': 'block', 'target': target});

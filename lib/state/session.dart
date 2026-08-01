@@ -87,6 +87,7 @@ class AppSession extends ChangeNotifier {
       final a = p.getInt('age');
       if (a != null) age = a;
       myVibes = p.getStringList('vibes') ?? myVibes;
+      rulesAccepted = p.getBool('rulesAccepted') ?? false;
       // persist the freshly-generated identity the first time
       if (p.getString('uid') == null) await _persist();
     } catch (_) {/* first run / no store — defaults are fine */}
@@ -115,6 +116,13 @@ class AppSession extends ChangeNotifier {
     if (clean.length < 3) return;
     myHandle = clean.substring(0, clean.length.clamp(0, 14));
     _persist();
+    notifyListeners();
+  }
+
+  bool rulesAccepted = false;
+  void acceptRules() {
+    rulesAccepted = true;
+    _prefs?.setBool('rulesAccepted', true);
     notifyListeners();
   }
 

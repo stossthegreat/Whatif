@@ -14,6 +14,7 @@ import 'screens/profile_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/party_screen.dart';
+import 'screens/rules_screen.dart';
 import 'screens/finding_screen.dart';
 import 'screens/live_screen.dart';
 
@@ -38,7 +39,7 @@ class RivlrApp extends StatelessWidget {
   }
 }
 
-enum _Step { boot, welcome, signin, profile, permission, home, party, finding, live }
+enum _Step { boot, welcome, signin, profile, rules, permission, home, party, finding, live }
 
 class _Root extends StatefulWidget {
   const _Root();
@@ -208,7 +209,8 @@ class _RootState extends State<_Root> {
       _Step.boot => const ColoredBox(color: C.black),
       _Step.welcome => WelcomeScreen(onNext: () => _to(_Step.signin)),
       _Step.signin => SignInScreen(onContinue: () => _to(_Step.profile)),
-      _Step.profile => ProfileScreen(onDone: () => _to(_Step.permission)),
+      _Step.profile => ProfileScreen(onDone: () => _to(_Step.rules)),
+      _Step.rules => RulesScreen(onAgree: () => _to(_Step.permission)),
       _Step.permission => OnboardingScreen(onDone: () {
           AppSession.instance.completeOnboarding();
           _to(_Step.home);

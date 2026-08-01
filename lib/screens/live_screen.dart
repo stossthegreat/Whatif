@@ -16,7 +16,7 @@ import '../widgets/presence_tile.dart';
 import '../widgets/self_view.dart';
 import '../widgets/video_view.dart';
 
-enum _Phase { drop, game, reveal, awards, wheel }
+enum _Phase { drop, talk, game, reveal, awards, wheel }
 
 /// The room. TikTok-clean, FaceTime-exact.
 ///
@@ -124,6 +124,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   int _target = 0;
   bool _bottleDone = true;
 
+  // your PiP in 1:1 — draggable; null = default anchor (bottom-right)
+  Offset? _pipPos;
+
+  // talk-first: games played this hang (simulated ceremony every 3rd)
+  int _gamesPlayed = 0;
+
   Cell get cell => widget.cell;
   GameDef get game => cell.rounds[_round].game;
   List<String> get _prompt => cell.rounds[_round].prompt;
@@ -149,7 +155,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       if (!mounted || cell.people.isEmpty) return;
       setState(() => _speakingIdx = _r.nextInt(cell.people.length));
     });
-    _startTimer = Timer(const Duration(milliseconds: 1300), _startGame);
+    _startTimer = Timer(const Duration(milliseconds: 1300), _toTalk);
     // the Director strikes somewhere in the first stretch — nobody knows when.
     // (In server-driven rooms chaos is pushed by the server so all phones
     // flash the same card at the same moment.)
@@ -187,13 +193,24 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         _onAwardsMsg(m);
       case 'wheel':
         _onWheelMsg(m);
+      case 'talk':
+        if (_serverDriven && _phase != _Phase.wheel) _toTalk();
     }
   }
 
   void _onRoundMsg(Map<String, dynamic> m) {
     if (!_serverDriven || _phase == _Phase.wheel) return;
     final idx = (m['idx'] as num?)?.toInt();
-    if (idx == null || idx < 0 || idx >= cell.rounds.length) return;
+    if (idx == null || idx < 0) return;
+    // the round now carries its game — the room picked it live
+    if (m['game'] is Map) {
+      final wire = _roundFromWire((m['game'] as Map).cast<String, dynamic>());
+      while (cell.rounds.length <= idx) {
+        cell.rounds.add(wire);
+      }
+      cell.rounds[idx] = wire;
+    }
+    if (idx >= cell.rounds.length) return;
     final ends = (m['endsAt'] as num?)?.toInt();
     _roundEndsAt = ends != null ? DateTime.fromMillisecondsSinceEpoch(ends) : null;
     // hard-sync to the server's clock: cancel every local fallback
@@ -440,6 +457,132 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   double get _timerProgress => 1 - _timer.value;
 
   // ---- phase machine --------------------------------------------------------
+
+  /// The room's resting state: faces + conversation. Games are something the
+  /// room chooses to do, not a conveyor belt.
+  void _toTalk() {
+    if (!mounted || _phase == _Phase.wheel) return;
+    _timer.stop();
+    _idle?.cancel();
+    _resultGrace?.cancel();
+    setState(() {
+      _phase = _Phase.talk;
+      _answered = false;
+      _result = '';
+      _voteCounts = {};
+    });
+  }
+
+  /// Anyone starts a game — a chosen one or the dice.
+  void _requestGame([String? name]) {
+    Buzz.commit();
+    Sfx.pop();
+    if (_serverDriven) {
+      NetworkClient.instance.pickGame(name);
+      return; // the {t:'round'} broadcast starts it for everyone
+    }
+    // simulated / old server: roll locally
+    final strangers = cell.people.length;
+    GameDef? g;
+    if (name != null) {
+      for (final def in GameDef.pack) {
+        if (def.name == name && def.fits(strangers)) g = def;
+      }
+    }
+    final round = g != null
+        ? _localRound(g)
+        : Cell.rollRounds(_r, strangers, count: 1,
+            avoidKind: cell.rounds.isEmpty ? null : game.kind).first;
+    cell.rounds.add(round);
+    setState(() {
+      _round = cell.rounds.length - 1;
+      _pointPick = null;
+      _selected = null;
+      _winnerIdx = null;
+      _split = const [];
+      _voteCounts = {};
+    });
+    _startGame();
+  }
+
+  RoundDef _localRound(GameDef g) {
+    final chosen = [...g.prompts[_r.nextInt(g.prompts.length)]];
+    final head = chosen.removeAt(0);
+    chosen.shuffle(_r);
+    return RoundDef(game: g, prompt: [head, ...chosen]);
+  }
+
+  /// The game picker — warm openers up top, spark at the bottom.
+  void _openPicker() {
+    Buzz.tick();
+    final strangers = cell.people.length;
+    final fits = GameDef.pack.where((g) => g.fits(strangers) || strangers == 0).toList();
+    const order = ['warm', 'wild', 'spark'];
+    fits.sort((a, b) => order.indexOf(a.vibe).compareTo(order.indexOf(b.vibe)));
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: Container(
+          margin: const EdgeInsets.all(12),
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.72),
+          decoration: BoxDecoration(
+            color: const Color(0xF20B0C10),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: C.hair2),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 16),
+              Text('PICK A GAME', style: T.eyebrow.copyWith(letterSpacing: 3, fontSize: 11)),
+              const SizedBox(height: 8),
+              Flexible(
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+                  shrinkWrap: true,
+                  itemCount: fits.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, color: C.hair, indent: 18, endIndent: 18),
+                  itemBuilder: (ctx2, i) {
+                    final g = fits[i];
+                    return InkWell(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _requestGame(g.name);
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(g.name,
+                                      style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+                                  const SizedBox(height: 2),
+                                  Text(g.hint, style: T.tiny),
+                                ],
+                              ),
+                            ),
+                            if (g.vibe == 'spark')
+                              Text('SPARK', style: T.eyebrow.copyWith(color: C.sig, fontSize: 9, letterSpacing: 1.6)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _startGame() {
     setState(() {
       _phase = _Phase.game;
@@ -519,8 +662,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     Timer(const Duration(milliseconds: 650), _toReveal);
   }
 
-  bool get _finalRound => _round >= cell.rounds.length - 1;
-
   // the signature beat: answers stay hidden, then 3…2…1 — everything flips at
   // once. The suspense before the flip is the dopamine.
   int? _revealCount;
@@ -559,51 +700,26 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   void _doReveal() {
     Buzz.commit();
-    if (_finalRound) {
-      // only the session's climax becomes a shareable moment
-      AppSession.instance.captureMoment(
-        game: game.name,
-        result: _result,
-        hues: [...cell.people.map((p) => p.hue), AppSession.instance.myHue],
-      );
-    }
+    AppSession.instance.captureMoment(
+      game: game.name,
+      result: _result,
+      hues: [...cell.people.map((p) => p.hue), AppSession.instance.myHue],
+    );
     setState(() => _phase = _Phase.reveal);
+    _gamesPlayed++;
     _idle?.cancel();
-    // in server-driven rooms the server sends 'round'/'awards' to advance us —
-    // these local timers are only the safety net if it goes quiet.
-    if (_finalRound) {
-      _idle = Timer(Duration(milliseconds: _serverDriven ? 11000 : 6500), () {
-        if (mounted && _phase == _Phase.reveal) _toAwards();
-      });
-    } else {
-      _idle = Timer(Duration(milliseconds: _serverDriven ? 10000 : 6000), () {
-        if (mounted && _phase == _Phase.reveal) _nextRound();
-      });
-    }
-  }
-
-  void _nextRound() {
-    setState(() {
-      _round++;
-      _answered = false;
-      _pointPick = null;
-      _selected = null;
-      _winnerIdx = null;
-      _split = const [];
-      _result = '';
-      _voteCounts = {};
-      _phase = _Phase.drop;
+    // after the reveal breathes, the room goes back to talking. Every 3rd game
+    // earns the ceremony. (Server rooms: 'talk'/'awards' messages drive this —
+    // the local timers are only the safety net.)
+    final ceremonyDue = !_serverDriven && _gamesPlayed % 3 == 0;
+    _idle = Timer(Duration(milliseconds: _serverDriven ? 11000 : 6500), () {
+      if (!mounted || _phase != _Phase.reveal) return;
+      if (ceremonyDue) {
+        _toAwards();
+      } else {
+        _toTalk();
+      }
     });
-    Buzz.pop();
-    Sfx.pop();
-    _startTimer?.cancel();
-    _startTimer = Timer(const Duration(milliseconds: 900), _startGame);
-    // the Director may strike again between rounds (local mode only —
-    // server-driven rooms get synced chaos pushed to every phone)
-    if (!_serverDriven && _r.nextDouble() < 0.4) {
-      _director?.cancel();
-      _director = Timer(Duration(milliseconds: 4000 + _r.nextInt(6000)), _dropChaos);
-    }
   }
 
   /// The wheel chose REVIVE — same room, same people, a fresh session.
@@ -630,7 +746,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       if (mounted) setState(() => _stamp = false);
     });
     _startTimer?.cancel();
-    _startTimer = Timer(const Duration(milliseconds: 1300), _startGame);
+    _startTimer = Timer(const Duration(milliseconds: 1300), _toTalk);
     if (!_serverDriven) {
       _director?.cancel();
       _director = Timer(Duration(milliseconds: 6000 + _r.nextInt(8000)), _dropChaos);
@@ -1050,19 +1166,32 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       );
     }
 
-    // 1:1 — them full screen, you as a floating PiP. Pure FaceTime.
+    // 1:1 — them full screen, you as a draggable PiP (default bottom-right).
     if (n == 1) {
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          _face(0, radius: 0),
-          Positioned(
-            right: 12,
-            top: MediaQuery.of(context).padding.top + 58,
-            child: _pip(),
-          ),
-        ],
-      );
+      return LayoutBuilder(builder: (context, box) {
+        const pw = 128.0, ph = 184.0;
+        final pad = MediaQuery.of(context).padding;
+        final def = Offset(box.maxWidth - pw - 12, box.maxHeight - ph - 220);
+        var pos = _pipPos ?? def;
+        pos = Offset(
+          pos.dx.clamp(8.0, box.maxWidth - pw - 8.0),
+          pos.dy.clamp(pad.top + 56.0, box.maxHeight - ph - 12.0),
+        );
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            _face(0, radius: 0),
+            Positioned(
+              left: pos.dx,
+              top: pos.dy,
+              child: GestureDetector(
+                onPanUpdate: (d) => setState(() => _pipPos = pos + d.delta),
+                child: _pip(),
+              ),
+            ),
+          ],
+        );
+      });
     }
 
     // groups — perfect 2-column grid, you are one of the tiles.
@@ -1083,10 +1212,10 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   Widget _pip() {
     return Container(
-      width: 108,
-      height: 152,
+      width: 128,
+      height: 184,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withOpacity(0.25)),
         boxShadow: const [BoxShadow(color: Color(0xB3000000), blurRadius: 22, offset: Offset(0, 8))],
       ),
@@ -1095,9 +1224,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            widget.live
-                ? VideoView(track: RtcService.instance.localTrack, mirror: true)
-                : const SelfView(),
+            widget.live ? _selfVideo() : const SelfView(),
             if (_lucky == cell.people.length)
               const Positioned(left: 6, top: 6, child: _StarChip()),
           ],
@@ -1126,13 +1253,27 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     );
     final votes = _voteCounts[i] ?? 0;
     if (_lucky != i && votes == 0) return tile;
+    // full-bleed tiles reach under the status bar — keep chips clear of it
+    final chipTop = radius == 0 ? MediaQuery.of(context).padding.top + 56.0 : 10.0;
     return Stack(
       fit: StackFit.expand,
       children: [
         tile,
-        if (_lucky == i) const Positioned(left: 10, top: 10, child: _StarChip()),
-        if (votes > 0) Positioned(right: 10, top: 10, child: _VoteChip(count: votes)),
+        if (_lucky == i) Positioned(left: 10, top: chipTop, child: const _StarChip()),
+        if (votes > 0) Positioned(right: 10, top: chipTop, child: _VoteChip(count: votes)),
       ],
+    );
+  }
+
+  /// Local LiveKit video with a fade-in that hides the first frames (they can
+  /// arrive rotated before orientation metadata applies).
+  Widget _selfVideo() {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOut,
+      builder: (context, v, child) => Opacity(opacity: v, child: child),
+      child: VideoView(track: RtcService.instance.localTrack),
     );
   }
 
@@ -1142,9 +1283,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          widget.live
-              ? VideoView(track: RtcService.instance.localTrack, mirror: true)
-              : const SelfView(),
+          widget.live ? _selfVideo() : const SelfView(),
           const Positioned(
             left: 0, right: 0, bottom: 0, height: 54,
             child: IgnorePointer(
@@ -1260,6 +1399,63 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   // ---- bottom caption -------------------------------------------------------
   Widget _caption() {
     if (_phase == _Phase.drop) return const SizedBox.shrink();
+    if (_phase == _Phase.talk) {
+      return Positioned(
+        left: 16,
+        right: 16,
+        bottom: 14,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('just talk — or play something',
+                style: T.sub.copyWith(color: Colors.white70, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.only(right: 52),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Press(
+                      haptic: false,
+                      onTap: () => _requestGame(),
+                      child: Container(
+                        height: 52,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text('🎲  Random game',
+                            style: T.body.copyWith(color: Colors.black, fontWeight: FontWeight.w800, fontSize: 15)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Press(
+                      haptic: false,
+                      onTap: _openPicker,
+                      child: Container(
+                        height: 52,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color(0x59000000),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0x40FFFFFF)),
+                        ),
+                        child: Text('Pick a game',
+                            style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return Positioned(
       left: 16,
       right: 16,
@@ -1280,7 +1476,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                     borderRadius: BorderRadius.circular(100),
                     border: Border.all(color: C.sig.withOpacity(0.5)),
                   ),
-                  child: Text('ROUND ${_round + 1}/${cell.rounds.length}',
+                  child: Text('GAME ${_gamesPlayed + 1}',
                       style: T.eyebrow.copyWith(color: Colors.white, letterSpacing: 1.2, fontSize: 9.5)),
                 ),
                 const SizedBox(width: 10),
@@ -1624,6 +1820,22 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                           ),
                           const SizedBox(width: 12),
                         ],
+                        Press(
+                          onTap: () {
+                            Buzz.tick();
+                            _toTalk();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(100),
+                              border: Border.all(color: C.hair2),
+                            ),
+                            child: Text('keep hanging',
+                                style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
                         Press(
                           onTap: widget.onLeave,
                           child: Padding(
