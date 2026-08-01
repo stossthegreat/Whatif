@@ -9,7 +9,10 @@ import '../widgets/identity_orb.dart';
 /// share card built to spread. (Video capture is a native add-on later; the
 /// experience and the shareable card are here now.)
 class MomentsScreen extends StatelessWidget {
-  const MomentsScreen({super.key});
+  const MomentsScreen({super.key, this.embedded = false});
+
+  /// Hides the back button when shown as a bottom-nav tab.
+  final bool embedded;
 
   static void push(BuildContext context) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MomentsScreen()));
@@ -31,15 +34,17 @@ class MomentsScreen extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
                   child: Row(
                     children: [
-                      Press(
-                        onTap: () => Navigator.of(context).maybePop(),
-                        child: Container(
-                          width: 38, height: 38,
-                          decoration: BoxDecoration(shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
-                          child: const Icon(Icons.arrow_back_rounded, size: 20, color: C.tx2),
+                      if (!embedded) ...[
+                        Press(
+                          onTap: () => Navigator.of(context).maybePop(),
+                          child: Container(
+                            width: 38, height: 38,
+                            decoration: BoxDecoration(shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
+                            child: const Icon(Icons.arrow_back_rounded, size: 20, color: C.tx2),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 14),
+                        const SizedBox(width: 14),
+                      ],
                       Text('Your moments', style: T.big.copyWith(fontSize: 26)),
                     ],
                   ),

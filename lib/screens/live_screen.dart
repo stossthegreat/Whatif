@@ -16,10 +16,10 @@ import '../widgets/video_view.dart';
 
 enum _Phase { drop, game, reveal }
 
-/// The live canvas — the reason the app exists. Faces on black; the layout
-/// reflows to the (unpredictable) group size; a game is already running so there
-/// is never dead air; every round builds to one reveal beat; NEXT re-rolls, and
-/// an idle cell recomposes on its own so you feel the pull.
+/// The live canvas — the reason the app exists. Faces on black, edge to edge.
+/// The layout is a clean FaceTime grid that reflows to the group size; a game is
+/// already running so there is never dead air; the game deck lives *below* the
+/// faces (never on top of them); every round builds to one reveal beat.
 class LiveScreen extends StatefulWidget {
   const LiveScreen({
     super.key,
@@ -51,7 +51,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   int? _pointPick; // tile the user pointed at
   int? _selected; // generic selected option
   int? _winnerIdx; // tile to spotlight on reveal
-  int? _saveIdx; // tile that shows the reconnect "save"
   String _result = '';
   List<int> _split = const [];
 
@@ -201,7 +200,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     setState(() {
       _pointPick = userPick;
       _winnerIdx = winner;
-      _saveIdx = winner;
       _result = 'the room pointed at @${cell.people[winner].name}';
     });
     Timer(const Duration(milliseconds: 850), _toReveal);
@@ -215,7 +213,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     setState(() {
       _selected = choice;
       _split = [a, 100 - a];
-      _saveIdx = _r.nextInt(cell.people.length);
       _result = 'the room split ${choice == 0 ? a : 100 - a}% your way';
     });
     Timer(const Duration(milliseconds: 650), _toReveal);
@@ -228,7 +225,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     final n = 1 + _r.nextInt(cell.people.length + 1);
     setState(() {
       _selected = guilty ? 1 : 0;
-      _saveIdx = _r.nextInt(cell.people.length);
       _result = '$n in the room are guilty 👀';
     });
     Timer(const Duration(milliseconds: 650), _toReveal);
@@ -241,7 +237,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     final m = _r.nextInt(cell.people.length + 1);
     setState(() {
       _selected = choice;
-      _saveIdx = _r.nextInt(cell.people.length);
       _result = m > 0 ? '$m of you said the same thing 🧠' : 'nobody matched you — iconic';
     });
     Timer(const Duration(milliseconds: 650), _toReveal);
@@ -254,7 +249,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     final correct = _r.nextBool();
     setState(() {
       _selected = choice;
-      _saveIdx = 0;
       _result = correct ? 'you read them 😏 nailed the lie' : 'they fooled you 😵 slippery';
     });
     Timer(const Duration(milliseconds: 650), _toReveal);
@@ -265,7 +259,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _answered = true;
     final survived = _r.nextBool();
     setState(() {
-      _saveIdx = _r.nextInt(cell.people.length);
       _result = survived ? 'you held it 😐 ice cold' : 'you cracked 😂 @${cell.people[0].name} won';
     });
     Buzz.pop();
@@ -277,13 +270,20 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _answered = true;
     Buzz.commit();
     setState(() {
-      _saveIdx = 0;
       _result = 'quick hands — @${cell.people[0].name} liked that';
     });
     Timer(const Duration(milliseconds: 400), _toReveal);
   }
 
-  // ---- report / block -------------------------------------------------------
+  // ---- save / report / block ------------------------------------------------
+  void _save(Person p) {
+    AppSession.instance.spark(p);
+    if (widget.live && p.id != null) NetworkClient.instance.save(p.id!);
+    _toast('✨ sparked @${p.name} — added to your people');
+    Buzz.commit();
+    setState(() {});
+  }
+
   void _openReport(Person p) {
     Buzz.commit();
     final name = p.name;
@@ -361,120 +361,102 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   }
 
   Widget _scaffold(BuildContext context) {
-    final r = Responsive.of(context);
     return Scaffold(
       backgroundColor: C.black,
-      body: Stack(
-        fit: StackFit.expand,
+      body: Column(
         children: [
-          // stage
-          Padding(
-            padding: EdgeInsets.fromLTRB(12, MediaQuery.of(context).padding.top + 62, 12, 0),
-            child: _buildGrid(),
-          ),
-          // cinematic legibility scrims (top for the bar, bottom for the card)
-          Positioned(
-            top: 0, left: 0, right: 0, height: 150,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                    colors: [Colors.black.withOpacity(0.65), Colors.transparent],
-                  ),
+          _topBar(context),
+          // the faces — always the hero, never covered by anything
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
+                  child: _buildGrid(),
                 ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 0, left: 0, right: 0, height: 260,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter, end: Alignment.topCenter,
-                    colors: [Colors.black.withOpacity(0.8), Colors.transparent],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // top bar
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: Row(
-                children: [
-                  Press(
-                    onTap: widget.onLeave,
-                    child: Container(
-                      width: 38, height: 38,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
-                      child: const Icon(Icons.close_rounded, size: 20, color: C.tx2),
+                // Director twist banner floats over the faces briefly
+                Positioned(
+                  top: 12,
+                  left: 20,
+                  right: 20,
+                  child: IgnorePointer(
+                    child: AnimatedSwitcher(
+                      duration: M.quick,
+                      transitionBuilder: (child, anim) => FadeTransition(
+                        opacity: anim,
+                        child: ScaleTransition(scale: Tween(begin: 0.92, end: 1.0).animate(anim), child: child),
+                      ),
+                      child: _twist == null
+                          ? const SizedBox.shrink()
+                          : _TwistBanner(key: ValueKey<String>(_twist!), text: _twist!),
                     ),
                   ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0x59000000),
-                      borderRadius: BorderRadius.circular(100),
-                      border: Border.all(color: C.hair),
-                    ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Container(width: 6, height: 6, decoration: BoxDecoration(
-                        shape: BoxShape.circle, color: C.live,
-                        boxShadow: [BoxShadow(color: C.live.withOpacity(0.6), blurRadius: 8)])),
-                      const SizedBox(width: 7),
-                      Text(cell.isOneToOne ? 'LIVE · 1:1' : 'LIVE · ${cell.people.length + 1} people',
-                          style: T.tiny.copyWith(color: C.tx2, letterSpacing: 1, fontWeight: FontWeight.w800)),
-                    ]),
-                  ),
-                  const Spacer(),
-                  const SizedBox(width: 38),
-                ],
-              ),
-            ),
-          ),
-          // Director twist banner
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 64,
-            left: 20, right: 20,
-            child: IgnorePointer(
-              child: AnimatedSwitcher(
-                duration: M.quick,
-                transitionBuilder: (child, anim) => FadeTransition(
-                  opacity: anim,
-                  child: ScaleTransition(scale: Tween(begin: 0.92, end: 1.0).animate(anim), child: child),
                 ),
-                child: _twist == null
-                    ? const SizedBox.shrink()
-                    : _TwistBanner(key: ValueKey<String>(_twist!), text: _twist!),
-              ),
+              ],
             ),
           ),
-          // game / reveal card
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(r.gutter * 0.6, 0, r.gutter * 0.6, 12),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: r.stageMaxWidth),
-                  child: _phase == _Phase.drop ? const SizedBox.shrink() : _buildCard(),
-                ),
-              ),
-            ),
-          ),
+          // the game deck — a separate surface *under* the faces
+          _panel(),
         ],
       ),
     );
   }
 
+  Widget _topBar(BuildContext context) {
+    return Container(
+      color: C.black,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+          child: Row(
+            children: [
+              Press(
+                onTap: widget.onLeave,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
+                  child: const Icon(Icons.close_rounded, size: 20, color: C.tx2),
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: C.char2,
+                  borderRadius: BorderRadius.circular(100),
+                  border: Border.all(color: C.hair),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: C.live,
+                      boxShadow: [BoxShadow(color: C.live.withOpacity(0.6), blurRadius: 8)],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(cell.isOneToOne ? 'LIVE · 1:1' : 'LIVE · ${cell.people.length + 1} people',
+                      style: T.tiny.copyWith(color: Colors.white, letterSpacing: 1, fontWeight: FontWeight.w800)),
+                ]),
+              ),
+              const Spacer(),
+              // balances the close button; long-press a tile to report anyone
+              const SizedBox(width: 40),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// The camera IS the interface. 1:1 stacks them over you; groups are an equal
-  /// FaceTime grid with you as one of the tiles (never a floating box).
+  /// FaceTime grid with you as one of the tiles (never a floating box). The last
+  /// row's tiles stretch to fill the width — no dead gaps, ever.
   Widget _buildGrid() {
     final n = cell.people.length; // strangers
     final personTiles = List.generate(n, (i) => _tile(i));
@@ -495,25 +477,25 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   Widget _facetime(List<Widget> tiles, int cols) {
     final rows = <Widget>[];
     for (var i = 0; i < tiles.length; i += cols) {
+      final end = min(i + cols, tiles.length);
       final rowKids = <Widget>[];
-      for (var j = 0; j < cols; j++) {
-        if (j > 0) rowKids.add(const SizedBox(width: 8));
-        final idx = i + j;
-        rowKids.add(Expanded(child: idx < tiles.length ? tiles[idx] : const SizedBox()));
+      for (var j = i; j < end; j++) {
+        if (j > i) rowKids.add(const SizedBox(width: 8));
+        rowKids.add(Expanded(child: tiles[j]));
       }
       rows.add(Expanded(child: Row(children: rowKids)));
-      if (i + cols < tiles.length) rows.add(const SizedBox(height: 8));
+      if (end < tiles.length) rows.add(const SizedBox(height: 8));
     }
     return Column(children: rows);
   }
 
   Widget _selfTile() {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(22),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: C.char2,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(22),
           border: Border.all(color: const Color(0x1FFFFFFF)),
         ),
         child: Stack(
@@ -522,14 +504,28 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             widget.live
                 ? VideoView(track: RtcService.instance.localTrack, mirror: true)
                 : const SelfView(),
+            // bottom legibility scrim so the "you" label always reads
+            const Positioned(
+              left: 0, right: 0, bottom: 0, height: 54,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                      colors: [Color(0x99000000), Color(0x00000000)],
+                    ),
+                  ),
+                ),
+              ),
+            ),
             Positioned(
-              top: 0, left: 12, right: 12,
+              top: 0, left: 14, right: 14,
               child: Container(height: 1, decoration: const BoxDecoration(
                 gradient: LinearGradient(colors: [Color(0x00FFFFFF), C.spec, Color(0x00FFFFFF)]))),
             ),
             const Positioned(
-              left: 12, bottom: 11,
-              child: Text('you', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w700)),
+              left: 12, bottom: 10,
+              child: Text('you', style: TextStyle(fontSize: 12.5, color: Colors.white, fontWeight: FontWeight.w800)),
             ),
           ],
         ),
@@ -547,26 +543,37 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       picked: _pointPick == i || _winnerIdx == i,
       win: _winnerIdx == i && _phase == _Phase.reveal,
       dimmed: _phase == _Phase.reveal && _winnerIdx != null && _winnerIdx != i && game.kind == GameKind.point,
-      showSave: _phase == _Phase.reveal && _saveIdx == i,
       saved: AppSession.instance.isSaved(p.name),
       videoChild: widget.live ? VideoView(track: RtcService.instance.trackFor(p.id)) : null,
       onTap: canPoint ? () => _resolvePoint(i) : null,
       onReport: () => _openReport(p),
-      onSave: () {
-        AppSession.instance.spark(p);
-        if (widget.live && p.id != null) NetworkClient.instance.save(p.id!);
-        _toast('✨ sparked @${p.name} — added to your people');
-        Buzz.commit();
-      },
+      onSave: () => _save(p),
     );
   }
 
-  Widget _buildCard() {
-    return Glass(
-      radius: 26,
-      padding: const EdgeInsets.all(20),
-      tint: const Color(0x99101113),
-      child: _phase == _Phase.reveal ? _revealBody() : _gameBody(),
+  // ---- game deck (below the faces) -----------------------------------------
+  Widget _panel() {
+    final show = _phase != _Phase.drop;
+    return AnimatedSize(
+      duration: M.quick,
+      curve: M.ease,
+      alignment: Alignment.bottomCenter,
+      child: show
+          ? Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: Color(0xF00A0B0D),
+                border: Border(top: BorderSide(color: C.hair)),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                  child: _phase == _Phase.reveal ? _revealBody() : _gameBody(),
+                ),
+              ),
+            )
+          : const SizedBox(width: double.infinity),
     );
   }
 
@@ -586,11 +593,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Text(cell.prompt.first, style: T.big.copyWith(fontSize: 22, height: 1.14)),
+        const SizedBox(height: 10),
+        Text(cell.prompt.first, style: T.big.copyWith(fontSize: 21, height: 1.14)),
         const SizedBox(height: 6),
         Text(game.hint, style: T.tiny),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         ..._inputs(),
       ],
     );
@@ -599,7 +606,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   List<Widget> _inputs() {
     switch (game.kind) {
       case GameKind.point:
-        return [Text('tap someone’s tile', style: T.sub.copyWith(color: C.tx2))];
+        return [
+          Row(children: [
+            const Icon(Icons.touch_app_rounded, size: 16, color: C.sig),
+            const SizedBox(width: 8),
+            Text('tap someone’s tile', style: T.sub.copyWith(color: C.tx2)),
+          ]),
+        ];
       case GameKind.poll:
       case GameKind.wouldRather:
         return [

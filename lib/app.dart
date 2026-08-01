@@ -12,7 +12,7 @@ import 'screens/welcome_screen.dart';
 import 'screens/signin_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/onboarding_screen.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_shell.dart';
 import 'screens/finding_screen.dart';
 import 'screens/live_screen.dart';
 
@@ -155,7 +155,7 @@ class _RootState extends State<_Root> {
       _Step.signin => SignInScreen(onContinue: () => _to(_Step.profile)),
       _Step.profile => ProfileScreen(onDone: () => _to(_Step.permission)),
       _Step.permission => OnboardingScreen(onDone: () => _to(_Step.home)),
-      _Step.home => HomeScreen(onPlay: _play, onSignOut: () => _to(_Step.welcome)),
+      _Step.home => MainShell(onPlay: _play, onSignOut: () => _to(_Step.welcome)),
       _Step.finding => FindingScreen(onDone: _dropSimulated, waitForExternal: live),
       _Step.live => LiveScreen(
           key: ValueKey(_drop),

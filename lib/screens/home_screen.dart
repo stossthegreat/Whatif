@@ -2,15 +2,11 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
-import '../models/person.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
-import '../widgets/identity_orb.dart';
 import '../widgets/play_button.dart';
-import 'me_screen.dart';
 import 'settings_screen.dart';
-import 'sparks_screen.dart';
 
 /// Home — an *alive lobby*, not a launch button. Very black. Tiny red particles
 /// rise; a soft purple/blue glow drifts; a few avatars float; little bursts of
@@ -94,16 +90,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     children: [
                       const Wordmark(size: 22),
                       const Spacer(),
-                      _RoundBtn(
-                        icon: Icons.auto_awesome_rounded,
-                        onTap: () { Buzz.tick(); SparksScreen.push(context); },
-                      ),
-                      const SizedBox(width: 10),
-                      Press(
-                        onTap: () { Buzz.tick(); MeScreen.push(context); },
-                        child: IdentityOrb(hue: AppSession.instance.myHue, size: 34),
-                      ),
-                      const SizedBox(width: 10),
                       _RoundBtn(
                         icon: Icons.settings_rounded,
                         onTap: () { Buzz.tick(); SettingsScreen.push(context, widget.onSignOut); },
@@ -328,16 +314,19 @@ class _LobbyPainter extends CustomPainter {
 
 // ---- floating avatars -----------------------------------------------------
 class _Avatar {
-  _Avatar(this.person, this.ax, this.ay, this.fx, this.fy, this.phase, this.scale);
-  final Person person;
+  _Avatar(this.ax, this.ay, this.fx, this.fy, this.phase, this.scale, this.emoji);
   final double ax, ay, fx, fy, phase, scale;
+  final String? emoji;
+  static const _faces = ['😂', '😳', '🔥', '👀', '😭', '💀', '😏', '🤨', '😮'];
   static _Avatar random(math.Random r, int i) => _Avatar(
-        Person.random(r),
-        0.15 + r.nextDouble() * 0.7, // anchor x
-        0.12 + r.nextDouble() * 0.42, // anchor y (upper area)
-        0.04 + r.nextDouble() * 0.05, // drift amp x
+        0.14 + r.nextDouble() * 0.72, // anchor x
+        0.12 + r.nextDouble() * 0.44, // anchor y (upper area)
+        0.035 + r.nextDouble() * 0.05, // drift amp x
         0.03 + r.nextDouble() * 0.05, // drift amp y
-        r.nextDouble(), 0.7 + r.nextDouble() * 0.5,
+        r.nextDouble(),
+        0.72 + r.nextDouble() * 0.5,
+        // roughly half carry a small emoji face, half are pure obsidian orbs
+        r.nextBool() ? _faces[r.nextInt(_faces.length)] : null,
       );
 }
 
@@ -355,11 +344,11 @@ class _AvatarLayer extends StatelessWidget {
           children: [
             for (final a in avatars)
               Positioned(
-                left: (a.ax + a.fx * math.sin((t + a.phase) * tau)) * c.maxWidth - 22 * a.scale,
-                top: (a.ay + a.fy * math.cos((t + a.phase) * tau * 0.8)) * c.maxHeight - 22 * a.scale,
+                left: (a.ax + a.fx * math.sin((t + a.phase) * tau)) * c.maxWidth - 24 * a.scale,
+                top: (a.ay + a.fy * math.cos((t + a.phase) * tau * 0.8)) * c.maxHeight - 24 * a.scale,
                 child: Opacity(
-                  opacity: 0.55,
-                  child: _MiniOrb(person: a.person, size: 44 * a.scale),
+                  opacity: 0.9,
+                  child: _MiniOrb(size: 48 * a.scale, emoji: a.emoji),
                 ),
               ),
           ],
@@ -369,22 +358,52 @@ class _AvatarLayer extends StatelessWidget {
   }
 }
 
+/// A polished obsidian marble — shiny jet-black, a soft specular highlight
+/// top-left, a faint purple rim. Reads as premium, never a flat grey disc.
 class _MiniOrb extends StatelessWidget {
-  const _MiniOrb({required this.person, required this.size});
-  final Person person;
+  const _MiniOrb({required this.size, this.emoji});
   final double size;
+  final String? emoji;
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: size, height: size,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [person.light.withOpacity(1), C.char2],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        gradient: const RadialGradient(
+          center: Alignment(-0.45, -0.55),
+          radius: 1.05,
+          colors: [Color(0xFF2A2D34), Color(0xFF0C0D10), Color(0xFF000000)],
+          stops: [0.0, 0.55, 1.0],
         ),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
-        boxShadow: [BoxShadow(color: person.light.withOpacity(0.4), blurRadius: 14, spreadRadius: -4)],
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        boxShadow: [
+          const BoxShadow(color: Color(0xCC000000), blurRadius: 16, spreadRadius: -2, offset: Offset(0, 6)),
+          BoxShadow(color: C.sig.withOpacity(0.16), blurRadius: 18, spreadRadius: -8),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // specular glint
+          Positioned(
+            left: size * 0.2,
+            top: size * 0.16,
+            child: Container(
+              width: size * 0.24,
+              height: size * 0.24,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [Colors.white.withOpacity(0.5), Colors.white.withOpacity(0)],
+                ),
+              ),
+            ),
+          ),
+          if (emoji != null)
+            Text(emoji!, style: TextStyle(fontSize: size * 0.42)),
+        ],
       ),
     );
   }
