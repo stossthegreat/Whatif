@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../config.dart';
 import '../core/haptics.dart';
-import '../core/sound.dart';
 import '../models/game.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
@@ -91,6 +90,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     children: [
                       const Wordmark(size: 30),
                       const Spacer(),
+                      const _LivePill(),
+                      const SizedBox(width: 8),
                       _RoundBtn(
                         icon: Icons.settings_rounded,
                         onTap: () { Buzz.tick(); SettingsScreen.push(context, widget.onSignOut); },
@@ -105,9 +106,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // ---- HERO — the action, sized to own the first view
+                          // ---- HERO — the words do the work; the Play orb in
+                          // the tab bar is the one and only button.
                           SizedBox(
-                            height: math.max(box.maxHeight * 0.62, 380),
+                            height: math.max(box.maxHeight * 0.36, 250),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -118,9 +120,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   textAlign: TextAlign.center,
                                   style: T.huge(38),
                                 ),
-                                const SizedBox(height: 30),
-                                _StartOrb(onTap: widget.onPlay),
-                                const SizedBox(height: 26),
+                                const SizedBox(height: 18),
                                 const _StatsStrip(),
                               ],
                             ),
@@ -158,7 +158,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             padding: EdgeInsets.symmetric(horizontal: r.gutter),
                             child: _PartyRow(onTap: widget.onParty),
                           ),
-                          const SizedBox(height: 24),
+                          // clear the floating Play orb, which pokes above the bar
+                          const SizedBox(height: 72),
                         ],
                       ),
                     ),
@@ -182,13 +183,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
 // ---- hero pieces -----------------------------------------------------------
 
-/// One line of truth above the headline. Big real count when the world is
-/// busy; warm copy when it isn't. Never "1 stranger on camera".
+/// One line of truth above the headline — warm copy only, no digits (the
+/// number lives in the header pill). Never "1 stranger on camera".
 class _StatusLine extends StatelessWidget {
   const _StatusLine();
-
-  String _fmt(int n) =>
-      n.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
 
   @override
   Widget build(BuildContext context) {
@@ -201,7 +199,7 @@ class _StatusLine extends StatelessWidget {
         final trusted = !AppConfig.isLive || s.serverDriven;
         final String text;
         if (trusted && s.liveCount >= 100) {
-          text = '${_fmt(s.liveCount)} PEOPLE LIVE RIGHT NOW';
+          text = 'PEOPLE ARE LIVE RIGHT NOW';
         } else if (AppConfig.isLive && s.serverDriven && s.liveCount >= 2) {
           text = 'SOMEONE IS WAITING RIGHT NOW';
         } else {
@@ -232,57 +230,57 @@ class _StatusLine extends StatelessWidget {
   }
 }
 
-/// The huge glowing Start — the single most important control in the app.
-class _StartOrb extends StatefulWidget {
-  const _StartOrb({required this.onTap});
-  final VoidCallback onTap;
+/// The live headcount — a quiet pill beside settings. Green dot + the real
+/// number when it's big enough to impress; just "LIVE" while the world is
+/// small; nothing at all until the server has actually spoken.
+class _LivePill extends StatelessWidget {
+  const _LivePill();
 
-  @override
-  State<_StartOrb> createState() => _StartOrbState();
-}
-
-class _StartOrbState extends State<_StartOrb> with SingleTickerProviderStateMixin {
-  late final AnimationController _c =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 2200))
-        ..repeat(reverse: true);
-
-  @override
-  void dispose() { _c.dispose(); super.dispose(); }
+  String _fmt(int n) =>
+      n.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () { Buzz.pop(); Sfx.pop(); widget.onTap(); },
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (context, _) {
-          final glow = 0.26 + 0.16 * _c.value;
-          return Column(
+    return AnimatedBuilder(
+      animation: AppSession.instance,
+      builder: (context, _) {
+        final s = AppSession.instance;
+        if (AppConfig.isLive && !s.serverDriven) return const SizedBox.shrink();
+        final showCount = !AppConfig.isLive || s.liveCount >= 100;
+        return Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: C.glass,
+            borderRadius: BorderRadius.circular(100),
+            border: Border.all(color: C.hair),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 96, height: 96,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
+                width: 7, height: 7,
+                decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft, end: Alignment.bottomRight,
-                    colors: [C.sig, C.purpleDeep],
-                  ),
-                  border: Border.all(color: Colors.white.withOpacity(0.25), width: 1.5),
-                  boxShadow: [
-                    BoxShadow(color: C.sig.withOpacity(glow), blurRadius: 38, spreadRadius: -4),
-                    const BoxShadow(color: Color(0x99000000), blurRadius: 22, offset: Offset(0, 10)),
-                  ],
+                  color: Color(0xFF30D158),
+                  boxShadow: [BoxShadow(color: Color(0x8030D158), blurRadius: 6)],
                 ),
-                child: const Icon(Icons.play_arrow_rounded, size: 48, color: Colors.white),
               ),
-              const SizedBox(height: 14),
-              Text('START',
-                  style: T.eyebrow.copyWith(color: Colors.white, fontSize: 12, letterSpacing: 4)),
+              const SizedBox(width: 7),
+              Text(
+                showCount ? _fmt(s.liveCount) : 'LIVE',
+                style: T.tiny.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.4,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

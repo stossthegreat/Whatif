@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 /// All LiveKit usage is isolated here (and in widgets/video_view.dart). Connects
-/// to a LiveKit room, publishes the local camera, and exposes each participant's
-/// video track. [rev] bumps whenever tracks change so the UI rebuilds. Only
-/// invoked in live mode; in simulated builds nothing calls join().
+/// to a LiveKit room, publishes the local camera AND microphone, and exposes
+/// each participant's video track. [rev] bumps whenever tracks change so the UI
+/// rebuilds. Only invoked in live mode; in simulated builds nothing calls join().
 class RtcService {
   RtcService._();
   static final RtcService instance = RtcService._();
@@ -15,15 +15,30 @@ class RtcService {
   Future<void> join(String url, String token) async {
     if (url.isEmpty || token.isEmpty) return; // video disabled — placeholders show
     await leave();
-    final room = Room();
+    // speakerOn: a face-to-face video app plays through the loudspeaker, not
+    // the earpiece — without this iOS can route voices somewhere inaudible.
+    final room = Room(
+      roomOptions: const RoomOptions(
+        defaultAudioOutputOptions: AudioOutputOptions(speakerOn: true),
+      ),
+    );
     room.addListener(_bump);
     try {
       await room.connect(url, token);
-      await room.localParticipant?.setCameraEnabled(true);
-      _room = room;
+      _room = room; // set immediately so leave() can always disconnect
     } catch (_) {
       room.removeListener(_bump);
+      _bump();
+      return;
     }
+    // publish each track independently — a denied camera must not kill voice,
+    // and a denied mic must not kill video.
+    try {
+      await room.localParticipant?.setMicrophoneEnabled(true);
+    } catch (_) {}
+    try {
+      await room.localParticipant?.setCameraEnabled(true);
+    } catch (_) {}
     _bump();
   }
 

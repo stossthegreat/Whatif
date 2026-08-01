@@ -1343,15 +1343,20 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     );
   }
 
-  /// Local LiveKit video with a fade-in that hides the first frames (they can
-  /// arrive rotated before orientation metadata applies).
+  /// Local LiveKit video. The camera's first frames can carry stale rotation
+  /// metadata (sideways) — so we hold the placeholder until the track actually
+  /// exists, keep the video invisible ~350ms more while those frames pass,
+  /// then fade in. The old version started its fade at widget build, which
+  /// expired before the camera even warmed up — masking nothing.
   Widget _selfVideo() {
+    final t = RtcService.instance.localTrack;
+    if (t == null) return const ColoredBox(color: C.char2);
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 600),
-      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 950),
+      curve: const Interval(0.38, 1.0, curve: Curves.easeOut),
       builder: (context, v, child) => Opacity(opacity: v, child: child),
-      child: VideoView(track: RtcService.instance.localTrack),
+      child: VideoView(track: t),
     );
   }
 
