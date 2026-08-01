@@ -1,12 +1,16 @@
 import 'dart:math';
 import 'person.dart';
 
-/// The rotating game pack. Each game is a template + a prompt pool. The live
+/// The rotating game pack. Each game is a template + a big prompt pool. The live
 /// screen interprets [kind] to render the interaction. Games are tagged by how
 /// many *strangers* they need, so the matchmaker can serve genuinely different
 /// experiences — including 1:1-only games — depending on the (unpredictable)
-/// group size.
+/// group size. Prompts are deep and never repeat back-to-back, so no two plays
+/// feel the same.
 enum GameKind { point, poll, wouldRather, thumbs, same, freeze, twoTruths, rapidFire }
+
+GameKind gameKindFrom(String s) =>
+    GameKind.values.firstWhere((k) => k.name == s, orElse: () => GameKind.poll);
 
 class GameDef {
   const GameDef({
@@ -27,43 +31,44 @@ class GameDef {
   /// Each prompt is [headline, ...options]. Some kinds ignore options.
   final List<List<String>> prompts;
 
-  List<String> pick(Random r) => prompts[r.nextInt(prompts.length)];
-
   bool fits(int strangers) => strangers >= minStrangers && strangers <= maxStrangers;
 
   static const pack = <GameDef>[
-    // ---- group (needs someone to point at) ----
     GameDef(
       kind: GameKind.point, name: 'Point Party', hint: 'tap who fits — everyone points at once',
       minStrangers: 2, maxStrangers: 8,
       prompts: [
-        ['Who woke up 5 minutes ago?'],
-        ['Most likely to start a cult (a fun one)'],
-        ['Who texts their ex at 2am?'],
-        ['Most likely to be a secret genius'],
-        ['Who is definitely lying right now?'],
-        ['Most likely to cry at a dog video'],
+        ['Who woke up 5 minutes ago?'], ['Most likely to start a cult (a fun one)'],
+        ['Who texts their ex at 2am?'], ['Most likely to be a secret genius'],
+        ['Who is definitely lying right now?'], ['Most likely to cry at a dog video'],
+        ['Who would survive a horror movie?'], ['Most likely to fight a goose and lose'],
+        ['Who has the worst screen time?'], ['Most likely to become famous'],
+        ['Who is the main character here?'], ['Most likely to ghost the group'],
+        ['Who gives the best advice?'], ['Most likely to start dancing right now'],
       ],
     ),
-    // ---- works at any size, including 1:1 ----
     GameDef(
       kind: GameKind.poll, name: 'Hot Take', hint: 'pick a side',
       minStrangers: 1, maxStrangers: 8,
       prompts: [
-        ['Pineapple on pizza?', 'crime', 'genius'],
-        ['Socks in bed?', 'yes', 'never'],
-        ['Text or call?', 'text', 'call'],
-        ['Cereal then milk?', 'right', 'chaos'],
+        ['Pineapple on pizza?', 'crime', 'genius'], ['Socks in bed?', 'yes', 'never'],
+        ['Text or call?', 'text', 'call'], ['Cereal then milk?', 'right', 'chaos'],
+        ['Front camera or back?', 'front', 'back'], ['TP over or under?', 'over', 'under'],
+        ['Beach or mountains?', 'beach', 'mountains'], ['Morning person?', 'yes', 'absolutely not'],
+        ['Tattoos?', 'love them', 'never'], ['Cats or dogs?', 'cats', 'dogs'],
+        ['Is a hotdog a sandwich?', 'yes', 'how dare you'], ['Reply-all?', 'chaos', 'crime'],
       ],
     ),
     GameDef(
       kind: GameKind.thumbs, name: 'Confession Cam', hint: 'thumbs up = guilty · on 3',
       minStrangers: 1, maxStrangers: 8,
       prompts: [
-        ['Never have I ever been kicked out of a bar'],
-        ['…ghosted someone mid-conversation'],
-        ['…sent a text to the completely wrong person'],
-        ['…faked being busy to skip plans'],
+        ['Never have I ever been kicked out of a bar'], ['…ghosted someone mid-conversation'],
+        ['…sent a text to the completely wrong person'], ['…faked being busy to skip plans'],
+        ['…stalked an ex online this week'], ['…cried in a public bathroom'],
+        ['…pretended to know a song I didn’t'], ['…re-gifted a present'],
+        ['…screenshotted a chat to send to friends'], ['…had a crush on a friend’s partner'],
+        ['…googled myself'], ['…lied to get out of a date'],
       ],
     ),
     GameDef(
@@ -73,18 +78,23 @@ class GameDef {
         ['Name a fruit', 'banana', 'apple', 'mango', 'grape'],
         ['A colour, go', 'blue', 'red', 'green', 'black'],
         ['Pick a vibe', 'chaotic', 'chill', 'menace', 'soft'],
+        ['A random animal', 'cat', 'dog', 'fox', 'shark'],
+        ['Say a country', 'japan', 'italy', 'brazil', 'egypt'],
+        ['Pick a season', 'summer', 'winter', 'spring', 'autumn'],
+        ['A drink', 'coffee', 'tea', 'water', 'chaos'],
+        ['Number 1–4', '1', '2', '3', '4'],
       ],
     ),
     GameDef(
       kind: GameKind.freeze, name: 'Freeze Face', hint: 'hold it — last to laugh wins',
       minStrangers: 1, maxStrangers: 8,
       prompts: [
-        ['Hold your most SHOCKED face'],
-        ['Hold a straight face. No matter what.'],
-        ['Give your worst fake cry — and hold'],
+        ['Hold your most SHOCKED face'], ['Hold a straight face. No matter what.'],
+        ['Give your worst fake cry — and hold'], ['Your best villain smile — freeze'],
+        ['Most confused face — hold it'], ['Puppy eyes. Do not break.'],
+        ['Your “I smelled something” face'], ['Hold your happiest fake laugh'],
       ],
     ),
-    // ---- 1:1 flavoured ----
     GameDef(
       kind: GameKind.wouldRather, name: 'Would You Rather', hint: 'lock your choice, then compare',
       minStrangers: 1, maxStrangers: 6,
@@ -92,6 +102,11 @@ class GameDef {
         ['Fight 100 duck-sized horses, or…', '100 tiny horses', '1 giant duck'],
         ['Always be 10 min late, or…', 'always late', 'always 20 early'],
         ['Read minds, or…', 'read minds', 'be invisible'],
+        ['Never use a phone again, or…', 'no phone', 'no music'],
+        ['Be famous, or…', 'famous', 'filthy rich'],
+        ['Only whisper forever, or…', 'whisper', 'shout'],
+        ['Teleport, or…', 'teleport', 'fly'],
+        ['No pizza forever, or…', 'no pizza', 'no burgers'],
       ],
     ),
     GameDef(
@@ -101,30 +116,26 @@ class GameDef {
         ['Which one is the lie?', 'skydived once', 'has four siblings', 'hates coffee'],
         ['Spot the lie', 'met a celebrity', 'speaks 3 languages', 'broke a bone at 7'],
         ['Which is fake?', 'ran a marathon', 'was on TV once', 'can’t swim'],
+        ['Find the lie', 'been to 10 countries', 'allergic to cats', 'plays guitar'],
+        ['Which is made up?', 'has a twin', 'failed the driving test 4x', 'ate a bug on a dare'],
       ],
     ),
     GameDef(
       kind: GameKind.rapidFire, name: 'Rapid Fire', hint: '10 seconds. don’t overthink.',
       minStrangers: 1, maxStrangers: 1,
       prompts: [
-        ['Say the first word you think of: SUNDAY'],
-        ['Describe your week in one word — go'],
-        ['Best food, worst food. Fast.'],
+        ['Say the first word you think of: SUNDAY'], ['Describe your week in one word — go'],
+        ['Best food, worst food. Fast.'], ['Name 3 things in your room — go'],
+        ['Your hype song, right now'], ['Sum up your day in one emoji'],
+        ['Last thing you ate — quick'], ['Say a red thing, a blue thing, a green thing'],
       ],
     ),
   ];
 
-  /// Weighted toward small cells, with the occasional crowd. Returns the number
-  /// of *strangers* in the cell (you are always the +1).
-  static int rollGroupSize(Random r) {
-    const bag = [1, 1, 1, 2, 2, 3, 3, 5];
-    return bag[r.nextInt(bag.length)];
-  }
+  static const bag = [1, 1, 1, 2, 2, 3, 3, 5];
+  static int rollGroupSize(Random r) => bag[r.nextInt(bag.length)];
 
-  static GameDef rollGame(Random r, int strangers) {
-    final fits = pack.where((g) => g.fits(strangers)).toList();
-    return fits[r.nextInt(fits.length)];
-  }
+  static GameDef byKind(GameKind k) => pack.firstWhere((g) => g.kind == k);
 }
 
 /// One live cell: who's here, the game, and the chosen prompt.
@@ -132,14 +143,36 @@ class Cell {
   Cell({required this.people, required this.game, required this.prompt});
   final List<Person> people;
   final GameDef game;
-  final List<String> prompt;
+  final List<String> prompt; // [head, ...options], options already shuffled
 
   int get strangers => people.length;
   bool get isOneToOne => people.length == 1;
 
-  static Cell random(Random r) {
+  /// Unpredictable by construction: rolls a group size, then a game valid for it
+  /// (avoiding the last kind), then a prompt not seen recently, with options
+  /// shuffled — so a repeated game type never plays identically.
+  static Cell random(
+    Random r, {
+    GameKind? avoidKind,
+    Set<String> recentHeads = const {},
+  }) {
     final n = GameDef.rollGroupSize(r);
-    final game = GameDef.rollGame(r, n);
-    return Cell(people: Person.group(r, n), game: game, prompt: game.pick(r));
+    var fits = GameDef.pack.where((g) => g.fits(n)).toList();
+    final varied = fits.where((g) => g.kind != avoidKind).toList();
+    if (varied.isNotEmpty) fits = varied;
+    final game = fits[r.nextInt(fits.length)];
+
+    // pick a prompt not used recently (try a handful of times)
+    List<String> chosen = game.prompts[r.nextInt(game.prompts.length)];
+    for (var i = 0; i < 6 && recentHeads.contains(chosen.first); i++) {
+      chosen = game.prompts[r.nextInt(game.prompts.length)];
+    }
+
+    // shuffle the options (keep the headline first)
+    final head = chosen.first;
+    final opts = chosen.skip(1).toList()..shuffle(r);
+    final prompt = [head, ...opts];
+
+    return Cell(people: Person.group(r, n), game: game, prompt: prompt);
   }
 }

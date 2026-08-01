@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import '../models/game.dart';
 
-/// App-wide state for the prototype build: the saved ("reconnect") set and a
-/// living "people online" counter. In production this is the session, realtime
-/// connection, and match queue.
+/// App-wide state: the saved ("reconnect") set, a living "people online" counter,
+/// and the short memory that keeps the experience unpredictable (so a game never
+/// plays the same way twice in a row). In production the live count comes from
+/// the matchmaking server.
 class AppSession extends ChangeNotifier {
   AppSession._() {
     _drift = Timer.periodic(const Duration(milliseconds: 1600), (_) {
@@ -20,6 +22,19 @@ class AppSession extends ChangeNotifier {
 
   int liveCount = 12438;
   final Set<String> saved = <String>{};
+
+  // unpredictability memory
+  GameKind? lastKind;
+  final List<String> _recentHeads = [];
+  Set<String> get recentHeads => _recentHeads.toSet();
+
+  void noteCell(Cell cell) {
+    lastKind = cell.game.kind;
+    _recentHeads.add(cell.prompt.first);
+    while (_recentHeads.length > 14) {
+      _recentHeads.removeAt(0);
+    }
+  }
 
   void save(String name) {
     if (saved.add(name)) notifyListeners();

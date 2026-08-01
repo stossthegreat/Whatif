@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'models/game.dart';
+import 'state/session.dart';
 import 'theme/tokens.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/home_screen.dart';
@@ -48,8 +49,11 @@ class _RootState extends State<_Root> {
   void _to(_Step s) => setState(() => _step = s);
 
   void _dropIntoCell() {
+    final s = AppSession.instance;
+    final cell = Cell.random(_rng, avoidKind: s.lastKind, recentHeads: s.recentHeads);
+    s.noteCell(cell);
     setState(() {
-      _cell = Cell.random(_rng);
+      _cell = cell;
       _drop++;
       _step = _Step.live;
     });
