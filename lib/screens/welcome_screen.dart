@@ -27,7 +27,7 @@ class WelcomeScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 18),
-                  const Wordmark(size: 21),
+                  const Wordmark(size: 30),
                   const Spacer(),
                   RichText(
                     text: TextSpan(

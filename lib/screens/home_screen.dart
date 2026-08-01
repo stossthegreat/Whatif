@@ -76,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Wordmark(size: 22),
+                      const Wordmark(size: 30),
                       const Spacer(),
                       _RoundBtn(
                         icon: Icons.settings_rounded,

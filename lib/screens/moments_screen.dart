@@ -305,7 +305,7 @@ class _ShareCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Wordmark(size: 22),
+                const Wordmark(size: 26),
                 const Spacer(),
                 Text(m.game.toUpperCase(), style: T.eyebrow.copyWith(color: C.sig, letterSpacing: 2)),
                 const SizedBox(height: 14),

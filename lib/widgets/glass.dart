@@ -6,8 +6,10 @@ import '../theme/tokens.dart';
 
 /// The Rivlr wordmark — clean white with a single cool-signal period. The one
 /// brand flourish, used across onboarding and Home.
+/// The brand. Capital R, confident size, tight tracking — a name, not a
+/// username. The single purple beat after it is the only decoration.
 class Wordmark extends StatelessWidget {
-  const Wordmark({super.key, this.size = 20, this.color = C.tx});
+  const Wordmark({super.key, this.size = 28, this.color = C.tx});
   final double size;
   final Color color;
 
@@ -17,15 +19,15 @@ class Wordmark extends StatelessWidget {
       TextSpan(
         style: TextStyle(
           fontSize: size,
-          fontWeight: FontWeight.w900,
-          letterSpacing: -size * 0.045,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -size * 0.04,
           color: color,
           height: 1.0,
         ),
         children: const [
-          TextSpan(text: 'rivlr'),
+          TextSpan(text: 'Rivlr'),
           // a small purple beat — the one accent
-          TextSpan(text: '•', style: TextStyle(color: C.sig)),
+          TextSpan(text: '.', style: TextStyle(color: C.sig, fontWeight: FontWeight.w900)),
         ],
       ),
     );

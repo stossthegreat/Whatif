@@ -51,7 +51,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      const Wordmark(size: 21),
+                      const Wordmark(size: 30),
                       const Spacer(),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
