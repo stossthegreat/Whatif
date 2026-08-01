@@ -6,8 +6,11 @@ import '../models/person.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
+import '../widgets/identity_orb.dart';
 import '../widgets/play_button.dart';
+import 'me_screen.dart';
 import 'settings_screen.dart';
+import 'sparks_screen.dart';
 
 /// Home — an *alive lobby*, not a launch button. Very black. Tiny red particles
 /// rise; a soft purple/blue glow drifts; a few avatars float; little bursts of
@@ -91,19 +94,26 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     children: [
                       const Wordmark(size: 22),
                       const Spacer(),
+                      _RoundBtn(
+                        icon: Icons.auto_awesome_rounded,
+                        onTap: () { Buzz.tick(); SparksScreen.push(context); },
+                      ),
+                      const SizedBox(width: 10),
                       Press(
+                        onTap: () { Buzz.tick(); MeScreen.push(context); },
+                        child: IdentityOrb(hue: AppSession.instance.myHue, size: 34),
+                      ),
+                      const SizedBox(width: 10),
+                      _RoundBtn(
+                        icon: Icons.settings_rounded,
                         onTap: () { Buzz.tick(); SettingsScreen.push(context, widget.onSignOut); },
-                        child: Container(
-                          width: 34, height: 34,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
-                          child: const Icon(Icons.settings_rounded, size: 18, color: C.tx2),
-                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
                   const _LiveCounter(),
+                  const SizedBox(height: 10),
+                  const _ChaosHour(),
                   const Spacer(),
                   PlayButton(onTap: widget.onPlay, size: 150),
                   const SizedBox(height: 26),
@@ -174,6 +184,97 @@ class _PulseDotState extends State<_PulseDot> with SingleTickerProviderStateMixi
           shape: BoxShape.circle, color: C.live,
           boxShadow: [BoxShadow(color: C.live.withOpacity(0.4 + 0.6 * _c.value), blurRadius: 8 + 6 * _c.value)],
         ),
+      ),
+    );
+  }
+}
+
+class _RoundBtn extends StatelessWidget {
+  const _RoundBtn({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    return Press(
+      onTap: onTap,
+      child: Container(
+        width: 34, height: 34,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
+        child: Icon(icon, size: 18, color: C.tx2),
+      ),
+    );
+  }
+}
+
+/// The hourly ritual — a countdown to CHAOS HOUR (top of every hour), and a hot
+/// "LIVE NOW" state for its first minutes. The thing that makes everyone open
+/// the app at the same time.
+class _ChaosHour extends StatefulWidget {
+  const _ChaosHour();
+  @override
+  State<_ChaosHour> createState() => _ChaosHourState();
+}
+
+class _ChaosHourState extends State<_ChaosHour> {
+  Timer? _timer;
+  Duration _left = Duration.zero;
+  bool _live = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+  }
+
+  void _tick() {
+    final now = DateTime.now();
+    if (now.minute < 5) {
+      _live = true;
+      final endsAt = DateTime(now.year, now.month, now.day, now.hour, 5);
+      _left = endsAt.difference(now);
+    } else {
+      _live = false;
+      final next = DateTime(now.year, now.month, now.day, now.hour + 1);
+      _left = next.difference(now);
+    }
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final m = _left.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = _left.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+      decoration: BoxDecoration(
+        gradient: _live
+            ? LinearGradient(colors: [C.live.withOpacity(0.28), C.sig.withOpacity(0.22)])
+            : null,
+        color: _live ? null : C.glass,
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: _live ? C.sig.withOpacity(0.6) : C.hair),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('🔥', style: TextStyle(fontSize: 13)),
+          const SizedBox(width: 7),
+          Text(
+            _live ? 'CHAOS HOUR · LIVE  $m:$s' : 'chaos hour in  $m:$s',
+            style: T.tiny.copyWith(
+              color: _live ? Colors.white : C.tx2,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
       ),
     );
   }

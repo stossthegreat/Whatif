@@ -547,8 +547,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       onTap: canPoint ? () => _resolvePoint(i) : null,
       onReport: () => _openReport(p),
       onSave: () {
-        AppSession.instance.save(p.name);
-        _toast('saved @${p.name} — you’ll know when they’re live');
+        AppSession.instance.spark(p);
+        _toast('✨ sparked @${p.name} — added to your people');
         Buzz.commit();
       },
     );
