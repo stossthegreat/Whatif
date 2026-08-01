@@ -87,3 +87,24 @@ dependencies:
 That's the whole path to real, live, on-par-with-anyone video. The game engine,
 reveal beats, reconnect and report already work against `people`/`game` — they
 just start being driven by real strangers instead of the local simulator.
+
+---
+
+## v2 protocol additions (elite backend)
+
+**hello now carries identity + preferences:**
+`{t:'hello', uid, name, gender, meet}` — `meet` ∈ `Everyone|Women|Men`. `uid` is a
+stable client id so sparks/blocks survive reconnects. Matchmaking is
+**preference-aware** (respects `meet` both ways) and **block-aware**.
+
+**Sparks (real connections):**
+- client → `{t:'save', target:<uid>}` / `{t:'unsave', target:<uid>}`
+- server → `{t:'sparkMutual', uid, name}` when you and someone saved each other
+- server → `{t:'sparkLive', uid, name}` when someone who saved you (or you saved) comes online
+
+**Moderation:** `{t:'report'|'block', target:<uid>}`; a user is auto-removed after
+`REPORT_KICK` reports (`{t:'removed', reason}`).
+
+**Ops:** `GET /stats` → `{online, queued, cells, livekit}`. Heartbeat ping/pong
+drops dead sockets. Structure: `store.ts` (swappable for Redis/Postgres),
+`livekit.ts`, `games.ts`, `index.ts`.

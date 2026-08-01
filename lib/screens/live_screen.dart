@@ -554,6 +554,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       onReport: () => _openReport(p),
       onSave: () {
         AppSession.instance.spark(p);
+        if (widget.live && p.id != null) NetworkClient.instance.save(p.id!);
         _toast('✨ sparked @${p.name} — added to your people');
         Buzz.commit();
       },

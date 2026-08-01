@@ -10,7 +10,7 @@ class Spark {
   Spark({required this.name, required this.hue, required this.mutual, required this.vibe, this.liveNow = false});
   final String name;
   final double hue;
-  final bool mutual;
+  bool mutual;
   final String vibe;
   bool liveNow;
 }
@@ -50,6 +50,7 @@ class AppSession extends ChangeNotifier {
   // ---- your identity (anonymous, fun) ----
   late String myHandle;
   late double myHue;
+  late String myUid; // stable id sent to the backend
   static const _handleWords = [
     'wildcard', 'menace', 'ghost', 'goblin', 'sunny', 'chaos', 'riot',
     'maple', 'nova', 'zephyr', 'biscuit', 'vortex', 'gremlin', 'echo',
@@ -57,6 +58,28 @@ class AppSession extends ChangeNotifier {
   void _initIdentity() {
     myHandle = '${_handleWords[_r.nextInt(_handleWords.length)]}${10 + _r.nextInt(89)}';
     myHue = const [205.0, 212, 196, 220, 190, 208, 216, 200][_r.nextInt(8)];
+    myUid = List.generate(20, (_) => _r.nextInt(16).toRadixString(16)).join();
+  }
+
+  /// A saved person and you both saved each other → mark it mutual (or add).
+  void markMutual(String name, {double hue = 210}) {
+    final i = sparks.indexWhere((s) => s.name == name);
+    if (i >= 0) {
+      sparks[i].mutual = true;
+    } else {
+      sparks.insert(0, Spark(name: name, hue: hue, mutual: true, vibe: 'a whole vibe', liveNow: true));
+      saved.add(name);
+    }
+    notifyListeners();
+  }
+
+  /// A saved person just came online.
+  void setSparkLive(String name, bool live) {
+    final i = sparks.indexWhere((s) => s.name == name);
+    if (i >= 0) {
+      sparks[i].liveNow = live;
+      notifyListeners();
+    }
   }
 
   void _seedSparks() {

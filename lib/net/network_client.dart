@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../config.dart';
+import '../state/session.dart';
 
 /// Thin WebSocket matchmaking client (pure Dart). Connects to the Railway
 /// server, streams decoded events, and exposes the four verbs. Auto-reconnects.
@@ -43,7 +44,14 @@ class NetworkClient {
       onError: (_) => _retry(),
       cancelOnError: true,
     );
-    send({'t': 'hello'});
+    final s = AppSession.instance;
+    send({
+      't': 'hello',
+      'uid': s.myUid,
+      'name': s.myHandle,
+      'gender': s.gender,
+      'meet': s.lookingFor ?? 'Everyone',
+    });
   }
 
   void _retry() {
@@ -66,4 +74,6 @@ class NetworkClient {
   void react(String e) => send({'t': 'react', 'e': e});
   void report(String target) => send({'t': 'report', 'target': target});
   void block(String target) => send({'t': 'block', 'target': target});
+  void save(String target) => send({'t': 'save', 'target': target});
+  void unsave(String target) => send({'t': 'unsave', 'target': target});
 }
