@@ -143,11 +143,11 @@ class _RootState extends State<_Root> {
     }
     if (rounds.isEmpty) {
       rounds = Cell.rollRounds(_rng, people.length);
-    } else if (rounds.length < 3) {
+    } else if (rounds.length < 5) {
       rounds = [
         ...rounds,
         ...Cell.rollRounds(_rng, people.length,
-            count: 3 - rounds.length, avoidKind: rounds.last.game.kind),
+            count: 5 - rounds.length, avoidKind: rounds.last.game.kind),
       ];
     }
     return Cell(people: people, rounds: rounds);

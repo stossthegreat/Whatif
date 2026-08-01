@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/haptics.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
+import '../widgets/aurora.dart';
 import '../widgets/glass.dart';
 import 'legal_screen.dart';
 
@@ -22,7 +23,11 @@ class SignInScreen extends StatelessWidget {
     final r = Responsive.of(context);
     return Scaffold(
       backgroundColor: C.black,
-      body: SafeArea(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const Aurora(),
+          SafeArea(
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: r.gutter),
           child: Column(
@@ -31,7 +36,16 @@ class SignInScreen extends StatelessWidget {
               const SizedBox(height: 18),
               const Wordmark(size: 21),
               const Spacer(),
-              Text('Save your\nvibe.', style: T.huge(42 * r.scale)),
+              RichText(
+                text: TextSpan(
+                  style: T.huge(42 * r.scale),
+                  children: const [
+                    TextSpan(text: 'Save your\n'),
+                    TextSpan(text: 'vibe', style: TextStyle(color: C.sig)),
+                    TextSpan(text: '.'),
+                  ],
+                ),
+              ),
               const SizedBox(height: 14),
               Text('Sign in so you can reconnect with people you click with. '
                   'Or skip it — you can meet people right now.',
@@ -64,6 +78,8 @@ class SignInScreen extends StatelessWidget {
             ],
           ),
         ),
+          ),
+        ],
       ),
     );
   }

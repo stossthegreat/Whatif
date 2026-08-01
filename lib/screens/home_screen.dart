@@ -6,17 +6,14 @@ import '../models/game.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
-import '../widgets/play_button.dart';
 import 'settings_screen.dart';
 
-/// Home — an *alive lobby*, not a launch button. Very black. Tiny red particles
-/// rise; a soft purple/blue glow drifts; a few avatars float; little bursts of
-/// activity flicker past ("😂 x18", "@kai joined", "someone just won"). It should
-/// feel like arriving somewhere something is already happening — then the huge
-/// PLAY pulls you in.
+/// LIVE — the world, not a menu. Very black. Tiny red particles rise; a soft
+/// purple glow drifts; obsidian orbs float; activity flickers past. The
+/// centerpiece is the living headcount — proof something is happening right
+/// now — and the ▶ orb in the tab bar is the only way in.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.onPlay, required this.onSignOut});
-  final VoidCallback onPlay;
+  const HomeScreen({super.key, required this.onSignOut});
   final VoidCallback onSignOut;
 
   @override
@@ -97,19 +94,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  const _LiveCounter(),
-                  const SizedBox(height: 10),
+                  const Spacer(flex: 3),
+                  const _BigLive(),
+                  const SizedBox(height: 18),
                   const _ChaosHour(),
                   const SizedBox(height: 10),
                   const _WorldTicker(),
-                  const Spacer(),
-                  PlayButton(onTap: widget.onPlay, size: 150),
-                  const SizedBox(height: 26),
-                  Text('tap to drop in', style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 17)),
-                  const SizedBox(height: 6),
-                  Text('you never know who you’ll get', style: T.tiny),
-                  const SizedBox(height: 22),
+                  const Spacer(flex: 4),
+                  Text('you never know who you’ll get',
+                      style: T.body.copyWith(color: C.tx2, fontSize: 15)),
+                  const SizedBox(height: 8),
+                  Icon(Icons.keyboard_arrow_down_rounded, size: 22, color: C.sig.withOpacity(0.9)),
+                  const SizedBox(height: 4),
+                  Text('DROP IN', style: T.eyebrow.copyWith(color: C.sig, letterSpacing: 3, fontSize: 11)),
+                  const SizedBox(height: 10),
                 ],
               ),
             ),
@@ -120,9 +118,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 }
 
-/// The big live pill — the "something is happening" signal.
-class _LiveCounter extends StatelessWidget {
-  const _LiveCounter();
+/// The world's heartbeat — a huge living headcount, front and center.
+/// Proof that something is happening right now, before you even press play.
+class _BigLive extends StatelessWidget {
+  const _BigLive();
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -130,23 +129,28 @@ class _LiveCounter extends StatelessWidget {
       builder: (context, _) {
         final n = AppSession.instance.liveCount.toString().replaceAllMapped(
             RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: C.live.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(100),
-            border: Border.all(color: C.live.withOpacity(0.35)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _PulseDot(),
-              const SizedBox(width: 9),
-              Text(n, style: T.mono.copyWith(fontSize: 15)),
-              const SizedBox(width: 6),
-              Text('LIVE', style: T.eyebrow.copyWith(color: C.live, fontSize: 11, letterSpacing: 1.6)),
-            ],
-          ),
+        return Column(
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _PulseDot(),
+                const SizedBox(width: 8),
+                Text('LIVE RIGHT NOW',
+                    style: T.eyebrow.copyWith(color: C.live, fontSize: 11, letterSpacing: 3)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              n,
+              style: T.huge(64).copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+                shadows: [Shadow(color: C.sigGlow, blurRadius: 40)],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text('strangers on camera', style: T.body.copyWith(color: C.tx2, fontSize: 15)),
+          ],
         );
       },
     );

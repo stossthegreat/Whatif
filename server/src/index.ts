@@ -99,7 +99,7 @@ async function formCell(memberIds: string[]) {
 
   // a room is a session — roll a full set of rounds so every client plays the
   // same games in the same order (no kind/name repeats back-to-back)
-  const ROUNDS = 3;
+  const ROUNDS = 5;
   const rounds: { kind: string; name: string; hint: string; prompt: string[] }[] = [];
   let k = lastKind;
   let n = lastName;

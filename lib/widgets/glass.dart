@@ -138,3 +138,42 @@ class _PressState extends State<Press> with SingleTickerProviderStateMixin {
     );
   }
 }
+
+/// The signature call-to-action — a purple gradient key with a breathing glow.
+/// Every "go" moment in the app uses this instead of a flat white slab.
+class Cta extends StatelessWidget {
+  const Cta({super.key, required this.label, this.onTap, this.height = 62});
+  final String label;
+  final VoidCallback? onTap;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Press(
+      haptic: false,
+      onTap: onTap,
+      child: Opacity(
+        opacity: onTap == null ? 0.45 : 1,
+        child: Container(
+          height: height,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [C.sig, C.purpleDeep],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.18)),
+            boxShadow: [
+              BoxShadow(color: C.sigGlow, blurRadius: 30, spreadRadius: -6),
+              const BoxShadow(color: Color(0x66000000), blurRadius: 16, offset: Offset(0, 8)),
+            ],
+          ),
+          child: Text(label,
+              style: T.h3.copyWith(color: Colors.white, fontSize: 17, letterSpacing: -0.2)),
+        ),
+      ),
+    );
+  }
+}

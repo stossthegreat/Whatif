@@ -301,6 +301,160 @@ class GameDef {
         ['Someone here is improvising. Point at who.'],
       ],
     ),
+    // ---- the confessional block (juice — people remember these) ------------
+    GameDef(
+      kind: GameKind.point, name: 'Hot Seat', hint: 'answer for real — juiciest wins',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Hot seat: your most embarrassing camera-roll photo — describe it'],
+        ['Hot seat: the dumbest thing you’ve ever cried about'],
+        ['Hot seat: your worst text-to-the-wrong-person story'],
+        ['Hot seat: the biggest L you’ve ever taken'],
+        ['Hot seat: your most irrational fear'],
+        ['Hot seat: the weirdest thing you’ve googled this week'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Storytime', hint: '20 seconds — best story takes it',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Most embarrassing moment. 20 seconds. GO'],
+        ['Your worst date ever — make it quick'],
+        ['The dumbest thing you believed as a kid'],
+        ['Your most unhinged 3am decision'],
+        ['A time you got caught lying'],
+        ['Your biggest public L'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Petty Court', hint: 'confess — the pettiest wins',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['Confess your pettiest move ever — pettiest wins'],
+        ['The pettiest reason you’ve ever ghosted someone'],
+        ['Your pettiest revenge story. GO'],
+        ['The pettiest hill you will die on'],
+      ],
+    ),
+    // ---- the performance block (chaos on camera) ---------------------------
+    GameDef(
+      kind: GameKind.point, name: 'Speed Debate', hint: '15 seconds. full confidence.',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Defend: pineapple pizza is ELITE. 15 seconds'],
+        ['Argue: cereal is a soup. Mean it.'],
+        ['Defend: socks with sandals are fashion'],
+        ['Argue: pigeons are government drones'],
+        ['Defend: showering at night is superior'],
+        ['Argue: the gym at 6am is a personality disorder'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Rap Battle', hint: 'one bar. no beat. all heart.',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['One bar about the person on your right. GO'],
+        ['Freestyle about your breakfast'],
+        ['Drop a bar about this app'],
+        ['Rap your morning routine'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Scam Call', hint: 'commit to the bit — best scam wins',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['You’re a scam caller. Convince the room they won a cruise'],
+        ['Sell the room a fake crypto coin'],
+        ['You’re tech support. The problem is fake. Fix it anyway'],
+        ['Cold-call the room about their car’s extended warranty'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Conspiracy Corner', hint: 'pitch it like you believe it',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Pitch a conspiracy about birds. Full confidence'],
+        ['Explain why the moon is fake'],
+        ['Convince us your neighbour is a time traveller'],
+        ['Reveal what’s REALLY in airline food'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Oscar Bait', hint: 'dramatic acting. tiny problem.',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Dramatic scene: your toast burned. ACT.'],
+        ['Cry about losing the TV remote — Oscar level'],
+        ['Dramatic monologue: the wifi went down'],
+        ['Win an award. Thank your haters. Tears.'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.point, name: 'Show & Tell', hint: 'grab it — best object wins',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Grab the weirdest thing within reach — best object wins'],
+        ['Show the oldest thing in the room'],
+        ['Grab something that describes your personality'],
+        ['Show your most prized possession under a tenner'],
+      ],
+    ),
+    // ---- the judgement block (vote on each other — addictive) --------------
+    GameDef(
+      kind: GameKind.point, name: 'Superlatives', hint: 'the room decides who',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['Most likely to have a secret finsta'],
+        ['Most likely to cry over a situationship'],
+        ['Most likely to join a pyramid scheme'],
+        ['Most likely to get famous for something embarrassing'],
+        ['Most likely to argue with a self-checkout machine'],
+        ['Most likely to text their ex tonight'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.poll, name: 'Green Flag Red Flag', hint: 'judge them. instantly.',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['They reply in 0.2 seconds', 'green flag', 'red flag'],
+        ['They still follow all their exes', 'green flag', 'red flag'],
+        ['They clap when the plane lands', 'green flag', 'red flag'],
+        ['All their exes are “crazy”', 'green flag', 'red flag'],
+        ['They talk to their pet in a baby voice', 'green flag', 'red flag'],
+        ['Their camera roll is 90% selfies', 'green flag', 'red flag'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.thumbs, name: 'Delulu Check', hint: '👍 = you actually believe it',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['I could land a plane in an emergency'],
+        ['I could survive a zombie apocalypse'],
+        ['I’d win an argument with my therapist'],
+        ['I’m the funniest person I know'],
+        ['I could go pro if I trained for a year'],
+        ['A celebrity would 100% date me'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.same, name: 'Cursed Combos', hint: 'pick the worst — match the room',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Worst pizza topping', 'toothpaste', 'mayo ice cream', 'wet socks', 'gravel'],
+        ['Worst superpower', 'always slightly damp', 'teleport 3cm', 'invisible when nobody looks', 'talk to pigeons'],
+        ['Worst thing to say at a funeral', 'nice turnout', 'he owed me money', 'who’s hungry?', 'awkwarddd'],
+        ['Worst wifi name', 'FBI van 12', 'virus.exe', 'mum click here', 'definitely not spying'],
+      ],
+    ),
+    GameDef(
+      kind: GameKind.freeze, name: 'NPC Mode', hint: 'you are not a real person. hold it.',
+      minStrangers: 1, maxStrangers: 8,
+      prompts: [
+        ['Everyone act like an NPC. First to break loses'],
+        ['You’re all mannequins. HOLD IT'],
+        ['Buffering robots. Do not un-buffer.'],
+      ],
+    ),
   ];
 
   static const bag = [1, 1, 1, 2, 2, 3, 3, 5];
@@ -349,7 +503,7 @@ class Cell {
   static List<RoundDef> rollRounds(
     Random r,
     int strangers, {
-    int count = 3,
+    int count = 5,
     GameKind? avoidKind,
     Set<String> recentHeads = const {},
   }) {

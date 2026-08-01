@@ -65,8 +65,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ],
                   ),
                   const Spacer(),
-                  Text('Meet someone\nnew. Right now.',
-                      style: T.huge(44 * r.scale)),
+                  RichText(
+                    text: TextSpan(
+                      style: T.huge(44 * r.scale),
+                      children: const [
+                        TextSpan(text: 'Meet someone\nnew. '),
+                        TextSpan(text: 'Right now', style: TextStyle(color: C.sig)),
+                        TextSpan(text: '.'),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 18),
                   Text(
                     'One tap drops you live with a stranger — sometimes a few. '
@@ -74,21 +82,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     style: T.body.copyWith(fontSize: 17),
                   ),
                   const SizedBox(height: 34),
-                  Press(
-                    haptic: false,
+                  Cta(
+                    label: _asked ? 'Getting ready…' : 'Enable camera & go',
                     onTap: _asked ? null : _go,
-                    child: Container(
-                      height: 62,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        _asked ? 'Getting ready…' : 'Enable camera & go',
-                        style: T.h3.copyWith(color: Colors.black, fontSize: 17),
-                      ),
-                    ),
                   ),
                   const SizedBox(height: 14),
                   Row(

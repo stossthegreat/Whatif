@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
 import '../theme/tokens.dart';
+import '../widgets/aurora.dart';
 import '../widgets/glass.dart';
 import '../widgets/self_view.dart';
 
@@ -17,7 +18,8 @@ class WelcomeScreen extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          const Opacity(opacity: 0.45, child: SelfView(grade: true)),
+          const Opacity(opacity: 0.4, child: SelfView(grade: true)),
+          const Aurora(orbs: 3, opacity: 0.8),
           SafeArea(
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: r.gutter),
@@ -27,23 +29,26 @@ class WelcomeScreen extends StatelessWidget {
                   const SizedBox(height: 18),
                   const Wordmark(size: 21),
                   const Spacer(),
-                  Text('Meet someone\nnew. Every\nsingle night.', style: T.huge(46 * r.scale)),
+                  RichText(
+                    text: TextSpan(
+                      style: T.huge(46 * r.scale),
+                      children: const [
+                        TextSpan(text: 'Meet someone\n'),
+                        TextSpan(text: 'new', style: TextStyle(color: C.sig)),
+                        TextSpan(text: '. Every\nsingle night.'),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 18),
                   Text(
                     'One tap. A live room of strangers. A quick game to break the ice. '
                     'You never know who you’ll get.',
-                    style: T.body.copyWith(fontSize: 17),
+                    style: T.body.copyWith(fontSize: 17, color: Colors.white70),
                   ),
                   const SizedBox(height: 34),
-                  Press(
-                    haptic: false,
+                  Cta(
+                    label: 'Get started',
                     onTap: () { Buzz.commit(); onNext(); },
-                    child: Container(
-                      height: 62,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-                      child: Text('Get started', style: T.h3.copyWith(color: Colors.black, fontSize: 17)),
-                    ),
                   ),
                   const SizedBox(height: 26),
                 ],
