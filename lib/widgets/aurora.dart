@@ -84,9 +84,9 @@ class _AuroraPainter extends CustomPainter {
     }
 
     glow(C.purpleDeep, 0.24 + 0.1 * math.sin(t * tau), 0.24 + 0.07 * math.cos(t * tau),
-        size.width * 0.75, 0.20);
+        size.width * 0.75, 0.10);
     glow(C.blue, 0.8 + 0.07 * math.cos(t * tau * 0.7), 0.65 + 0.06 * math.sin(t * tau * 0.9),
-        size.width * 0.5, 0.07);
+        size.width * 0.5, 0.035);
 
     // glossy obsidian orbs drifting through
     for (final o in orbs) {

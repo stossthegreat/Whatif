@@ -34,7 +34,7 @@ class SignInScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 18),
-              const Wordmark(size: 21),
+              const Wordmark(size: 30),
               const Spacer(),
               RichText(
                 text: TextSpan(
