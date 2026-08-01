@@ -27,7 +27,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   late final List<_Particle> _particles =
       List.generate(34, (_) => _Particle.random(_rng));
-  late final List<_Avatar> _avatars = List.generate(6, (i) => _Avatar.random(_rng, i));
+  late final List<_Avatar> _avatars = List.generate(4, (i) => _Avatar.random(_rng, i));
 
   @override
   void dispose() {
@@ -54,15 +54,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
             ),
           ),
-          // drifting avatars (upper two-thirds)
+          // drifting orbs — small, dim, and confined to the edges so the
+          // center column stays clean
           RepaintBoundary(
             child: AnimatedBuilder(
               animation: _t,
               builder: (context, _) => _AvatarLayer(t: _t.value, avatars: _avatars),
             ),
           ),
-          // ephemeral activity
-          const _ActivityLayer(),
           // legibility scrim at the bottom so PLAY + text pop
           const Positioned(
             bottom: 0, left: 0, right: 0, height: 360,
@@ -96,9 +95,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ),
                   const Spacer(flex: 3),
                   const _BigLive(),
-                  const SizedBox(height: 18),
-                  const _ChaosHour(),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 26),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _ChaosHour(),
+                      SizedBox(width: 8),
+                      _TrendChip(),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   const _WorldTicker(),
                   const Spacer(flex: 4),
                   Text('you never know who you’ll get',
@@ -129,6 +135,7 @@ class _BigLive extends StatelessWidget {
       builder: (context, _) {
         final n = AppSession.instance.liveCount.toString().replaceAllMapped(
             RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
+        final count = AppSession.instance.liveCount;
         return Column(
           children: [
             Row(
@@ -149,7 +156,10 @@ class _BigLive extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
-            Text('strangers on camera', style: T.body.copyWith(color: C.tx2, fontSize: 15)),
+            Text(
+              count == 1 ? 'stranger on camera' : 'strangers on camera',
+              style: T.body.copyWith(color: C.tx2, fontSize: 15),
+            ),
           ],
         );
       },
@@ -273,6 +283,55 @@ class _ChaosHourState extends State<_ChaosHour> {
   }
 }
 
+/// The trending game — a clean glass chip beside the chaos-hour countdown.
+/// Rotates slowly; never overlaps anything.
+class _TrendChip extends StatefulWidget {
+  const _TrendChip();
+  @override
+  State<_TrendChip> createState() => _TrendChipState();
+}
+
+class _TrendChipState extends State<_TrendChip> {
+  static const _games = ['Roast Me', 'Red Flag', 'Face Battle', 'Spin the Bottle', 'Caption This', 'Rizz Battle'];
+  final _rng = math.Random();
+  Timer? _t;
+  late String _game = _games[_rng.nextInt(_games.length)];
+
+  @override
+  void initState() {
+    super.initState();
+    _t = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (mounted) setState(() => _game = _games[_rng.nextInt(_games.length)]);
+    });
+  }
+
+  @override
+  void dispose() {
+    _t?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+      decoration: BoxDecoration(
+        color: C.glass,
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: C.hair),
+      ),
+      child: AnimatedSwitcher(
+        duration: M.base,
+        child: Text(
+          '📈 $_game',
+          key: ValueKey(_game),
+          style: T.tiny.copyWith(color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+}
+
 /// The world, breathing — one line at a time. Rooms filling, laughs counting,
 /// friends going live, a trending game. Nothing on this screen is static.
 class _WorldTicker extends StatefulWidget {
@@ -286,10 +345,8 @@ class _WorldTickerState extends State<_WorldTicker> {
   Timer? _t;
   late String _line = _next();
 
-  static const _games = ['Red Flag', 'Caption This', 'Roast Me', 'Freeze Face', 'Odd One Out', 'Sell It'];
-
   String _next() {
-    switch (_rng.nextInt(5)) {
+    switch (_rng.nextInt(4)) {
       case 0:
         final room = Cell.roomNames[_rng.nextInt(Cell.roomNames.length)];
         return '$room filling · ${2 + _rng.nextInt(4)}/6';
@@ -297,8 +354,6 @@ class _WorldTickerState extends State<_WorldTicker> {
         return '😂 ${180 + _rng.nextInt(600)} laughs this minute';
       case 2:
         return '👀 ${2 + _rng.nextInt(7)} of your people online';
-      case 3:
-        return '📈 trending · ${_games[_rng.nextInt(_games.length)]}';
       default:
         return '⚡ ${3 + _rng.nextInt(9)} rooms started just now';
     }
@@ -397,20 +452,22 @@ class _LobbyPainter extends CustomPainter {
 
 // ---- floating avatars -----------------------------------------------------
 class _Avatar {
-  _Avatar(this.ax, this.ay, this.fx, this.fy, this.phase, this.scale, this.emoji);
+  _Avatar(this.ax, this.ay, this.fx, this.fy, this.phase, this.scale);
   final double ax, ay, fx, fy, phase, scale;
-  final String? emoji;
-  static const _faces = ['😂', '😳', '🔥', '👀', '😭', '💀', '😏', '🤨', '😮'];
-  static _Avatar random(math.Random r, int i) => _Avatar(
-        0.14 + r.nextDouble() * 0.72, // anchor x
-        0.12 + r.nextDouble() * 0.44, // anchor y (upper area)
-        0.035 + r.nextDouble() * 0.05, // drift amp x
-        0.03 + r.nextDouble() * 0.05, // drift amp y
-        r.nextDouble(),
-        0.72 + r.nextDouble() * 0.5,
-        // roughly half carry a small emoji face, half are pure obsidian orbs
-        r.nextBool() ? _faces[r.nextInt(_faces.length)] : null,
-      );
+
+  /// Anchored to the left/right EDGES and the upper band only — the center
+  /// column belongs to the type, and nothing ever drifts through it.
+  static _Avatar random(math.Random r, int i) {
+    final leftSide = i.isEven;
+    return _Avatar(
+      leftSide ? 0.06 + r.nextDouble() * 0.14 : 0.80 + r.nextDouble() * 0.14,
+      0.10 + r.nextDouble() * 0.22,
+      0.015 + r.nextDouble() * 0.02,
+      0.02 + r.nextDouble() * 0.03,
+      r.nextDouble(),
+      0.5 + r.nextDouble() * 0.5,
+    );
+  }
 }
 
 class _AvatarLayer extends StatelessWidget {
@@ -427,11 +484,11 @@ class _AvatarLayer extends StatelessWidget {
           children: [
             for (final a in avatars)
               Positioned(
-                left: (a.ax + a.fx * math.sin((t + a.phase) * tau)) * c.maxWidth - 24 * a.scale,
-                top: (a.ay + a.fy * math.cos((t + a.phase) * tau * 0.8)) * c.maxHeight - 24 * a.scale,
+                left: (a.ax + a.fx * math.sin((t + a.phase) * tau)) * c.maxWidth - 14 * a.scale,
+                top: (a.ay + a.fy * math.cos((t + a.phase) * tau * 0.8)) * c.maxHeight - 14 * a.scale,
                 child: Opacity(
-                  opacity: 0.9,
-                  child: _MiniOrb(size: 48 * a.scale, emoji: a.emoji),
+                  opacity: 0.4,
+                  child: _MiniOrb(size: 28 * a.scale),
                 ),
               ),
           ],
@@ -441,12 +498,11 @@ class _AvatarLayer extends StatelessWidget {
   }
 }
 
-/// A polished obsidian marble — shiny jet-black, a soft specular highlight
-/// top-left, a faint purple rim. Reads as premium, never a flat grey disc.
+/// A polished obsidian marble — small, quiet, atmospheric. Never a bowling
+/// ball, never carrying a random emoji, never in the way of the type.
 class _MiniOrb extends StatelessWidget {
-  const _MiniOrb({required this.size, this.emoji});
+  const _MiniOrb({required this.size});
   final double size;
-  final String? emoji;
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -457,138 +513,33 @@ class _MiniOrb extends StatelessWidget {
         gradient: const RadialGradient(
           center: Alignment(-0.45, -0.55),
           radius: 1.05,
-          colors: [Color(0xFF2A2D34), Color(0xFF0C0D10), Color(0xFF000000)],
+          colors: [Color(0xFF23252B), Color(0xFF0B0C0F), Color(0xFF000000)],
           stops: [0.0, 0.55, 1.0],
         ),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
         boxShadow: [
-          const BoxShadow(color: Color(0xCC000000), blurRadius: 16, spreadRadius: -2, offset: Offset(0, 6)),
-          BoxShadow(color: C.sig.withOpacity(0.16), blurRadius: 18, spreadRadius: -8),
+          BoxShadow(color: C.sig.withOpacity(0.12), blurRadius: 14, spreadRadius: -6),
         ],
       ),
       child: Stack(
-        alignment: Alignment.center,
         children: [
-          // specular glint
           Positioned(
-            left: size * 0.2,
-            top: size * 0.16,
+            left: size * 0.22,
+            top: size * 0.18,
             child: Container(
-              width: size * 0.24,
-              height: size * 0.24,
+              width: size * 0.2,
+              height: size * 0.2,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
-                  colors: [Colors.white.withOpacity(0.5), Colors.white.withOpacity(0)],
+                  colors: [Colors.white.withOpacity(0.35), Colors.white.withOpacity(0)],
                 ),
               ),
             ),
           ),
-          if (emoji != null)
-            Text(emoji!, style: TextStyle(fontSize: size * 0.42)),
         ],
       ),
     );
   }
 }
 
-// ---- ephemeral activity ---------------------------------------------------
-class _ActivityLayer extends StatefulWidget {
-  const _ActivityLayer();
-  @override
-  State<_ActivityLayer> createState() => _ActivityLayerState();
-}
-
-class _ActivityLayerState extends State<_ActivityLayer> with TickerProviderStateMixin {
-  final _rng = math.Random();
-  final List<_Act> _items = [];
-  Timer? _spawner;
-
-  static const _pool = [
-    '😂 x18', '🔥 x7', '💀', '❤️ x12', 'someone just won', '👏 x9', '😭 x4', '😳', '⚡️ CHAOS', '@kai joined', '@nova joined',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _spawner = Timer.periodic(const Duration(milliseconds: 1100), (_) => _spawn());
-  }
-
-  void _spawn() {
-    if (!mounted) return;
-    final ctl = AnimationController(vsync: this, duration: Duration(milliseconds: 2600 + _rng.nextInt(900)));
-    final act = _Act(
-      text: _pool[_rng.nextInt(_pool.length)],
-      x: 0.1 + _rng.nextDouble() * 0.8,
-      y: 0.42 + _rng.nextDouble() * 0.22,
-      ctl: ctl,
-    );
-    setState(() => _items.add(act));
-    ctl.forward().whenComplete(() {
-      if (!mounted) return;
-      setState(() => _items.remove(act));
-      ctl.dispose();
-    });
-  }
-
-  @override
-  void dispose() {
-    _spawner?.cancel();
-    for (final a in _items) { a.ctl.dispose(); }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: LayoutBuilder(
-        builder: (context, c) => Stack(
-          children: [
-            for (final a in _items)
-              AnimatedBuilder(
-                animation: a.ctl,
-                builder: (context, _) {
-                  final t = a.ctl.value;
-                  final op = t < 0.15 ? t / 0.15 : (t > 0.7 ? (1 - (t - 0.7) / 0.3) : 1.0);
-                  return Positioned(
-                    left: a.x * c.maxWidth,
-                    top: (a.y - 0.12 * t) * c.maxHeight,
-                    child: Opacity(
-                      opacity: op.clamp(0.0, 1.0) * 0.9,
-                      child: _ActivityChip(a.text),
-                    ),
-                  );
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Act {
-  _Act({required this.text, required this.x, required this.y, required this.ctl});
-  final String text;
-  final double x, y;
-  final AnimationController ctl;
-}
-
-class _ActivityChip extends StatelessWidget {
-  const _ActivityChip(this.text);
-  final String text;
-  @override
-  Widget build(BuildContext context) {
-    final chaos = text.contains('CHAOS');
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0x66000000),
-        borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: chaos ? C.sig.withOpacity(0.5) : C.hair),
-      ),
-      child: Text(text, style: T.tiny.copyWith(
-        color: chaos ? C.sig : Colors.white.withOpacity(0.85), fontWeight: FontWeight.w700)),
-    );
-  }
-}
