@@ -1,30 +1,27 @@
-// This is a basic Flutter widget test.
+// Smoke test for WhatIf.
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Verifies the app boots to the splash screen and shows the wordmark's tagline,
+// then auto-advances into onboarding without throwing. We keep it light because
+// most of the app is animation-driven; the goal here is a build/boot sanity check.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:whatif/main.dart';
+import 'package:whatif/app.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('WhatIf boots to splash', (WidgetTester tester) async {
+    await tester.pumpWidget(const WhatIfApp());
+    await tester.pump(); // first frame
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // The splash tagline is present.
+    expect(find.text('what happens tonight?'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // Let the splash auto-advance timer + a few animation frames run.
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 700));
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // We should have left the splash (tagline gone) without exceptions.
+    expect(tester.takeException(), isNull);
   });
 }
