@@ -42,6 +42,7 @@ export interface Cell {
   luckyId: string;
   reviveRounds?: RoundWire[];    // shared reroll once any member revives
   timers: NodeJS.Timeout[];      // everything scheduled for this cell
+  roundTimer?: NodeJS.Timeout;   // the current round's deadline (cancellable alone)
 }
 
 /// In-memory store. Deliberately behind one object so it can be swapped for

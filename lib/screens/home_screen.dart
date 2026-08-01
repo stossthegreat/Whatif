@@ -341,18 +341,23 @@ class _WorldTickerState extends State<_WorldTicker> {
   Timer? _t;
   late String _line = _next();
 
+  // ambient flavor only — never fabricated numbers. The count above is real;
+  // everything down here is vibe.
+  static const _lines = [
+    'Spin the Bottle hits different after dark',
+    'new tonight · Scam Call',
+    'the wheel decides who stays',
+    'chaos hour doubles the badges',
+    'rooms are never recorded — ever',
+    'someone in there is your kind of weird',
+  ];
+
   String _next() {
-    switch (_rng.nextInt(4)) {
-      case 0:
-        final room = Cell.roomNames[_rng.nextInt(Cell.roomNames.length)];
-        return '$room filling · ${2 + _rng.nextInt(4)}/6';
-      case 1:
-        return '${180 + _rng.nextInt(600)} laughs this minute';
-      case 2:
-        return '${2 + _rng.nextInt(7)} of your people online';
-      default:
-        return '${3 + _rng.nextInt(9)} rooms started just now';
+    if (_rng.nextBool()) {
+      final room = Cell.roomNames[_rng.nextInt(Cell.roomNames.length)];
+      return '$room is open';
     }
+    return _lines[_rng.nextInt(_lines.length)];
   }
 
   @override

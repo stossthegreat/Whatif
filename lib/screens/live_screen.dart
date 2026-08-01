@@ -318,7 +318,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     Buzz.impact();
     Sfx.fanfare();
     setState(() => _phase = _Phase.awards);
-    _idle = Timer(const Duration(seconds: 14), () {
+    _idle = Timer(const Duration(seconds: 30), () {
       if (mounted && _phase == _Phase.awards) widget.onNext();
     });
   }
@@ -449,16 +449,18 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _target = _idxOf(cell.rounds[_round].targetId) ?? _r.nextInt(cell.people.length + 1);
       _bottleDone = game.kind != GameKind.spin;
     });
+    // mirrors the server's conversation-first table exactly
     var secs = switch (game.kind) {
-      GameKind.freeze => 5,
-      GameKind.rapidFire => 10,
-      GameKind.spin => 13, // the bottle eats the first ~2.5s
-      _ => 9,
+      GameKind.point => 75, // talk/perform games — they need real time
+      GameKind.spin => 45,
+      GameKind.freeze => 15,
+      GameKind.rapidFire => 20,
+      _ => 30, // tap-answer kinds — answer, then chat
     };
     if (_serverDriven && _roundEndsAt != null) {
       // ride the server's clock so every phone's countdown agrees
       final left = _roundEndsAt!.difference(DateTime.now()).inMilliseconds / 1000;
-      secs = left.clamp(3, 20).round();
+      secs = left.clamp(3, 90).round();
     }
     // in server-driven rooms the deadline resolution belongs to the server;
     // the grace timer fabricates locally only if the server goes silent.
@@ -477,7 +479,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   void _autoResolve() {
     switch (game.kind) {
       case GameKind.point:
-        _resolvePoint(_r.nextInt(cell.people.length));
+        if (cell.people.isEmpty) {
+          _resolveFreeze(); // solo warm-up — no one to crown yet
+        } else {
+          _resolvePoint(_r.nextInt(cell.people.length));
+        }
       case GameKind.poll:
       case GameKind.wouldRather:
         _resolveSplit(0);
@@ -566,11 +572,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     // in server-driven rooms the server sends 'round'/'awards' to advance us —
     // these local timers are only the safety net if it goes quiet.
     if (_finalRound) {
-      _idle = Timer(Duration(milliseconds: _serverDriven ? 7000 : 3400), () {
+      _idle = Timer(Duration(milliseconds: _serverDriven ? 11000 : 6500), () {
         if (mounted && _phase == _Phase.reveal) _toAwards();
       });
     } else {
-      _idle = Timer(Duration(milliseconds: _serverDriven ? 6500 : 2400), () {
+      _idle = Timer(Duration(milliseconds: _serverDriven ? 10000 : 6000), () {
         if (mounted && _phase == _Phase.reveal) _nextRound();
       });
     }
@@ -647,7 +653,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     setState(() => _phase = _Phase.awards);
     // never a dead end — if you just sit there, the loop pulls you forward.
     _idle?.cancel();
-    _idle = Timer(const Duration(seconds: 14), () {
+    _idle = Timer(const Duration(seconds: 30), () {
       if (mounted && _phase == _Phase.awards) widget.onNext();
     });
   }
@@ -787,7 +793,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _answered = true;
     final survived = _r.nextBool();
     setState(() {
-      _result = survived ? 'you held it 😐 ice cold' : 'you cracked 😂 @${cell.people[0].name} won';
+      _result = survived
+          ? 'you held it 😐 ice cold'
+          : cell.people.isEmpty
+              ? 'you cracked 😂 first'
+              : 'you cracked 😂 @${cell.people[0].name} won';
     });
     Buzz.pop();
     _toReveal();
@@ -804,7 +814,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _answered = true;
     Buzz.commit();
     setState(() {
-      _result = 'quick hands — @${cell.people[0].name} liked that';
+      _result = cell.people.isEmpty
+          ? 'quick hands 👏'
+          : 'quick hands — @${cell.people[0].name} liked that';
     });
     Timer(const Duration(milliseconds: 400), _toReveal);
   }
@@ -812,7 +824,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   // ---- save / report / block ------------------------------------------------
   void _save(Person p) {
     AppSession.instance.spark(p);
-    if (widget.live && p.id != null) NetworkClient.instance.save(p.id!);
+    // the server keys saves by the STABLE uid — never the connection id
+    final target = p.uid ?? p.id;
+    if (widget.live && target != null) NetworkClient.instance.save(target);
     _toast('✨ sparked @${p.name} — they’re in your people now');
     Buzz.commit();
     setState(() {});
@@ -1007,6 +1021,35 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   Widget _stage() {
     final n = cell.people.length;
 
+    // solo (waiting) — no fake tiles, ever. You, full bleed, and the truth.
+    if (n == 0) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          _selfFace(),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: MediaQuery.of(context).padding.top + 64,
+            child: IgnorePointer(
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: const Color(0x8C000000),
+                    borderRadius: BorderRadius.circular(100),
+                    border: Border.all(color: C.hair2),
+                  ),
+                  child: Text('you’re live — waiting for someone real to drop in…',
+                      style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     // 1:1 — them full screen, you as a floating PiP. Pure FaceTime.
     if (n == 1) {
       return Stack(
@@ -1074,8 +1117,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       picked: _pointPick == i || _winnerIdx == i,
       win: _winnerIdx == i && _phase == _Phase.reveal,
       dimmed: _phase == _Phase.reveal && _winnerIdx != null && _winnerIdx != i && game.kind == GameKind.point,
-      saved: AppSession.instance.isSaved(p.name),
+      saved: AppSession.instance.isSaved(p.sparkKey),
       videoChild: widget.live ? VideoView(track: RtcService.instance.trackFor(p.id)) : null,
+      connecting: widget.live && RtcService.instance.trackFor(p.id) == null,
       onTap: canPoint ? () => _resolvePoint(i) : null,
       onReport: () => _openReport(p),
       onSave: () => _save(p),
@@ -1564,7 +1608,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (mvpPerson != null && !AppSession.instance.isSaved(mvpPerson.name)) ...[
+                        if (mvpPerson != null && !AppSession.instance.isSaved(mvpPerson.sparkKey)) ...[
                           Press(
                             onTap: () => _save(mvpPerson!),
                             child: Container(

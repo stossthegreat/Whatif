@@ -137,8 +137,15 @@ function leaveParty(userId: string) {
 // real answers, schedules chaos, computes awards from real votes, and rolls
 // the revive wheel. Clients keep local timers only as fail-soft fallback.
 
-const ROUND_SECS: Record<string, number> = { freeze: 5, rapidFire: 10, spin: 13 };
-const secsFor = (kind: string) => ROUND_SECS[kind] ?? 9;
+// Conversation-first pacing: talk games get real time; a round ends early when
+// everyone has answered. This is a place to meet people, not a quiz show.
+const ROUND_SECS: Record<string, number> = {
+  point: 75,     // perform/talk games — storytime, debates, roasts
+  spin: 45,      // bottle + the target performs
+  freeze: 15,
+  rapidFire: 20,
+};
+const secsFor = (kind: string) => ROUND_SECS[kind] ?? 30; // tap-answer kinds
 
 const CHAOS_CARDS: [string, string][] = [
   ['🤫', 'Everyone WHISPER until the next game'],
@@ -169,6 +176,7 @@ function later(cellId: string, ms: number, fn: (cell: Cell) => void) {
 function clearCellTimers(cell: Cell) {
   for (const t of cell.timers) clearTimeout(t);
   cell.timers = [];
+  if (cell.roundTimer) { clearTimeout(cell.roundTimer); cell.roundTimer = undefined; }
 }
 
 function rollSession(strangers: number): RoundWire[] {
@@ -205,7 +213,11 @@ function startRound(cell: Cell, idx: number) {
   const secs = secsFor(cell.rounds[idx].kind);
   const endsAt = Date.now() + secs * 1000;
   broadcastCell(cell.id, { t: 'round', idx, endsAt });
-  later(cell.id, secs * 1000, (c) => endRound(c));
+  if (cell.roundTimer) clearTimeout(cell.roundTimer);
+  cell.roundTimer = setTimeout(() => {
+    const c = store.cells.get(cell.id);
+    if (c && c.roundIdx === idx) endRound(c);
+  }, secs * 1000);
 }
 
 function endRound(cell: Cell) {
@@ -247,10 +259,11 @@ function endRound(cell: Cell) {
   }
 
   broadcastCell(cell.id, msg);
+  // the reveal breathes — people need a beat to laugh and talk about it
   if (idx + 1 < cell.rounds.length) {
-    later(cell.id, 3300, (c) => startRound(c, idx + 1));
+    later(cell.id, 7000, (c) => startRound(c, idx + 1));
   } else {
-    later(cell.id, 3500, (c) => sendAwards(c));
+    later(cell.id, 7000, (c) => sendAwards(c));
   }
 }
 
@@ -316,7 +329,7 @@ async function formCell(memberIds: string[]) {
   const chaosCount = 1 + Math.floor(Math.random() * 2);
   for (let i = 0; i < chaosCount; i++) {
     const [e, x] = pick(CHAOS_CARDS);
-    later(cellId, 9000 + Math.floor(Math.random() * 30000), (c) =>
+    later(cellId, 15000 + Math.floor(Math.random() * 90000), (c) =>
       broadcastCell(c.id, { t: 'chaos', e, x }));
   }
   console.log(`[cell] ${cellId} · ${live.length} people · ${rounds.map((r) => r.name).join(' → ')}${cell.golden ? ' · GOLDEN' : ''}`);
@@ -475,7 +488,18 @@ wss.on('connection', (ws) => {
         broadcastCell(user.cellId, { t: 'answer', from: id, v: m.v }, id);
         // record the real answer for this round's tally
         const cell = store.cells.get(user.cellId);
-        if (cell && (m.round == null || m.round === cell.roundIdx)) cell.answers.set(id, m.v);
+        if (cell && (m.round == null || m.round === cell.roundIdx)) {
+          cell.answers.set(id, m.v);
+          // everyone's in — give the room 4s to see it, then flip early
+          if (cell.answers.size >= cell.members.length && cell.roundTimer) {
+            clearTimeout(cell.roundTimer);
+            const idx = cell.roundIdx;
+            cell.roundTimer = setTimeout(() => {
+              const c = store.cells.get(cell.id);
+              if (c && c.roundIdx === idx) endRound(c);
+            }, 4000);
+          }
+        }
         break;
       }
       case 'react':

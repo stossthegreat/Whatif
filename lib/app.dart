@@ -91,7 +91,9 @@ class _RootState extends State<_Root> {
         RtcService.instance.leave();
         if (mounted && _step == _Step.live) _to(_Step.finding); // server re-queued us
       case 'sparkMutual':
-        if (m['name'] is String) AppSession.instance.markMutual(m['name'] as String);
+        if (m['name'] is String) {
+          AppSession.instance.markMutual(m['name'] as String, uid: m['uid'] as String?);
+        }
       case 'sparkLive':
         if (m['name'] is String) AppSession.instance.setSparkLive(m['name'] as String, true);
     }
@@ -136,7 +138,6 @@ class _RootState extends State<_Root> {
     var people = ((m['people'] as List?) ?? const [])
         .map((e) => Person.fromServer((e as Map).cast<String, dynamic>(), _rng))
         .toList();
-    if (people.isEmpty) people = Person.group(_rng, 1); // solo test — show one tile
 
     // prefer the server's full session (everyone plays the same rounds); an
     // older server sends a single game — fill the session out locally.

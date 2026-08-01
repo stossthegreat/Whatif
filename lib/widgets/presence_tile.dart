@@ -15,6 +15,7 @@ class PresenceTile extends StatefulWidget {
     this.win = false,
     this.dimmed = false,
     this.saved = false,
+    this.connecting = false,
     this.radius = 20,
     this.popDelay = Duration.zero,
     this.videoChild,
@@ -36,6 +37,10 @@ class PresenceTile extends StatefulWidget {
   final bool win;
   final bool dimmed;
   final bool saved;
+
+  /// Real person whose video hasn't arrived yet — label the tile as loading so
+  /// it never reads as an empty ghost.
+  final bool connecting;
   final Duration popDelay;
   final VoidCallback? onTap;
   final VoidCallback? onSave;
@@ -144,12 +149,21 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
                     ),
                   ),
                 ),
-              // handle
+              // handle (+ honest connecting state while their video warms up)
               Positioned(
                 left: 12,
                 bottom: 10,
-                child: Text('@${p.name}',
-                    style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12.5)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('@${p.name}',
+                        style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12.5)),
+                    if (widget.connecting)
+                      Text('connecting camera…',
+                          style: T.tiny.copyWith(color: C.tx3, fontSize: 10)),
+                  ],
+                ),
               ),
               // save — always available, on every person (bottom-right heart)
               if (widget.onSave != null)
@@ -183,8 +197,8 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
   }
 }
 
-/// A compact circular save/spark control that sits on every person's tile.
-/// Tap to spark them; fills purple once saved.
+/// The save control — a labeled pill so it's unmistakably a button.
+/// ♡ Save (dark) → ✓ Saved (white). Tap to keep this person.
 class _SaveHeart extends StatelessWidget {
   const _SaveHeart({required this.saved, this.onTap});
   final bool saved;
@@ -195,21 +209,30 @@ class _SaveHeart extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: M.quick,
-        width: 34,
-        height: 34,
-        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: saved ? C.sig : const Color(0x59000000),
-          border: Border.all(color: saved ? C.sig : C.hair2),
-          boxShadow: saved
-              ? [BoxShadow(color: C.sigGlow, blurRadius: 14, spreadRadius: -4)]
-              : null,
+          color: saved ? Colors.white : const Color(0x73000000),
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(color: saved ? Colors.white : const Color(0x59FFFFFF)),
         ),
-        child: Icon(
-          saved ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-          size: 17,
-          color: Colors.white,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              saved ? Icons.check_rounded : Icons.favorite_border_rounded,
+              size: 14,
+              color: saved ? Colors.black : Colors.white,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              saved ? 'Saved' : 'Save',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: saved ? Colors.black : Colors.white,
+              ),
+            ),
+          ],
         ),
       ),
     );
