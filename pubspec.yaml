@@ -35,9 +35,15 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
-  # Live self-view. The app is fail-soft: if the camera is unavailable or
+  # Live self-view (simulated mode). Fail-soft: if the camera is unavailable or
   # denied, every screen falls back to an elegant placeholder.
   camera: ^0.11.0+2
+
+  # Real matchmaking (pure Dart WebSocket) — used only when WHATIF_BACKEND is set.
+  web_socket_channel: ^3.0.1
+
+  # Live group video ("livestream") — used only in live mode.
+  livekit_client: ^2.3.0
 
 dev_dependencies:
   flutter_test:

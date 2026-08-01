@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config.dart';
 import '../core/camera_service.dart';
 import '../core/haptics.dart';
 import '../theme/tokens.dart';
@@ -22,8 +23,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _go() async {
     Buzz.commit();
     setState(() => _asked = true);
-    // Permission prompt fires here, at the moment of intent.
-    await CameraService.instance.ensure();
+    // In simulated mode the camera plugin powers the self-view. In live mode
+    // LiveKit owns the camera (and prompts for permission on first match), so we
+    // don't open the plugin here — that would fight LiveKit for the device.
+    if (!AppConfig.isLive) {
+      await CameraService.instance.ensure();
+    }
     if (mounted) widget.onDone();
   }
 

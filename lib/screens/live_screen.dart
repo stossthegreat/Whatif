@@ -3,12 +3,16 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
 import '../models/game.dart';
+import '../models/person.dart';
+import '../net/network_client.dart';
+import '../net/rtc_service.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
 import '../widgets/countdown_ring.dart';
 import '../widgets/glass.dart';
 import '../widgets/presence_tile.dart';
 import '../widgets/self_view.dart';
+import '../widgets/video_view.dart';
 
 enum _Phase { drop, game, reveal }
 
@@ -17,10 +21,19 @@ enum _Phase { drop, game, reveal }
 /// is never dead air; every round builds to one reveal beat; NEXT re-rolls, and
 /// an idle cell recomposes on its own so you feel the pull.
 class LiveScreen extends StatefulWidget {
-  const LiveScreen({super.key, required this.cell, required this.onNext, required this.onLeave});
+  const LiveScreen({
+    super.key,
+    required this.cell,
+    required this.onNext,
+    required this.onLeave,
+    this.live = false,
+  });
   final Cell cell;
   final VoidCallback onNext;
   final VoidCallback onLeave;
+
+  /// True when driven by the real backend (LiveKit video + relayed reactions).
+  final bool live;
 
   @override
   State<LiveScreen> createState() => _LiveScreenState();
@@ -46,6 +59,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   Timer? _idle;
   Timer? _speak;
   Timer? _startTimer;
+  StreamSubscription<Map<String, dynamic>>? _netSub;
 
   Cell get cell => widget.cell;
   GameDef get game => cell.game;
@@ -59,6 +73,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       setState(() => _speakingIdx = _r.nextInt(cell.people.length));
     });
     _startTimer = Timer(const Duration(milliseconds: 700), _startGame);
+    // relay peers' reactions in live mode
+    if (widget.live) {
+      _netSub = NetworkClient.instance.events.listen((m) {
+        if (!mounted) return;
+        if (m['t'] == 'react' && m['e'] is String) _float(m['e'] as String);
+      });
+    }
   }
 
   @override
@@ -67,6 +88,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _idle?.cancel();
     _speak?.cancel();
     _startTimer?.cancel();
+    _netSub?.cancel();
     super.dispose();
   }
 
@@ -232,8 +254,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   }
 
   // ---- report / block -------------------------------------------------------
-  void _openReport(String name) {
+  void _openReport(Person p) {
     Buzz.commit();
+    final name = p.name;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -247,11 +270,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             children: [
               _sheetRow(Icons.flag_outlined, 'Report @$name', C.tx, () {
                 Navigator.pop(ctx);
+                if (widget.live && p.id != null) NetworkClient.instance.report(p.id!);
                 _toast('reported — our team is on it');
               }),
               const Divider(height: 1, color: C.hair),
               _sheetRow(Icons.block_rounded, 'Block @$name', C.live, () {
                 Navigator.pop(ctx);
+                if (widget.live && p.id != null) NetworkClient.instance.block(p.id!);
                 _toast('blocked — you won’t see them again');
                 widget.onNext();
               }),
@@ -295,6 +320,17 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   // ---- build ---------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
+    if (widget.live) {
+      // rebuild when LiveKit tracks change so video tiles fill in
+      return ValueListenableBuilder<int>(
+        valueListenable: RtcService.instance.rev,
+        builder: (context, _, __) => _scaffold(context),
+      );
+    }
+    return _scaffold(context);
+  }
+
+  Widget _scaffold(BuildContext context) {
     final r = Responsive.of(context);
     return Scaffold(
       backgroundColor: C.black,
@@ -322,7 +358,23 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: const SelfView(label: 'you'),
+                child: widget.live
+                    ? Stack(fit: StackFit.expand, children: [
+                        const DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: C.char2,
+                            gradient: RadialGradient(
+                              center: Alignment(0, -0.2), radius: 0.9,
+                              colors: [Color(0x4D8CB4FF), Color(0x00000000)], stops: [0.0, 0.72],
+                            ),
+                          ),
+                        ),
+                        VideoView(track: RtcService.instance.localTrack, mirror: true),
+                        const Positioned(
+                            left: 8, bottom: 7,
+                            child: Text('you', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w700))),
+                      ])
+                    : const SelfView(label: 'you'),
               ),
             ),
           ),
@@ -420,8 +472,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       dimmed: _phase == _Phase.reveal && _winnerIdx != null && _winnerIdx != i && game.kind == GameKind.point,
       showSave: _phase == _Phase.reveal && _saveIdx == i,
       saved: AppSession.instance.isSaved(p.name),
+      videoChild: widget.live ? VideoView(track: RtcService.instance.trackFor(p.id)) : null,
       onTap: canPoint ? () => _resolvePoint(i) : null,
-      onReport: () => _openReport(p.name),
+      onReport: () => _openReport(p),
       onSave: () {
         AppSession.instance.save(p.name);
         _toast('saved @${p.name} — you’ll know when they’re live');
@@ -576,6 +629,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               onTap: () {
                 Buzz.tap();
                 _float('😂');
+                if (widget.live) NetworkClient.instance.react('😂');
               },
               child: Container(
                 width: 54, height: 54,

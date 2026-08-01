@@ -25,10 +25,23 @@ open ios/Runner.xcworkspace
   registered in App Store Connect.
 - Leave **Automatically manage signing** on.
 
-> Camera requires iOS 12+. If the Pods complain, set `platform :ios, '12.0'` at
-> the top of `ios/Podfile`, then `cd ios && pod install && cd ..`.
+> **iOS 13+ required** (LiveKit / WebRTC). After the first `flutter pub get`,
+> open `ios/Podfile` and set `platform :ios, '13.0'` at the top, and in Xcode set
+> the Runner **iOS Deployment Target** to 13.0. Then `cd ios && pod install && cd ..`.
 
 The camera/microphone usage strings are already in `ios/Runner/Info.plist`.
+
+## Simulated vs Live
+- **Default build = simulated.** No backend needed — people, matches and games
+  are generated on-device (great for a first TestFlight). Your camera powers the
+  self-view.
+- **Live build** — deploy `server/` to Railway + a LiveKit project (see
+  `server/README.md`), then build with the backend wired in:
+  ```bash
+  flutter build ipa --release --dart-define=WHATIF_BACKEND=wss://<your-domain>/ws
+  ```
+  In live mode LiveKit owns the camera and prompts for permission on the first
+  match; matchmaking pairs real strangers and their video fills the tiles.
 
 ## 3. Bump the build number
 In `pubspec.yaml`, the version line is `version: 1.0.0+1`. Increment the number

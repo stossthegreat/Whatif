@@ -5,12 +5,23 @@ import 'package:flutter/material.dart';
 /// live video tile; in this build it's an elegant "presence" tile (a cool light
 /// pooled on black) so the app runs and feels alive without a video backend.
 class Person {
-  Person({required this.name, required this.hue, required this.lx, required this.ly});
+  Person({required this.name, required this.hue, required this.lx, required this.ly, this.id});
 
+  /// LiveKit participant identity in live mode (null when simulated).
+  final String? id;
   final String name;
   final double hue; // cool range, tells people apart without breaking monochrome
   final double lx; // light pool x (0..1)
   final double ly; // light pool y (0..1)
+
+  /// Build from a server `people` entry: {id, name, hue}.
+  factory Person.fromServer(Map<String, dynamic> m, Random r) => Person(
+        id: m['id'] as String?,
+        name: (m['name'] as String?) ?? 'someone',
+        hue: ((m['hue'] as num?)?.toDouble()) ?? 210,
+        lx: 0.20 + r.nextDouble() * 0.50,
+        ly: 0.22 + r.nextDouble() * 0.40,
+      );
 
   /// The pooled light color for the tile.
   Color get light => HSLColor.fromAHSL(0.34, hue, 0.45, 0.60).toColor();

@@ -8,8 +8,12 @@ import '../widgets/self_view.dart';
 /// line. The ring fills, the number ticks 2→1, haptics ramp — then it hands off
 /// to the drop. This ~1.5s is the most important surface in the product.
 class FindingScreen extends StatefulWidget {
-  const FindingScreen({super.key, required this.onDone});
+  const FindingScreen({super.key, required this.onDone, this.waitForExternal = false});
   final VoidCallback onDone;
+
+  /// In live mode the match arrives from the server, so the ring fills and then
+  /// holds (a held breath) until the parent transitions — [onDone] isn't used.
+  final bool waitForExternal;
 
   @override
   State<FindingScreen> createState() => _FindingScreenState();
@@ -33,7 +37,12 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
         }
       })
       ..forward().whenComplete(() {
-        if (mounted) widget.onDone();
+        if (!mounted) return;
+        if (widget.waitForExternal) {
+          _c.repeat(min: 0.92, max: 1.0, reverse: true, period: const Duration(milliseconds: 900));
+        } else {
+          widget.onDone();
+        }
       });
   }
 

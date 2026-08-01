@@ -1,6 +1,11 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'config.dart';
 import 'models/game.dart';
+import 'models/person.dart';
+import 'net/network_client.dart';
+import 'net/rtc_service.dart';
 import 'state/session.dart';
 import 'theme/tokens.dart';
 import 'screens/onboarding_screen.dart';
@@ -20,10 +25,7 @@ class WhatIfApp extends StatelessWidget {
         useMaterial3: true,
         brightness: Brightness.dark,
         scaffoldBackgroundColor: C.black,
-        colorScheme: const ColorScheme.dark(
-          primary: C.sig,
-          surface: C.char2,
-        ),
+        colorScheme: const ColorScheme.dark(primary: C.sig, surface: C.char2),
         splashFactory: NoSplash.splashFactory,
         highlightColor: Colors.transparent,
       ),
@@ -44,11 +46,66 @@ class _RootState extends State<_Root> {
   final _rng = Random();
   _Step _step = _Step.onboarding;
   Cell? _cell;
-  int _drop = 0; // reset live-screen state per drop
+  int _drop = 0;
+  StreamSubscription<Map<String, dynamic>>? _netSub;
+
+  @override
+  void initState() {
+    super.initState();
+    if (AppConfig.isLive) {
+      NetworkClient.instance.connect();
+      _netSub = NetworkClient.instance.events.listen(_onNet);
+    }
+  }
+
+  @override
+  void dispose() {
+    _netSub?.cancel();
+    super.dispose();
+  }
 
   void _to(_Step s) => setState(() => _step = s);
 
-  void _dropIntoCell() {
+  // ---- live mode (server-driven) -------------------------------------------
+  void _onNet(Map<String, dynamic> m) {
+    switch (m['t']) {
+      case 'presence':
+        final n = (m['live'] as num?)?.toInt();
+        if (n != null) AppSession.instance.setLiveCount(n);
+      case 'cell':
+        _onCell(m);
+      case 'ended':
+        RtcService.instance.leave();
+        if (mounted && _step == _Step.live) _to(_Step.finding); // server re-queued us
+    }
+  }
+
+  void _onCell(Map<String, dynamic> m) {
+    final cell = _cellFromServer(m);
+    AppSession.instance.noteCell(cell);
+    final url = (m['url'] as String?) ?? '';
+    final token = (m['token'] as String?) ?? '';
+    RtcService.instance.join(url, token); // fire-and-forget; tiles fill on rev
+    setState(() {
+      _cell = cell;
+      _drop++;
+      _step = _Step.live;
+    });
+  }
+
+  Cell _cellFromServer(Map<String, dynamic> m) {
+    var people = ((m['people'] as List?) ?? const [])
+        .map((e) => Person.fromServer((e as Map).cast<String, dynamic>(), _rng))
+        .toList();
+    if (people.isEmpty) people = Person.group(_rng, 1); // solo test — show one tile
+    final g = ((m['game'] as Map?) ?? const {}).cast<String, dynamic>();
+    final def = GameDef.byKind(gameKindFrom((g['kind'] as String?) ?? 'poll'));
+    final prompt = ((g['prompt'] as List?) ?? const []).map((e) => e.toString()).toList();
+    return Cell(people: people, game: def, prompt: prompt.isEmpty ? def.prompts.first : prompt);
+  }
+
+  // ---- simulated mode -------------------------------------------------------
+  void _dropSimulated() {
     final s = AppSession.instance;
     final cell = Cell.random(_rng, avoidKind: s.lastKind, recentHeads: s.recentHeads);
     s.noteCell(cell);
@@ -59,17 +116,43 @@ class _RootState extends State<_Root> {
     });
   }
 
+  // ---- verbs ----------------------------------------------------------------
+  void _play() {
+    if (AppConfig.isLive) NetworkClient.instance.play();
+    _to(_Step.finding);
+  }
+
+  void _next() {
+    if (AppConfig.isLive) {
+      NetworkClient.instance.next();
+      RtcService.instance.leave();
+      _to(_Step.finding);
+    } else {
+      _to(_Step.finding);
+    }
+  }
+
+  void _leave() {
+    if (AppConfig.isLive) {
+      NetworkClient.instance.leaveCell();
+      RtcService.instance.leave();
+    }
+    _to(_Step.home);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final live = AppConfig.isLive;
     final Widget screen = switch (_step) {
       _Step.onboarding => OnboardingScreen(onDone: () => _to(_Step.home)),
-      _Step.home => HomeScreen(onPlay: () => _to(_Step.finding)),
-      _Step.finding => FindingScreen(onDone: _dropIntoCell),
+      _Step.home => HomeScreen(onPlay: _play),
+      _Step.finding => FindingScreen(onDone: _dropSimulated, waitForExternal: live),
       _Step.live => LiveScreen(
           key: ValueKey(_drop),
           cell: _cell!,
-          onNext: () => _to(_Step.finding),
-          onLeave: () => _to(_Step.home),
+          onNext: _next,
+          onLeave: _leave,
+          live: live,
         ),
     };
 
