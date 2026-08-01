@@ -15,6 +15,7 @@ import 'screens/onboarding_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/party_screen.dart';
 import 'screens/rules_screen.dart';
+import 'screens/mode_screen.dart';
 import 'screens/finding_screen.dart';
 import 'screens/live_screen.dart';
 
@@ -39,7 +40,7 @@ class RivlrApp extends StatelessWidget {
   }
 }
 
-enum _Step { boot, welcome, signin, profile, rules, permission, home, party, finding, live }
+enum _Step { boot, welcome, signin, profile, rules, permission, home, mode, party, finding, live }
 
 class _Root extends StatefulWidget {
   const _Root();
@@ -50,6 +51,7 @@ class _Root extends StatefulWidget {
 class _RootState extends State<_Root> {
   final _rng = Random();
   _Step _step = _Step.boot;
+  String _mode = 'hang'; // how the next room should run
   Cell? _cell;
   int _drop = 0;
   StreamSubscription<Map<String, dynamic>>? _netSub;
@@ -163,13 +165,14 @@ class _RootState extends State<_Root> {
       rounds: rounds,
       golden: m['golden'] as bool?,
       luckyId: m['luckyId'] as String?,
+      mode: m['mode'] as String?,
     );
   }
 
   // ---- simulated mode -------------------------------------------------------
   void _dropSimulated() {
     final s = AppSession.instance;
-    final cell = Cell.random(_rng, avoidKind: s.lastKind, recentHeads: s.recentHeads);
+    final cell = Cell.random(_rng, avoidKind: s.lastKind, recentHeads: s.recentHeads, mode: _mode);
     s.noteCell(cell);
     setState(() {
       _cell = cell;
@@ -179,8 +182,9 @@ class _RootState extends State<_Root> {
   }
 
   // ---- verbs ----------------------------------------------------------------
-  void _play() {
-    if (AppConfig.isLive) NetworkClient.instance.play();
+  void _play(String mode) {
+    _mode = mode;
+    if (AppConfig.isLive) NetworkClient.instance.play(mode);
     _to(_Step.finding);
   }
 
@@ -216,9 +220,10 @@ class _RootState extends State<_Root> {
           _to(_Step.home);
         }),
       _Step.home => MainShell(
-          onPlay: _play,
+          onPlay: () => _to(_Step.mode),
           onParty: () => _to(_Step.party),
           onSignOut: () => _to(_Step.welcome)),
+      _Step.mode => ModeScreen(onPick: _play, onBack: () => _to(_Step.home)),
       _Step.party => PartyScreen(onBack: () => _to(_Step.home)),
       _Step.finding => FindingScreen(onDone: _dropSimulated, waitForExternal: live),
       _Step.live => LiveScreen(

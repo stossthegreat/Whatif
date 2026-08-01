@@ -68,7 +68,7 @@ class NetworkClient {
     } catch (_) {}
   }
 
-  void play() => send({'t': 'play'});
+  void play([String mode = 'hang']) => send({'t': 'play', 'mode': mode});
   void next() => send({'t': 'next'});
   void leaveCell() => send({'t': 'leave'});
   void host() => send({'t': 'host'});

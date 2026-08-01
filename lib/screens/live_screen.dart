@@ -130,6 +130,14 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   // talk-first: games played this hang (simulated ceremony every 3rd)
   int _gamesPlayed = 0;
 
+  // blended games — the remaining local beat chain + beat counters for the pill
+  final List<RoundDef> _seqQueue = [];
+  int _beat = 1;
+  int _beats = 1;
+
+  /// roulette rooms: no choices — games auto-chain
+  bool get _roulette => (widget.cell.mode ?? 'hang') == 'roulette';
+
   Cell get cell => widget.cell;
   GameDef get game => cell.rounds[_round].game;
   List<String> get _prompt => cell.rounds[_round].prompt;
@@ -213,6 +221,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     if (idx >= cell.rounds.length) return;
     final ends = (m['endsAt'] as num?)?.toInt();
     _roundEndsAt = ends != null ? DateTime.fromMillisecondsSinceEpoch(ends) : null;
+    _beat = (m['beat'] as num?)?.toInt() ?? 1;
+    _beats = (m['beats'] as num?)?.toInt() ?? 1;
     // hard-sync to the server's clock: cancel every local fallback
     _idle?.cancel();
     _startTimer?.cancel();
@@ -471,9 +481,16 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _result = '';
       _voteCounts = {};
     });
+    // roulette: the wheel of fate rolls the next game on its own
+    if (_roulette && !_serverDriven) {
+      _idle = Timer(const Duration(seconds: 6), () {
+        if (mounted && _phase == _Phase.talk) _requestGame();
+      });
+    }
   }
 
-  /// Anyone starts a game — a chosen one or the dice.
+  /// Anyone starts one of THE TEN — a chosen game or the dice. Each game is a
+  /// blended chain of beats played back to back.
   void _requestGame([String? name]) {
     Buzz.commit();
     Sfx.pop();
@@ -481,19 +498,30 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       NetworkClient.instance.pickGame(name);
       return; // the {t:'round'} broadcast starts it for everyone
     }
-    // simulated / old server: roll locally
-    final strangers = cell.people.length;
-    GameDef? g;
-    if (name != null) {
-      for (final def in GameDef.pack) {
-        if (def.name == name && def.fits(strangers)) g = def;
-      }
-    }
-    final round = g != null
-        ? _localRound(g)
-        : Cell.rollRounds(_r, strangers, count: 1,
-            avoidKind: cell.rounds.isEmpty ? null : game.kind).first;
-    cell.rounds.add(round);
+    // simulated / old server: build the beat chain locally
+    final seq = (name != null ? SeqDef.byName(name) : null) ??
+        SeqDef.ten[_r.nextInt(SeqDef.ten.length)];
+    final beats = seq.beats.map((b) {
+      final chosen = [...b.pool[_r.nextInt(b.pool.length)]];
+      final head = chosen.removeAt(0);
+      chosen.shuffle(_r);
+      return RoundDef(
+        game: GameDef(
+          kind: b.kind, name: seq.name, hint: seq.hint,
+          minStrangers: 0, maxStrangers: 8,
+          prompts: const [['—']],
+        ),
+        prompt: [head, ...chosen],
+        secs: b.secs,
+      );
+    }).toList();
+
+    _seqQueue
+      ..clear()
+      ..addAll(beats.skip(1));
+    _beat = 1;
+    _beats = beats.length;
+    cell.rounds.add(beats.first);
     setState(() {
       _round = cell.rounds.length - 1;
       _pointPick = null;
@@ -505,20 +533,32 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _startGame();
   }
 
-  RoundDef _localRound(GameDef g) {
-    final chosen = [...g.prompts[_r.nextInt(g.prompts.length)]];
-    final head = chosen.removeAt(0);
-    chosen.shuffle(_r);
-    return RoundDef(game: g, prompt: [head, ...chosen]);
+  /// The next beat of the current blended game (simulated chaining).
+  void _nextLocalBeat() {
+    if (_seqQueue.isEmpty) return;
+    final next = _seqQueue.removeAt(0);
+    cell.rounds.add(next);
+    setState(() {
+      _round = cell.rounds.length - 1;
+      _beat++;
+      _answered = false;
+      _pointPick = null;
+      _selected = null;
+      _winnerIdx = null;
+      _split = const [];
+      _result = '';
+      _voteCounts = {};
+    });
+    _startGame();
   }
 
-  /// The game picker — warm openers up top, spark at the bottom.
+  /// The game picker — THE TEN, each with a living icon. Warm up top,
+  /// spark at the bottom.
   void _openPicker() {
     Buzz.tick();
-    final strangers = cell.people.length;
-    final fits = GameDef.pack.where((g) => g.fits(strangers) || strangers == 0).toList();
     const order = ['warm', 'wild', 'spark'];
-    fits.sort((a, b) => order.indexOf(a.vibe).compareTo(order.indexOf(b.vibe)));
+    final games = [...SeqDef.ten]
+      ..sort((a, b) => order.indexOf(a.vibe).compareTo(order.indexOf(b.vibe)));
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -526,7 +566,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       builder: (ctx) => SafeArea(
         child: Container(
           margin: const EdgeInsets.all(12),
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.72),
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.76),
           decoration: BoxDecoration(
             color: const Color(0xF20B0C10),
             borderRadius: BorderRadius.circular(28),
@@ -535,43 +575,25 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
               Text('PICK A GAME', style: T.eyebrow.copyWith(letterSpacing: 3, fontSize: 11)),
+              const SizedBox(height: 4),
+              Text('every one is a few rounds back to back', style: T.tiny),
               const SizedBox(height: 8),
               Flexible(
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 18),
                   shrinkWrap: true,
-                  itemCount: fits.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1, color: C.hair, indent: 18, endIndent: 18),
+                  itemCount: games.length,
                   itemBuilder: (ctx2, i) {
-                    final g = fits[i];
-                    return InkWell(
+                    final g = games[i];
+                    return _GameRow(
+                      seq: g,
+                      delay: Duration(milliseconds: 40 * i),
                       onTap: () {
                         Navigator.pop(ctx);
                         _requestGame(g.name);
                       },
-                      borderRadius: BorderRadius.circular(16),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(g.name,
-                                      style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
-                                  const SizedBox(height: 2),
-                                  Text(g.hint, style: T.tiny),
-                                ],
-                              ),
-                            ),
-                            if (g.vibe == 'spark')
-                              Text('SPARK', style: T.eyebrow.copyWith(color: C.sig, fontSize: 9, letterSpacing: 1.6)),
-                          ],
-                        ),
-                      ),
                     );
                   },
                 ),
@@ -600,6 +622,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       GameKind.rapidFire => 20,
       _ => 30, // tap-answer kinds — answer, then chat
     };
+    final beatSecs = cell.rounds[_round].secs;
+    if (beatSecs != null) secs = beatSecs;
     if (_serverDriven && _roundEndsAt != null) {
       // ride the server's clock so every phone's countdown agrees
       final left = _roundEndsAt!.difference(DateTime.now()).inMilliseconds / 1000;
@@ -706,8 +730,17 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       hues: [...cell.people.map((p) => p.hue), AppSession.instance.myHue],
     );
     setState(() => _phase = _Phase.reveal);
-    _gamesPlayed++;
     _idle?.cancel();
+
+    // simulated: more beats in this game? quick flip into the next beat.
+    if (!_serverDriven && _seqQueue.isNotEmpty) {
+      _idle = Timer(const Duration(milliseconds: 4200), () {
+        if (mounted && _phase == _Phase.reveal) _nextLocalBeat();
+      });
+      return;
+    }
+
+    _gamesPlayed++;
     // after the reveal breathes, the room goes back to talking. Every 3rd game
     // earns the ceremony. (Server rooms: 'talk'/'awards' messages drive this —
     // the local timers are only the safety net.)
@@ -1400,6 +1433,22 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   Widget _caption() {
     if (_phase == _Phase.drop) return const SizedBox.shrink();
     if (_phase == _Phase.talk) {
+      if (_roulette) {
+        // roulette rooms don't take requests — build the suspense instead
+        return Positioned(
+          left: 16,
+          right: 16,
+          bottom: 18,
+          child: Row(
+            children: [
+              const Text('🎰', style: TextStyle(fontSize: 18)),
+              const SizedBox(width: 10),
+              Text('next game rolling in…',
+                  style: T.sub.copyWith(color: Colors.white70, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        );
+      }
       return Positioned(
         left: 16,
         right: 16,
@@ -1476,7 +1525,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                     borderRadius: BorderRadius.circular(100),
                     border: Border.all(color: C.sig.withOpacity(0.5)),
                   ),
-                  child: Text('GAME ${_gamesPlayed + 1}',
+                  child: Text(_beats > 1 ? 'BEAT $_beat/$_beats' : 'GAME ${_gamesPlayed + 1}',
                       style: T.eyebrow.copyWith(color: Colors.white, letterSpacing: 1.2, fontSize: 9.5)),
                 ),
                 const SizedBox(width: 10),
@@ -1981,6 +2030,128 @@ class _ChaosOverlay extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One of THE TEN in the picker — a living emoji tile, the name, the recipe,
+/// and a beat count. Slides in with a tiny stagger.
+class _GameRow extends StatefulWidget {
+  const _GameRow({required this.seq, required this.onTap, this.delay = Duration.zero});
+  final SeqDef seq;
+  final VoidCallback onTap;
+  final Duration delay;
+
+  @override
+  State<_GameRow> createState() => _GameRowState();
+}
+
+class _GameRowState extends State<_GameRow> with SingleTickerProviderStateMixin {
+  late final AnimationController _in =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
+  late final AnimationController _bob =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 2400))
+        ..repeat(reverse: true);
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(widget.delay, () {
+      if (mounted) _in.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _in.dispose();
+    _bob.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final g = widget.seq;
+    return AnimatedBuilder(
+      animation: _in,
+      builder: (context, child) {
+        final v = Curves.easeOutCubic.transform(_in.value);
+        return Opacity(
+          opacity: v,
+          child: Transform.translate(offset: Offset(0, 16 * (1 - v)), child: child),
+        );
+      },
+      child: Press(
+        haptic: false,
+        scale: 0.97,
+        onTap: widget.onTap,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: C.hair),
+          ),
+          child: Row(
+            children: [
+              // the living icon
+              AnimatedBuilder(
+                animation: _bob,
+                builder: (context, _) {
+                  final t = Curves.easeInOut.transform(_bob.value);
+                  return Transform.translate(
+                    offset: Offset(0, -2 + 4 * t),
+                    child: Transform.rotate(
+                      angle: -0.06 + 0.12 * t,
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(15),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF1B1D23), Color(0xFF0A0B0E)],
+                          ),
+                          border: Border.all(color: C.hair2),
+                        ),
+                        child: Text(g.icon, style: const TextStyle(fontSize: 24)),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(g.name,
+                            style: T.body.copyWith(
+                                color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+                        if (g.vibe == 'spark') ...[
+                          const SizedBox(width: 8),
+                          Text('SPARK',
+                              style: T.eyebrow.copyWith(color: C.sig, fontSize: 8.5, letterSpacing: 1.6)),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(g.hint, style: T.tiny),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text('${g.beats.length} rounds',
+                  style: T.tiny.copyWith(color: C.tx3, fontSize: 10.5)),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right_rounded, size: 18, color: C.tx3),
+            ],
           ),
         ),
       ),

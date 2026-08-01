@@ -10,7 +10,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'crypto';
-import { rollGame, rollMemberCount, PACK, type GameKind } from './games.js';
+import { rollGame, rollMemberCount, SEQ_PACK, seqByName, type GameKind, type SeqDef } from './games.js';
 import { store, type User, type Meet, type Cell, type RoundWire } from './store.js';
 import { mintToken, LIVEKIT_URL } from './livekit.js';
 
@@ -50,6 +50,7 @@ function meetOk(meet: Meet, gender?: string): boolean {
 function compatible(a: User, b: User): boolean {
   return a.uid !== b.uid
     && !store.isBlocked(a.uid, b.uid)
+    && (a.mode ?? 'hang') === (b.mode ?? 'hang') // roulette matches roulette
     && meetOk(a.meet, b.gender)
     && meetOk(b.meet, a.gender);
 }
@@ -206,48 +207,45 @@ function assignTargets(rounds: RoundWire[], members: string[]) {
   for (const r of rounds) r.targetId = pick(members);
 }
 
-/// Start one game, chosen by the room ('name') or random. The round message
-/// carries the full game payload so the client never depends on pre-rolls.
+/// Start one of THE TEN — a blended sequence of beats. The room chose it by
+/// name, or the dice (or roulette mode) picked it. Beats auto-chain.
 function startPickedGame(cell: Cell, name?: string) {
   if (cell.inRound) return; // one game at a time
-  const strangers = Math.max(1, cell.members.length - 1);
-  let wire: RoundWire;
-  const chosen = name
-    ? PACK.find((g) => g.name === name && strangers >= g.minStrangers && strangers <= g.maxStrangers)
-    : undefined;
-  if (chosen) {
-    const prompt = [...chosen.prompts[Math.floor(Math.random() * chosen.prompts.length)]];
+  const seq: SeqDef = (name ? seqByName(name) : undefined) ?? pick(SEQ_PACK);
+
+  // roll one prompt per beat now, so the whole chain is decided up front
+  cell.seqBeats = seq.beats.map((b) => {
+    const prompt = [...b.pool[Math.floor(Math.random() * b.pool.length)]];
     const head = prompt.shift()!;
     for (let i = prompt.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [prompt[i], prompt[j]] = [prompt[j], prompt[i]];
     }
-    wire = {
-      kind: chosen.kind, name: chosen.name, hint: chosen.hint, prompt: [head, ...prompt],
+    return {
+      kind: b.kind, name: seq.name, hint: seq.hint, prompt: [head, ...prompt],
       targetId: pick(cell.members),
-      lieIdx: chosen.kind === 'twoTruths'
+      lieIdx: b.kind === 'twoTruths'
         ? Math.floor(Math.random() * Math.max(1, prompt.length)) : undefined,
-    };
-  } else {
-    const last = cell.rounds[cell.roundIdx];
-    const r = rollGame(strangers, last?.kind as GameKind | undefined, last?.name);
-    wire = {
-      kind: r.game.kind, name: r.game.name, hint: r.game.hint, prompt: r.prompt,
-      targetId: pick(cell.members),
-      lieIdx: r.game.kind === 'twoTruths'
-        ? Math.floor(Math.random() * Math.max(1, r.prompt.length - 1)) : undefined,
-    };
-  }
+      secs: b.secs,
+    } as RoundWire & { secs?: number };
+  });
+  cell.seqPos = 0;
+  startBeat(cell);
+}
 
+function startBeat(cell: Cell) {
+  const wire = cell.seqBeats?.[cell.seqPos] as (RoundWire & { secs?: number }) | undefined;
+  if (!wire) return;
   const idx = cell.roundIdx + 1;
   cell.roundIdx = idx;
   if (idx < cell.rounds.length) cell.rounds[idx] = wire; else cell.rounds.push(wire);
   cell.answers = new Map();
   cell.inRound = true;
 
-  const secs = secsFor(wire.kind);
+  const secs = wire.secs ?? secsFor(wire.kind);
   const endsAt = Date.now() + secs * 1000;
-  broadcastCell(cell.id, { t: 'round', idx, endsAt, game: wire });
+  broadcastCell(cell.id, { t: 'round', idx, endsAt, game: wire,
+    beat: cell.seqPos + 1, beats: cell.seqBeats?.length ?? 1 });
   if (cell.roundTimer) clearTimeout(cell.roundTimer);
   cell.roundTimer = setTimeout(() => {
     const c = store.cells.get(cell.id);
@@ -294,14 +292,29 @@ function endRound(cell: Cell) {
   }
 
   cell.inRound = false;
-  cell.gamesPlayed += 1;
   broadcastCell(cell.id, msg);
-  // the reveal breathes, then the room goes back to talking. Every 3rd game
-  // earns a ceremony first.
+
+  // more beats in this game? quick flip, straight into the next beat
+  if (cell.seqBeats && cell.seqPos < cell.seqBeats.length - 1) {
+    cell.seqPos += 1;
+    later(cell.id, 4000, (c) => startBeat(c));
+    return;
+  }
+
+  // game complete — the reveal breathes, then back to the hang. Every 3rd
+  // game earns a ceremony. Roulette rooms roll the next game automatically.
+  cell.seqBeats = undefined;
+  cell.gamesPlayed += 1;
   if (cell.gamesPlayed % 3 === 0) {
     later(cell.id, 7000, (c) => sendAwards(c));
+    if (cell.mode === 'roulette') {
+      later(cell.id, 22000, (c) => { if (!c.inRound) startPickedGame(c); });
+    }
   } else {
     later(cell.id, 7000, (c) => broadcastCell(c.id, { t: 'talk' }));
+    if (cell.mode === 'roulette') {
+      later(cell.id, 14000, (c) => { if (!c.inRound) startPickedGame(c); });
+    }
   }
 }
 
@@ -340,11 +353,12 @@ async function formCell(memberIds: string[]) {
 
   const cellId = randomUUID();
   const room = `cell_${cellId}`;
+  const mode = (store.users.get(live[0])?.mode ?? 'hang');
   const cell: Cell = {
     id: cellId, room, members: [...live], kind: rounds[0].kind as GameKind,
     rounds, roundIdx: -1, answers: new Map(), votes: new Map(),
     golden: Math.random() < 0.04, luckyId: pick(live), timers: [],
-    gamesPlayed: 0, inRound: false,
+    gamesPlayed: 0, inRound: false, mode, seqPos: 0,
   };
   store.cells.set(cellId, cell);
 
@@ -359,12 +373,13 @@ async function formCell(memberIds: string[]) {
     });
     const token = await mintToken(room, id, u.name);
     send(u, { t: 'cell', room, url: LIVEKIT_URL, token, people: others,
-      game: rounds[0], rounds, golden: cell.golden, luckyId: cell.luckyId });
+      game: rounds[0], rounds, golden: cell.golden, luckyId: cell.luckyId, mode });
   }
 
-  // talk-first: the room opens as a hang. Games start when the room picks one
-  // (or hits Random). Chaos still strikes on its own.
+  // talk-first: the room opens as a hang. In HANG mode games start when the
+  // room picks one; in ROULETTE they auto-chain — no choices, that's the deal.
   later(cellId, 1300, (c) => broadcastCell(c.id, { t: 'talk' }));
+  if (mode === 'roulette') later(cellId, 6000, (c) => startPickedGame(c));
   const chaosCount = 1 + Math.floor(Math.random() * 2);
   for (let i = 0; i < chaosCount; i++) {
     const [e, x] = pick(CHAOS_CARDS);
@@ -487,7 +502,10 @@ wss.on('connection', (ws) => {
         notifyLive(user);
         break;
       }
-      case 'play': leaveParty(id); leaveCell(user); enqueue(user); break;
+      case 'play':
+        if (m.mode === 'roulette' || m.mode === 'hang') user.mode = m.mode;
+        leaveParty(id); leaveCell(user); enqueue(user);
+        break;
       case 'next': leaveCell(user); enqueue(user); break;
       case 'leave': dequeue(id); leaveCell(user); user.state = 'idle'; break;
       case 'host': {
@@ -514,7 +532,10 @@ wss.on('connection', (ws) => {
       case 'leaveParty': leaveParty(id); break;
       case 'pickGame': {
         const cell = user.cellId ? store.cells.get(user.cellId) : undefined;
-        if (cell) startPickedGame(cell, typeof m.name === 'string' ? m.name : undefined);
+        // roulette rooms don't take requests — the wheel of fate runs them
+        if (cell && cell.mode !== 'roulette') {
+          startPickedGame(cell, typeof m.name === 'string' ? m.name : undefined);
+        }
         break;
       }
       case 'startParty': {
@@ -571,7 +592,11 @@ wss.on('connection', (ws) => {
             later(cell.id, 4200, (c) => {
               c.reviveRounds = undefined; // allow a fresh reroll next ceremony
               c.inRound = false;
+              c.seqBeats = undefined;
               broadcastCell(c.id, { t: 'talk' }); // revived room = fresh hang
+              if (c.mode === 'roulette') {
+                later(c.id, 6000, (c2) => { if (!c2.inRound) startPickedGame(c2); });
+              }
             });
             const [e, x] = pick(CHAOS_CARDS);
             later(cell.id, 12000 + Math.floor(Math.random() * 20000), (c) =>

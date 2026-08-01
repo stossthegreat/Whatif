@@ -12,6 +12,7 @@ export interface User {
   gender?: string;   // 'Woman' | 'Man' | ...
   meet: Meet;        // who they want to meet
   state: 'idle' | 'queued' | 'incell';
+  mode?: 'roulette' | 'hang'; // how they want their rooms to run
   cellId: string | null;
   queuedAt: number;
   lastPong: number;
@@ -45,6 +46,9 @@ export interface Cell {
   roundTimer?: NodeJS.Timeout;   // the current round's deadline (cancellable alone)
   gamesPlayed: number;           // ceremony fires every 3rd game
   inRound: boolean;              // a game is currently running
+  mode: 'roulette' | 'hang';     // roulette = games auto-chain, no choices
+  seqBeats?: RoundWire[];        // the current game's remaining beat chain
+  seqPos: number;                // index into seqBeats
 }
 
 /// In-memory store. Deliberately behind one object so it can be swapped for
