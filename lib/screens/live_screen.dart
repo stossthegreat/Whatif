@@ -8,6 +8,7 @@ import '../core/sound.dart';
 import '../models/game.dart';
 import '../models/person.dart';
 import '../net/network_client.dart';
+import '../net/p2p_service.dart';
 import '../net/rtc_service.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
@@ -1113,9 +1114,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     if (widget.live) {
-      return ValueListenableBuilder<int>(
-        valueListenable: RtcService.instance.rev,
-        builder: (context, _, __) => _scaffold(context),
+      return AnimatedBuilder(
+        animation: Listenable.merge([RtcService.instance.rev, P2PService.instance.rev]),
+        builder: (context, _) => _scaffold(context),
       );
     }
     return _scaffold(context);
@@ -1343,8 +1344,17 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       win: _winnerIdx == i && _phase == _Phase.reveal,
       dimmed: _phase == _Phase.reveal && _winnerIdx != null && _winnerIdx != i && game.kind == GameKind.point,
       saved: AppSession.instance.isSaved(p.sparkKey),
-      videoChild: widget.live ? VideoView(track: RtcService.instance.trackFor(p.id)) : null,
-      connecting: widget.live && RtcService.instance.trackFor(p.id) == null,
+      // P2P carries the (single) remote face when active; LiveKit otherwise.
+      // Remote P2P is NEVER mirrored (see the doctrine in video_view.dart).
+      videoChild: !widget.live
+          ? null
+          : P2PService.instance.active
+              ? P2PVideoView(renderer: P2PService.instance.remoteRenderer)
+              : VideoView(track: RtcService.instance.trackFor(p.id)),
+      connecting: widget.live &&
+          (P2PService.instance.active || P2PService.instance.attempting
+              ? !P2PService.instance.remoteReady
+              : RtcService.instance.trackFor(p.id) == null),
       onTap: canPoint ? () => _resolvePoint(i) : null,
       onReport: () => _openReport(p),
       onSave: () => _save(p),
@@ -1363,12 +1373,21 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     );
   }
 
-  /// Local LiveKit video. The camera's first frames can carry stale rotation
-  /// metadata (sideways) — so we hold the placeholder until the track actually
-  /// exists, keep the video invisible ~350ms more while those frames pass,
-  /// then fade in. The old version started its fade at widget build, which
-  /// expired before the camera even warmed up — masking nothing.
+  /// Local video. P2P first (mirror:true is MANDATORY there — raw
+  /// getUserMedia has no auto-mirror layer, see video_view.dart); LiveKit
+  /// otherwise. The fade holds back the camera's first frames, which can
+  /// carry stale rotation metadata (sideways) on both pipelines.
   Widget _selfVideo() {
+    final p2p = P2PService.instance;
+    if (p2p.attempting || p2p.active) {
+      return TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 950),
+        curve: const Interval(0.38, 1.0, curve: Curves.easeOut),
+        builder: (context, v, child) => Opacity(opacity: v, child: child),
+        child: P2PVideoView(renderer: p2p.localRenderer, mirror: true),
+      );
+    }
     final t = RtcService.instance.localTrack;
     if (t == null) return const ColoredBox(color: C.char2);
     return TweenAnimationBuilder<double>(

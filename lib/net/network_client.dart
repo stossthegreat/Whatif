@@ -156,4 +156,5 @@ class NetworkClient {
       send({'t': 'callInvite', 'to': to, 'video': video});
   void callAccept(String callId) => send({'t': 'callAccept', 'callId': callId});
   void callDecline(String callId) => send({'t': 'callDecline', 'callId': callId});
+  void rtcSignal(String to, Map<String, dynamic> d) => send({'t': 'rtc', 'to': to, 'd': d});
 }

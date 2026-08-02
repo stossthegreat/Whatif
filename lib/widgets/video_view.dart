@@ -39,3 +39,27 @@ class VideoView extends StatelessWidget {
     );
   }
 }
+
+/// Direct P2P rendering (raw flutter_webrtc renderer, texture path — the same
+/// pipeline the LiveKit fix uses, so rotation is baked into the pixels).
+///
+/// MIRRORING DOCTRINE for P2P (read the saga above before touching):
+/// raw getUserMedia has NO auto-mirror layer — unlike LiveKit's renderer.
+/// Therefore the LOCAL front camera MUST pass mirror: true here, and REMOTE
+/// views MUST pass mirror: false. Getting this backwards recreates the
+/// "lean left, image goes right" bug.
+class P2PVideoView extends StatelessWidget {
+  const P2PVideoView({super.key, required this.renderer, this.mirror = false});
+  final rtc.RTCVideoRenderer renderer;
+  final bool mirror;
+
+  @override
+  Widget build(BuildContext context) {
+    return rtc.RTCVideoView(
+      renderer,
+      mirror: mirror,
+      objectFit: rtc.RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+      filterQuality: FilterQuality.medium,
+    );
+  }
+}

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'p2p_service.dart';
 
 /// All LiveKit usage is isolated here (and in widgets/video_view.dart). Connects
 /// to a LiveKit room, publishes the local camera AND microphone, and exposes
@@ -19,6 +20,7 @@ class RtcService {
 
   Future<void> setMic(bool on) async {
     micOn = on;
+    P2PService.instance.setMic(on); // whichever pipeline carries the room
     try {
       await _room?.localParticipant?.setMicrophoneEnabled(on);
     } catch (_) {}
@@ -89,6 +91,7 @@ class RtcService {
   }
 
   Future<void> leave() async {
+    await P2PService.instance.leave(); // both pipelines always die together
     final room = _room;
     _room = null;
     if (room != null) {

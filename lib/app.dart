@@ -8,6 +8,7 @@ import 'core/push.dart';
 import 'models/game.dart';
 import 'models/person.dart';
 import 'net/network_client.dart';
+import 'net/p2p_service.dart';
 import 'net/rtc_service.dart';
 import 'state/chat.dart';
 import 'state/session.dart';
@@ -236,6 +237,10 @@ class _RootState extends State<_Root> {
         }
       case 'sparkLive':
         if (m['name'] is String) AppSession.instance.setSparkLive(m['name'] as String, true);
+      case 'rtc':
+        final from = m['from'] as String?;
+        final d = (m['d'] as Map?)?.cast<String, dynamic>();
+        if (from != null && d != null) P2PService.instance.onSignal(from, d);
     }
   }
 
@@ -257,8 +262,26 @@ class _RootState extends State<_Root> {
     });
     final url = (m['url'] as String?) ?? '';
     final token = (m['token'] as String?) ?? '';
-    // voice calls start camera-off; flipping it on mid-call upgrades to video
-    RtcService.instance.join(url, token, camera: !isCall || _pendingCallVideo);
+    // P2P: exactly-two stranger rooms go phone-to-phone; LiveKit is the
+    // automatic fallback (and still carries groups + calls). Worst case is
+    // exactly the pre-P2P app.
+    final wantP2p = m['p2p'] == true && cell.people.length == 1 &&
+        cell.people.first.id != null && NetworkClient.instance.myId != null;
+    if (wantP2p) {
+      final peerId = cell.people.first.id!;
+      final myId = NetworkClient.instance.myId!;
+      P2PService.instance.onFailed = () {
+        RtcService.instance.join(url, token); // the room continues on LiveKit
+      };
+      P2PService.instance.attempt(
+        peerId: peerId,
+        offerer: myId.compareTo(peerId) < 0, // exactly one side offers
+      );
+    } else {
+      P2PService.instance.leave();
+      // voice calls start camera-off; toggling upgrades to video mid-call
+      RtcService.instance.join(url, token, camera: !isCall || _pendingCallVideo);
+    }
     setState(() {
       _cell = cell;
       _drop++;
