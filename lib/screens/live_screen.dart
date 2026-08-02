@@ -11,7 +11,9 @@ import '../net/network_client.dart';
 import '../net/p2p_service.dart';
 import '../net/rtc_service.dart';
 import '../state/session.dart';
+import '../state/social.dart';
 import '../theme/tokens.dart';
+import '../widgets/identity_orb.dart';
 import '../widgets/countdown_ring.dart';
 import '../widgets/glass.dart';
 import '../widgets/presence_tile.dart';
@@ -64,6 +66,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   int _lastSec = -1;
 
   int? _pointPick;
+  bool _pointSelfPick = false; // duo rooms vote with buttons — "me" picked
+  final Set<String> _friendReqSent = {}; // uids already friend-requested from this room
   int? _selected;
   int? _winnerIdx;
   String _result = '';
@@ -235,6 +239,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       // per-round tile indices can be stale after a reflow — clear them
       _voteCounts = {};
       _pointPick = null;
+      _pointSelfPick = false;
       if (_winnerIdx != null && _winnerIdx! >= cell.people.length) _winnerIdx = null;
     });
     _toast('@$name just dropped in 👋');
@@ -250,6 +255,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       cell.people.removeAt(i);
       _voteCounts = {};
       _pointPick = null;
+      _pointSelfPick = false;
       _winnerIdx = null;
       if (_target > cell.people.length) _target = cell.people.length;
     });
@@ -283,6 +289,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _round = idx;
       _answered = false;
       _pointPick = null;
+      _pointSelfPick = false;
       _selected = null;
       _winnerIdx = null;
       _split = const [];
@@ -584,6 +591,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     setState(() {
       _round = cell.rounds.length - 1;
       _pointPick = null;
+      _pointSelfPick = false;
       _selected = null;
       _winnerIdx = null;
       _split = const [];
@@ -602,6 +610,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _beat++;
       _answered = false;
       _pointPick = null;
+      _pointSelfPick = false;
       _selected = null;
       _winnerIdx = null;
       _split = const [];
@@ -822,6 +831,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _round = 0;
       _answered = false;
       _pointPick = null;
+      _pointSelfPick = false;
       _selected = null;
       _winnerIdx = null;
       _split = const [];
@@ -913,6 +923,30 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     final winner = cell.people.length == 1 ? 0 : _r.nextInt(cell.people.length);
     setState(() {
       _pointPick = userPick;
+      _winnerIdx = winner;
+      _result = 'the room pointed at @${cell.people[winner].name}';
+    });
+    Timer(const Duration(milliseconds: 850), _toReveal);
+  }
+
+  /// Duo rooms only: vote for YOURSELF. The server tally accepts any member
+  /// id including your own — groups express this by tapping faces, but with
+  /// one face on screen it needs a button.
+  void _resolvePointSelf() {
+    if (_answered) return;
+    if (_serverDriven) {
+      _answered = true;
+      Buzz.commit();
+      setState(() => _pointSelfPick = true);
+      final me = NetworkClient.instance.myId;
+      if (me != null) NetworkClient.instance.answer(_round, me);
+      return;
+    }
+    _answered = true;
+    Buzz.commit();
+    final winner = cell.people.length == 1 ? 0 : _r.nextInt(cell.people.length);
+    setState(() {
+      _pointSelfPick = true;
       _winnerIdx = winner;
       _result = 'the room pointed at @${cell.people[winner].name}';
     });
@@ -1039,6 +1073,99 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _toast('✨ sparked @${p.name} — they’re in your people now');
     Buzz.commit();
     setState(() {});
+  }
+
+  /// The in-room friends sheet — see who you're with, add them as friends.
+  /// Requests go out instantly; if they add you back you're friends and
+  /// messaging unlocks. No luck, no waiting for the rating prompt.
+  void _openAddPeople() {
+    Buzz.tick();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          final friends = SocialState.instance.friends.map((f) => f.uid).toSet();
+          return Padding(
+            padding: const EdgeInsets.all(12),
+            child: Glass(
+              radius: 26,
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    const Icon(Icons.group_rounded, size: 20, color: C.sig),
+                    const SizedBox(width: 10),
+                    Text('in this room', style: T.eyebrow.copyWith(fontSize: 12)),
+                  ]),
+                  const SizedBox(height: 14),
+                  for (final p in cell.people)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        children: [
+                          IdentityOrb(hue: p.hue, size: 42),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text('@${p.name}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: T.body.copyWith(
+                                    color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15.5)),
+                          ),
+                          const SizedBox(width: 10),
+                          _addState(p, friends, setSheet),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Friends can message you and find you again — rooms vanish, people don’t.',
+                    style: T.tiny.copyWith(color: C.tx3, fontSize: 12, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _addState(Person p, Set<String> friendUids, StateSetter setSheet) {
+    final uid = p.uid;
+    if (uid == null || !widget.live) {
+      return Text('—', style: T.tiny.copyWith(color: C.tx3));
+    }
+    if (friendUids.contains(uid)) {
+      return Text('friends ✓',
+          style: T.tiny.copyWith(color: C.sig, fontWeight: FontWeight.w800, fontSize: 12.5));
+    }
+    if (_friendReqSent.contains(uid)) {
+      return Text('requested ✓',
+          style: T.tiny.copyWith(color: C.tx2, fontWeight: FontWeight.w800, fontSize: 12.5));
+    }
+    return Press(
+      haptic: false,
+      onTap: () {
+        Buzz.commit();
+        NetworkClient.instance.friendRequest(uid);
+        _friendReqSent.add(uid);
+        setSheet(() {});
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: C.sig,
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: Text('Add friend',
+            style: T.tiny.copyWith(
+                color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12.5)),
+      ),
+    );
   }
 
   void _openReport(Person p) {
@@ -1529,6 +1656,17 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 18),
           ],
+          if (!_isCall) ...[
+            // WhatsApp-style people button — add whoever you're with as a
+            // friend right here, without waiting for the rating prompt.
+            _RailAction(
+              icon: Icons.person_add_alt_1_rounded,
+              iconColor: Colors.white,
+              label: 'add',
+              onTap: _openAddPeople,
+            ),
+            const SizedBox(height: 18),
+          ],
           _RailAction(
             icon: Icons.favorite_rounded,
             iconColor: C.live,
@@ -1696,11 +1834,20 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   List<Widget> _inputs() {
     switch (game.kind) {
       case GameKind.point:
+        // 1:1 rooms have exactly one face on screen — "tap a face" is
+        // meaningless, so the vote becomes two buttons: them or you.
+        if (cell.people.length == 1) {
+          return [
+            _pointBtn('@${cell.people.first.name}', _pointPick == 0, () => _resolvePoint(0)),
+            const SizedBox(height: 8),
+            _pointBtn('me 🙋', _pointSelfPick, _resolvePointSelf),
+          ];
+        }
         return [
           Row(mainAxisSize: MainAxisSize.min, children: [
             const Icon(Icons.touch_app_rounded, size: 16, color: C.sig),
             const SizedBox(width: 8),
-            Text('tap a face', style: T.sub.copyWith(color: Colors.white)),
+            Text('tap a face to vote', style: T.sub.copyWith(color: Colors.white)),
           ]),
         ];
       case GameKind.poll:
@@ -1742,6 +1889,25 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           ]),
         ];
     }
+  }
+
+  /// Vote button for duo point rounds — same glass style as _optBtn but with
+  /// an explicit tap handler instead of the shared game-kind switch.
+  Widget _pointBtn(String label, bool sel, VoidCallback onVote) {
+    return Press(
+      onTap: _answered ? null : onVote,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        decoration: BoxDecoration(
+          color: sel ? C.sig.withOpacity(0.9) : const Color(0x59000000),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: sel ? C.sig : const Color(0x40FFFFFF)),
+        ),
+        child: Text(label,
+            style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+      ),
+    );
   }
 
   Widget _optBtn(String label, int index) {

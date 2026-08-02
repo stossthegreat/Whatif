@@ -88,7 +88,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (x == null || !mounted) return;
       setState(() => _uploading = true);
       final bytes = await x.readAsBytes();
-      final id = await Api.uploadMedia(bytes, kind: 'photo', mime: 'image/jpeg');
+      final id = await Api.uploadMedia(bytes, kind: 'photo');
       if (!mounted) return;
       setState(() => _uploading = false);
       if (id != null) {

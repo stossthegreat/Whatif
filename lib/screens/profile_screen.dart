@@ -115,7 +115,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (x == null || !mounted) return;
       setState(() => _photoUploading = true);
       final bytes = await x.readAsBytes();
-      final id = await Api.uploadMedia(bytes, kind: 'avatar', mime: 'image/jpeg');
+      final id = await Api.uploadMedia(bytes, kind: 'avatar');
       if (!mounted) return;
       setState(() {
         _photoUploading = false;

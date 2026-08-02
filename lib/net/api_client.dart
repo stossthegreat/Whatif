@@ -13,19 +13,48 @@ class Api {
   static String get _token => NetworkClient.instance.httpToken;
   static bool get ready => _base.isNotEmpty && _token.isNotEmpty;
 
-  /// Upload bytes; returns the media id or null.
-  static Future<int?> uploadMedia(Uint8List bytes, {required String kind, required String mime}) async {
-    if (!ready) return null;
+  /// Why the last uploadMedia returned null — surfaced in snackbars so a
+  /// failing photo tells the truth instead of a generic shrug.
+  static String? lastUploadError;
+
+  /// The server validates magic bytes, so the declared mime must match what
+  /// the picker ACTUALLY returned (iOS can hand back PNG where JPEG was
+  /// assumed — that mismatch used to 415 the upload).
+  static String sniffImageMime(Uint8List b) {
+    if (b.length > 2 && b[0] == 0x89 && b[1] == 0x50) return 'image/png';
+    if (b.length > 12 && b[8] == 0x57 && b[9] == 0x45 && b[10] == 0x42 && b[11] == 0x50) {
+      return 'image/webp';
+    }
+    return 'image/jpeg';
+  }
+
+  /// Upload bytes; returns the media id or null. Pass [mime] for audio;
+  /// images are sniffed from the bytes when it's omitted.
+  static Future<int?> uploadMedia(Uint8List bytes, {required String kind, String? mime}) async {
+    if (!ready) {
+      lastUploadError = 'not connected yet — give it a second and retry';
+      return null;
+    }
     try {
       final r = await http.post(
         Uri.parse('$_base/api/media?kind=$kind'),
-        headers: {'content-type': mime, 'authorization': 'Bearer $_token'},
+        headers: {'content-type': mime ?? sniffImageMime(bytes), 'authorization': 'Bearer $_token'},
         body: bytes,
       ).timeout(const Duration(seconds: 20));
-      if (r.statusCode != 200) return null;
+      if (r.statusCode == 404) {
+        // old server without the media API — tell it like it is
+        lastUploadError = 'server update pending — photos land after the next deploy';
+        return null;
+      }
+      if (r.statusCode != 200) {
+        lastUploadError = 'upload failed (${r.statusCode}) — try a smaller photo';
+        return null;
+      }
       final j = jsonDecode(r.body) as Map<String, dynamic>;
+      lastUploadError = null;
       return (j['id'] as num?)?.toInt();
     } catch (_) {
+      lastUploadError = 'no connection — check your signal and retry';
       return null;
     }
   }

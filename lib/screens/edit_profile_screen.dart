@@ -109,7 +109,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (x == null || !mounted) return;
       setState(() => _uploading = true);
       final bytes = await x.readAsBytes();
-      final id = await Api.uploadMedia(bytes, kind: 'avatar', mime: 'image/jpeg');
+      final id = await Api.uploadMedia(bytes, kind: 'avatar');
       if (!mounted) return;
       setState(() {
         _uploading = false;
@@ -119,7 +119,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           behavior: SnackBarBehavior.floating,
           backgroundColor: C.char2,
-          content: Text('photo didn’t upload — try again',
+          content: Text(Api.lastUploadError ?? 'photo didn’t upload — try again',
               style: T.body.copyWith(color: Colors.white)),
         ));
       }
