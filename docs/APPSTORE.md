@@ -8,19 +8,65 @@ bottom when submitting.
 | Field | Value |
 |---|---|
 | Name | Rivlr |
-| Subtitle (30 chars) | Live video. Real strangers. |
+| Subtitle (30 chars) | You never know who you'll get |
 | Bundle ID | com.rivlr.app |
 | Category | Social Networking |
 | Age rating | **17+** (see §3) |
 | Price | Free |
 
-Promotional text (170 chars):
-> Press play and you're live with someone new — talk, play ten unhinged
-> games, spark with people you click with. Never recorded. You never know
-> who you'll get.
+Promotional text (160/170 chars):
+> Press play — seconds later you're face to face with someone new. Talk,
+> laugh, play games built to break the ice. Never recorded. You never
+> know who you'll get.
 
-Keywords (100 chars):
-`live,video chat,random,strangers,games,social,meet people,omegle,party,chaos`
+Keywords (97/100 chars — NO trademarked app names; guideline 2.3.7):
+`live,video,chat,random,strangers,meet,new,people,friends,games,party,fun,talk,social,speed,dating`
+
+Description: see §1.1 below — paste verbatim.
+
+### 1.1 · Description
+
+```
+One button. A real person. Live.
+
+Rivlr drops you into live video with people you've never met — sometimes
+one, sometimes a whole room. No profiles to swipe, no feeds to scroll, no
+scripts. Just faces, voices, and whatever happens next.
+
+TWO WAYS IN
+• ROULETTE — no choices, no mercy. The room runs itself: games fire on
+  their own, the wheel decides who stays.
+• HANG — meet someone, actually talk, and start a game whenever the vibe
+  calls for it.
+
+TEN GAMES BUILT TO BREAK THE ICE
+Face Off. Eye Contact. Hot Takes. Storytime. Rizz Off. Spin the Bottle.
+Confessions. Would You Rather. Impressions. Roast Circle. Fast,
+multi-round, and built to make strangers laugh inside the first minute.
+The room votes. The wheel decides. Awards get handed out.
+
+SPARK WITH PEOPLE YOU CLICK WITH
+Save someone mid-room. If they save you back, it's mutual — you'll know
+when they're live, and they stay your people across every session.
+
+ROOMS WITH FRIENDS
+One code, four letters. Share it anywhere and your friends drop straight
+in — then the same chaos engine runs the whole group.
+
+NEVER RECORDED. EVER.
+Rooms aren't saved, streamed, or scraped. No archive exists. That's why
+people act like themselves here — real reactions from real people.
+
+BUILT SAFE
+18+ only. House rules everyone agrees to before entering. Report or block
+anyone in one tap — repeat offenders are removed automatically, and
+blocked people can never be matched with you again.
+
+Chaos hour every hour. Golden rooms if you're lucky. Awards if you're
+funny.
+
+You never know who you'll get.
+```
 
 ## 2 · Privacy nutrition labels (App Privacy section)
 
