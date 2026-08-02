@@ -343,7 +343,7 @@ class _PersonRow extends StatelessWidget {
                 ],
               ),
             ),
-            if (spark.liveNow)
+            if (friend.online)
               Text('LIVE', style: T.tiny.copyWith(color: C.live, fontWeight: FontWeight.w900, letterSpacing: 1)),
           ],
         ),
