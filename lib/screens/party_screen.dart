@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../config.dart';
+import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
 import '../net/network_client.dart';
@@ -46,6 +47,7 @@ class _PartyScreenState extends State<PartyScreen> {
     if (AppConfig.isLive) {
       _sub = NetworkClient.instance.events.listen(_onNet);
       NetworkClient.instance.host();
+      Track.event('party_hosted');
     }
   }
 
@@ -59,6 +61,11 @@ class _PartyScreenState extends State<PartyScreen> {
   void _onNet(Map<String, dynamic> m) {
     if (!mounted) return;
     switch (m['t']) {
+      // the socket dropped and reconnected — the old party died with the old
+      // connection, so re-host: a fresh live code replaces the dead one on
+      // screen instead of silently showing a code nobody can join.
+      case 'welcome':
+        NetworkClient.instance.host();
       case 'party':
         setState(() {
           _error = null;
@@ -85,6 +92,7 @@ class _PartyScreenState extends State<PartyScreen> {
   void _share() {
     final code = _code;
     if (code == null) return;
+    Track.event('party_share');
     Buzz.commit();
     Sfx.pop();
     Share.share(
@@ -97,11 +105,18 @@ class _PartyScreenState extends State<PartyScreen> {
     if (code.length < 4) return;
     Buzz.commit();
     FocusScope.of(context).unfocus();
+    if (code == _code) {
+      // typing your own code back in — gently point at the share button
+      setState(() => _error = 'that’s your room — send the code to a friend');
+      return;
+    }
+    Track.event('party_join_attempt');
     NetworkClient.instance.joinParty(code);
   }
 
   void _start() {
     if (!_isHost || _starting) return;
+    Track.event('party_started', {'people': _members.length});
     setState(() => _starting = true);
     Buzz.pop();
     Sfx.match();

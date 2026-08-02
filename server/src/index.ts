@@ -567,6 +567,14 @@ wss.on('connection', (ws) => {
       }
       case 'joinParty': {
         const code = String(m.code ?? '').toUpperCase().trim();
+        // Joining the party you're already in (e.g. typing your own code) must
+        // be a no-op success. The old flow left-then-rejoined — leaving a solo
+        // party DELETES it from the map, so the host ended up holding a ghost
+        // code and every friend after that got "code doesn't exist".
+        if (partyByUser.get(id) === code) {
+          const own = parties.get(code);
+          if (own) { send(user, partyState(own)); break; }
+        }
         const p = parties.get(code);
         if (!p || p.members.length >= 8) {
           send(user, { t: 'partyError', reason: !p ? 'That code doesn’t exist' : 'That room is full' });

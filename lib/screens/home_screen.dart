@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../config.dart';
+import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../models/game.dart';
 import '../state/session.dart';
@@ -370,7 +371,7 @@ class _GameCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final spark = def.vibe == 'spark';
     return Press(
-      onTap: () { Buzz.tick(); onTap(); },
+      onTap: () { Buzz.tick(); Track.event('trending_tap', {'game': def.name}); onTap(); },
       child: Container(
         width: 150,
         padding: const EdgeInsets.all(14),
@@ -453,7 +454,7 @@ class _ChaosBannerState extends State<_ChaosBanner> {
     final fg = _live ? Colors.black : Colors.white;
     final fg2 = _live ? Colors.black.withOpacity(0.6) : C.tx3;
     return Press(
-      onTap: () { Buzz.tick(); widget.onTap(); },
+      onTap: () { Buzz.tick(); Track.event('chaos_banner_tap'); widget.onTap(); },
       child: AnimatedContainer(
         duration: M.base,
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),

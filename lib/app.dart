@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'config.dart';
+import 'core/analytics.dart';
 import 'models/game.dart';
 import 'models/person.dart';
 import 'net/network_client.dart';
@@ -80,7 +81,10 @@ class _RootState extends State<_Root> {
     super.dispose();
   }
 
-  void _to(_Step s) => setState(() => _step = s);
+  void _to(_Step s) {
+    Track.screen(s.name);
+    setState(() => _step = s);
+  }
 
   // ---- live mode (server-driven) -------------------------------------------
   void _onNet(Map<String, dynamic> m) {
@@ -109,6 +113,10 @@ class _RootState extends State<_Root> {
   void _onCell(Map<String, dynamic> m) {
     final cell = _cellFromServer(m);
     AppSession.instance.noteCell(cell);
+    Track.event('matched', {
+      'people': cell.people.length,
+      'mode': cell.mode ?? 'hang',
+    });
     final url = (m['url'] as String?) ?? '';
     final token = (m['token'] as String?) ?? '';
     RtcService.instance.join(url, token); // fire-and-forget; tiles fill on rev
@@ -188,11 +196,13 @@ class _RootState extends State<_Root> {
   // ---- verbs ----------------------------------------------------------------
   void _play(String mode) {
     _mode = mode;
+    Track.event('play_pressed', {'mode': mode});
     if (AppConfig.isLive) NetworkClient.instance.play(mode);
     _to(_Step.finding);
   }
 
   void _next() {
+    Track.event('next_room');
     if (AppConfig.isLive) {
       NetworkClient.instance.next();
       RtcService.instance.leave();
@@ -203,6 +213,7 @@ class _RootState extends State<_Root> {
   }
 
   void _leave() {
+    Track.event('left_room');
     if (AppConfig.isLive) {
       NetworkClient.instance.leaveCell();
       RtcService.instance.leave();
@@ -221,6 +232,7 @@ class _RootState extends State<_Root> {
       _Step.rules => RulesScreen(onAgree: () => _to(_Step.permission)),
       _Step.permission => OnboardingScreen(onDone: () {
           AppSession.instance.completeOnboarding();
+          Track.event('onboarding_done');
           _to(_Step.home);
         }),
       _Step.home => MainShell(
