@@ -5,11 +5,13 @@ import '../config.dart';
 import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../models/game.dart';
+import '../state/chat.dart';
 import '../state/session.dart';
 import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
+import 'chats_screen.dart';
 import 'friends_screen.dart';
 import 'settings_screen.dart';
 
@@ -95,6 +97,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       const Wordmark(size: 30),
                       const Spacer(),
                       const _RequestsChip(),
+                      const _MessagesBtn(),
+                      const SizedBox(width: 8),
                       const _LivePill(),
                       const SizedBox(width: 8),
                       _RoundBtn(
@@ -628,6 +632,49 @@ class _RecentlyMetRail extends StatelessWidget {
             ),
             const SizedBox(height: 22),
           ],
+        );
+      },
+    );
+  }
+}
+
+/// Messages entry — badge shows total unread across every conversation.
+class _MessagesBtn extends StatelessWidget {
+  const _MessagesBtn();
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: ChatStore.instance,
+      builder: (context, _) {
+        final n = ChatStore.instance.unreadTotal;
+        return Press(
+          onTap: () { Buzz.tick(); ChatsScreen.push(context); },
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 34, height: 34,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
+                child: const Icon(Icons.chat_bubble_outline_rounded, size: 16, color: C.tx2),
+              ),
+              if (n > 0)
+                Positioned(
+                  right: -4, top: -4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    constraints: const BoxConstraints(minWidth: 16),
+                    decoration: BoxDecoration(
+                        color: C.sig, borderRadius: BorderRadius.circular(100)),
+                    child: Text('$n',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 10, color: Colors.white, fontWeight: FontWeight.w800)),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );

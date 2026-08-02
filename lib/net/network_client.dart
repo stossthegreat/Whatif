@@ -108,4 +108,19 @@ class NetworkClient {
   void friendsSnapshot() => send({'t': 'friends'});
   void traitVote(String target, String trait) =>
       send({'t': 'traitVote', 'target': target, 'trait': trait});
+
+  // ---- messaging ------------------------------------------------------------
+  void dm(String to, String kind, String body, {String? tmp, int? mediaId, Map<String, dynamic>? meta}) =>
+      send({
+        't': 'dm', 'to': to, 'kind': kind, 'body': body,
+        if (tmp != null) 'tmp': tmp,
+        if (mediaId != null) 'mediaId': mediaId,
+        if (meta != null) 'meta': meta,
+      });
+  void dmHistory(String withUid, {int? before}) =>
+      send({'t': 'dmHistory', 'with': withUid, if (before != null) 'before': before});
+  void dmRead(String withUid, int upTo) => send({'t': 'dmRead', 'with': withUid, 'upTo': upTo});
+  void typing(String to, bool on) => send({'t': 'typing', 'to': to, 'on': on});
+  void reactMsg(int id, String? e) => send({'t': 'reactMsg', 'id': id, 'e': e});
+  void chatsList() => send({'t': 'chats'});
 }

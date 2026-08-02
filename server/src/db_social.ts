@@ -357,6 +357,125 @@ export function voteTrait(voter: string, target: string, trait: string): void {
   );
 }
 
+// ---- messaging -------------------------------------------------------------
+export interface MsgRow {
+  id: number; sender: string; kind: string; body: string;
+  mediaId: number | null; meta: Record<string, unknown>; at: string;
+}
+
+export async function insertMessage(u: string, v: string, sender: string, kind: string,
+    body: string, mediaId: number | null, meta: Record<string, unknown>):
+    Promise<{ id: number; at: string } | null> {
+  const [a, b] = pair(u, v);
+  const r = await run(
+    `INSERT INTO messages (a, b, sender, kind, body, media_id, meta)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, created_at`,
+    [a, b, sender, kind, body, mediaId, JSON.stringify(meta)],
+  );
+  const row = r?.rows?.[0];
+  return row ? { id: Number(row.id), at: String(row.created_at) } : null;
+}
+
+export async function messagesPage(u: string, v: string, before: number | null, limit: number):
+    Promise<{ msgs: MsgRow[]; reactions: [number, string, string][]; more: boolean }> {
+  const [a, b] = pair(u, v);
+  const r = await run(
+    `SELECT id, sender, kind, body, media_id, meta, created_at FROM messages
+     WHERE a=$1 AND b=$2 ${before != null ? 'AND id < $4' : ''}
+     ORDER BY id DESC LIMIT $3`,
+    before != null ? [a, b, limit + 1, before] : [a, b, limit + 1],
+  );
+  const rows = r?.rows ?? [];
+  const more = rows.length > limit;
+  const msgs = rows.slice(0, limit).map((x) => ({
+    id: Number(x.id), sender: x.sender as string, kind: x.kind as string,
+    body: x.body as string, mediaId: x.media_id == null ? null : Number(x.media_id),
+    meta: (x.meta as Record<string, unknown>) ?? {}, at: String(x.created_at),
+  })).reverse();
+  let reactions: [number, string, string][] = [];
+  if (msgs.length) {
+    const ids = msgs.map((m) => m.id);
+    const rr = await run(
+      'SELECT message_id, uid, emoji FROM message_reactions WHERE message_id = ANY($1)', [ids]);
+    reactions = (rr?.rows ?? []).map((x) => [Number(x.message_id), x.uid as string, x.emoji as string]);
+  }
+  return { msgs, reactions, more };
+}
+
+export async function messagePair(id: number): Promise<{ a: string; b: string } | null> {
+  const r = await run('SELECT a, b FROM messages WHERE id=$1', [id]);
+  const x = r?.rows?.[0];
+  return x ? { a: x.a as string, b: x.b as string } : null;
+}
+
+export function setReaction(messageId: number, uid: string, emoji: string | null): void {
+  if (emoji == null) {
+    void run('DELETE FROM message_reactions WHERE message_id=$1 AND uid=$2', [messageId, uid]);
+  } else {
+    void run(
+      `INSERT INTO message_reactions (message_id, uid, emoji) VALUES ($1,$2,$3)
+       ON CONFLICT (message_id, uid) DO UPDATE SET emoji = EXCLUDED.emoji`,
+      [messageId, uid, emoji]);
+  }
+}
+
+export function setRead(uid: string, peer: string, upTo: number): void {
+  void run(
+    `INSERT INTO chat_state (uid, peer, last_read_id) VALUES ($1,$2,$3)
+     ON CONFLICT (uid, peer) DO UPDATE SET
+       last_read_id = GREATEST(chat_state.last_read_id, EXCLUDED.last_read_id)`,
+    [uid, peer, upTo]);
+}
+
+export async function unreadTotal(uid: string): Promise<number> {
+  const r = await run(
+    `SELECT COUNT(*)::int AS n FROM messages m
+     LEFT JOIN chat_state cs ON cs.uid=$1 AND cs.peer=m.sender
+     WHERE (m.a=$1 OR m.b=$1) AND m.sender<>$1
+       AND m.id > COALESCE(cs.last_read_id, 0)`,
+    [uid]);
+  return r?.rows?.[0]?.n ?? 0;
+}
+
+export async function chatList(uid: string): Promise<{
+  peer: string; name: string; hue: number; photoId: number | null; title: string | null;
+  pinned: boolean; unread: number;
+  last: { id: number; sender: string; kind: string; body: string; at: string };
+}[]> {
+  const r = await run(
+    `WITH mine AS (
+       SELECT m.*, CASE WHEN m.a=$1 THEN m.b ELSE m.a END AS peer
+       FROM messages m WHERE m.a=$1 OR m.b=$1
+     ), lasts AS (
+       SELECT DISTINCT ON (peer) * FROM mine ORDER BY peer, id DESC
+     )
+     SELECT l.peer, l.id, l.sender, l.kind, l.body, l.created_at,
+       u.name, u.hue, u.photo_media_id, u.active_title,
+       COALESCE(CASE WHEN f.a=$1 THEN f.a_pinned ELSE f.b_pinned END, false) AS pinned,
+       (SELECT COUNT(*)::int FROM mine mm
+          WHERE mm.peer = l.peer AND mm.sender = l.peer
+            AND mm.id > COALESCE(cs.last_read_id, 0)) AS unread
+     FROM lasts l
+     JOIN users u ON u.uid = l.peer
+     LEFT JOIN friendships f ON f.a = LEAST($1, l.peer) AND f.b = GREATEST($1, l.peer)
+     LEFT JOIN chat_state cs ON cs.uid = $1 AND cs.peer = l.peer
+     ORDER BY pinned DESC, l.id DESC`,
+    [uid]);
+  return (r?.rows ?? []).map((x) => ({
+    peer: x.peer as string,
+    name: (x.name as string) ?? 'someone',
+    hue: Number(x.hue ?? 210),
+    photoId: x.photo_media_id == null ? null : Number(x.photo_media_id),
+    title: (x.active_title as string | null) ?? null,
+    pinned: !!x.pinned,
+    unread: Number(x.unread ?? 0),
+    last: {
+      id: Number(x.id), sender: x.sender as string, kind: x.kind as string,
+      body: x.body as string, at: String(x.created_at),
+    },
+  }));
+}
+
 // ---- stats + reputation ----------------------------------------------------
 export function bumpStat(uid: string, col: string, by = 1): void {
   // col is ALWAYS a code-side constant, never user input

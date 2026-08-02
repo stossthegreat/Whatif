@@ -17,6 +17,7 @@ import * as db from './db.js';
 import { sendPush, pushEnabled } from './push.js';
 import * as legal from './legal.js';
 import * as social from './social.js';
+import * as chat from './chat.js';
 import * as dbs from './db_social.js';
 import { mintAuthToken } from './auth.js';
 
@@ -795,6 +796,12 @@ wss.on('connection', (ws) => {
       case 'pinChat': void social.pinChat(user, m); break;
       case 'friends': void social.snapshot(user); break;
       case 'traitVote': void social.traitVote(user, m); break;
+      case 'dm': void chat.dm(user, m); break;
+      case 'dmHistory': void chat.history(user, m); break;
+      case 'dmRead': void chat.read(user, m); break;
+      case 'typing': chat.typing(user, m); break;
+      case 'reactMsg': void chat.react(user, m); break;
+      case 'chats': void chat.chats(user); break;
       case 'save': if (typeof m.target === 'string') onSave(user, m.target); break;
       case 'unsave':
         if (typeof m.target === 'string') {
@@ -859,6 +866,7 @@ server.listen(PORT, () => {
 });
 
 social.init(send);
+chat.init(send);
 
 void db.initDb().then(async () => {
   await dbs.initSocial();

@@ -9,11 +9,13 @@ import 'models/game.dart';
 import 'models/person.dart';
 import 'net/network_client.dart';
 import 'net/rtc_service.dart';
+import 'state/chat.dart';
 import 'state/session.dart';
 import 'state/social.dart';
 import 'theme/tokens.dart';
 import 'widgets/match_overlay.dart';
 import 'widgets/rating_overlay.dart';
+import 'screens/chat_screen.dart';
 import 'screens/friends_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/signin_screen.dart';
@@ -29,9 +31,13 @@ import 'screens/live_screen.dart';
 class RivlrApp extends StatelessWidget {
   const RivlrApp({super.key});
 
+  /// Global navigator — deep links and push taps route through it.
+  static final navKey = GlobalKey<NavigatorState>();
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navKey,
       title: 'Rivlr',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -64,10 +70,25 @@ class _RootState extends State<_Root> {
   StreamSubscription<Map<String, dynamic>>? _netSub;
   StreamSubscription<Uri>? _linkSub;
   String? _partyCode; // arrived via rivlr://join/CODE
+  String? _partyInviteUid; // host a room and DM this friend the code
 
   @override
   void initState() {
     super.initState();
+    // deep surfaces (chat threads, invite bubbles) drive the play flow
+    // through these hooks instead of owning the step machine
+    AppNav.joinPartyCode = (code) {
+      if (!mounted) return;
+      _partyInviteUid = null;
+      _partyCode = code;
+      _to(_Step.party);
+    };
+    AppNav.hostPartyFor = (uid) {
+      if (!mounted) return;
+      _partyCode = null;
+      _partyInviteUid = uid;
+      _to(_Step.party);
+    };
     _boot();
   }
 
@@ -76,7 +97,8 @@ class _RootState extends State<_Root> {
     // stable uid and we can skip onboarding for returning users.
     await AppSession.instance.load();
     if (AppConfig.isLive) {
-      SocialState.instance.attach(); // before connect so it sees the welcome
+      SocialState.instance.attach(); // before connect so they see the welcome
+      ChatStore.instance.attach(AppSession.instance.myUid);
       NetworkClient.instance.connect();
       _netSub = NetworkClient.instance.events.listen(_onNet);
     }
@@ -109,6 +131,18 @@ class _RootState extends State<_Root> {
       Track.event('deep_link_join');
       _partyCode = code;
       if (AppSession.instance.onboarded && mounted) _to(_Step.party);
+    }
+    // rivlr://chat/<uid> — from a message push
+    if (segs.isNotEmpty && segs.first.toLowerCase() == 'chat' && segs.length >= 2) {
+      final uid = segs[1];
+      final friend = SocialState.instance.friends
+          .where((f) => f.uid == uid)
+          .toList();
+      if (friend.isEmpty || !AppSession.instance.onboarded) return;
+      final ctx = RivlrApp.navKey.currentContext;
+      if (ctx != null) {
+        ChatScreen.push(ctx, uid: friend.first.uid, name: friend.first.name, hue: friend.first.hue);
+      }
     }
   }
 
@@ -295,10 +329,12 @@ class _RootState extends State<_Root> {
           onSignOut: () => _to(_Step.welcome)),
       _Step.mode => ModeScreen(onPick: _play, onBack: () => _to(_Step.home)),
       _Step.party => PartyScreen(
-          key: ValueKey('party${_partyCode ?? ''}'),
+          key: ValueKey('party${_partyCode ?? ''}${_partyInviteUid ?? ''}'),
           initialCode: _partyCode,
+          inviteUid: _partyInviteUid,
           onBack: () {
             _partyCode = null;
+            _partyInviteUid = null;
             _to(_Step.home);
           }),
       _Step.finding => FindingScreen(onDone: _dropSimulated, waitForExternal: live),

@@ -38,6 +38,7 @@ export async function hydrate(user: User): Promise<void> {
   neverAgain.set(user.uid, new Set(never));
   user.friendUids = new Set(edges.filter((e) => e.state === 'friends').map((e) => e.uid));
   broadcastPresence(user, true);
+  void import('./chat.js').then((c) => c.sendUnread(user)); // Home badge, pre-ask
 }
 
 /// Tell online friends this user came online / went offline.
