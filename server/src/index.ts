@@ -14,6 +14,7 @@ import { rollGame, rollMemberCount, SEQ_PACK, seqByName, type GameKind, type Seq
 import { store, type User, type Meet, type Cell, type RoundWire } from './store.js';
 import { mintToken, LIVEKIT_URL } from './livekit.js';
 import * as db from './db.js';
+import { sendPush, pushEnabled } from './push.js';
 
 const PORT = Number(process.env.PORT || 8080);
 const ALLOW_SOLO = (process.env.ALLOW_SOLO || 'true') === 'true';
@@ -506,12 +507,27 @@ function onSave(u: User, targetUid: string) {
     if (other) send(other, { t: 'sparkMutual', uid: u.uid, name: u.name });
   }
 }
+const lastPushAt = new Map<string, number>(); // recipient uid -> last push ms
+const PUSH_COOLDOWN_MS = 6 * 3600_000;
+
 function notifyLive(u: User) {
   // tell everyone who saved me that I just came online
   for (const a of store.savedByOf(u.uid)) {
     const watcher = store.userByUid(a);
     if (watcher) send(watcher, { t: 'sparkLive', uid: u.uid, name: u.name });
   }
+  // and push the OFFLINE mutuals (online ones just got the ws event).
+  // Rate-limited hard: at most one push per recipient per 6h, mutuals only.
+  if (!pushEnabled) return;
+  void db.mutualPushTargets(u.uid).then((targets) => {
+    const now = Date.now();
+    for (const t of targets) {
+      if (store.userByUid(t.uid)) continue;
+      if (now - (lastPushAt.get(t.uid) ?? 0) < PUSH_COOLDOWN_MS) continue;
+      lastPushAt.set(t.uid, now);
+      sendPush(t.token, `${u.name} is live on Rivlr`, 'drop in while they’re on 🎥');
+    }
+  });
 }
 
 // ---- moderation ------------------------------------------------------------
@@ -734,6 +750,17 @@ wss.on('connection', (ws) => {
         }
         break;
       case 'report': if (typeof m.target === 'string') onReport(m.target, user.uid); break;
+      case 'unblock':
+        if (typeof m.target === 'string') {
+          store.unblock(user.uid, m.target);
+          db.removeBlock(user.uid, m.target);
+        }
+        break;
+      case 'pushToken':
+        if (typeof m.token === 'string' && m.token.length) {
+          db.savePushToken(user.uid, m.token.slice(0, 512));
+        }
+        break;
       case 'block':
         if (typeof m.target === 'string') {
           store.block(user.uid, m.target);

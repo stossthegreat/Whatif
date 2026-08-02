@@ -97,6 +97,9 @@ class Store {
   block(a: string, b: string) {
     this.ensure(this.blocks, a).add(b);
   }
+  unblock(a: string, b: string) {
+    this.blocks.get(a)?.delete(b);
+  }
   isBlocked(a: string, b: string): boolean {
     return (this.blocks.get(a)?.has(b) ?? false) || (this.blocks.get(b)?.has(a) ?? false);
   }

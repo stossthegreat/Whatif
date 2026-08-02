@@ -1055,13 +1055,19 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             children: [
               _sheetRow(Icons.flag_outlined, 'Report @$name', C.tx, () {
                 Navigator.pop(ctx);
-                if (widget.live && p.id != null) NetworkClient.instance.report(p.id!);
+                // the server keys moderation by the STABLE uid, never conn-id
+                final target = p.uid ?? p.id;
+                if (widget.live && target != null) NetworkClient.instance.report(target);
                 _toast('reported — our team is on it');
               }),
               const Divider(height: 1, color: C.hair),
               _sheetRow(Icons.block_rounded, 'Block @$name', C.live, () {
                 Navigator.pop(ctx);
-                if (widget.live && p.id != null) NetworkClient.instance.block(p.id!);
+                final target = p.uid ?? p.id;
+                if (target != null) {
+                  AppSession.instance.noteBlocked(target, p.name);
+                  if (widget.live) NetworkClient.instance.block(target);
+                }
                 _toast('blocked — you won’t see them again');
                 widget.onNext();
               }),

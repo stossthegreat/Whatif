@@ -40,9 +40,11 @@ export async function initDb(): Promise<void> {
     gender TEXT,
     meet TEXT,
     vibes JSONB NOT NULL DEFAULT '[]',
+    push_token TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_seen TIMESTAMPTZ NOT NULL DEFAULT now()
   )`);
+  await run('ALTER TABLE users ADD COLUMN IF NOT EXISTS push_token TEXT');
   await run(`CREATE TABLE IF NOT EXISTS saves (
     uid TEXT NOT NULL,
     target TEXT NOT NULL,
@@ -116,6 +118,26 @@ export function removeSave(uid: string, target: string): void {
 }
 export function addBlock(uid: string, target: string): void {
   void run('INSERT INTO blocks (uid, target) VALUES ($1,$2) ON CONFLICT DO NOTHING', [uid, target]);
+}
+export function removeBlock(uid: string, target: string): void {
+  void run('DELETE FROM blocks WHERE uid = $1 AND target = $2', [uid, target]);
+}
+export function savePushToken(uid: string, token: string): void {
+  void run('UPDATE users SET push_token = $2 WHERE uid = $1', [uid, token]);
+}
+
+/// Push targets when [uid] goes live: people who saved them AND whom they
+/// saved back (mutuals only — anything less is stalker fuel), with a token.
+export async function mutualPushTargets(uid: string): Promise<{ uid: string; token: string }[]> {
+  const r = await run(
+    `SELECT u.uid, u.push_token AS token
+     FROM saves s1
+     JOIN saves s2 ON s2.uid = $1 AND s2.target = s1.uid
+     JOIN users u ON u.uid = s1.uid
+     WHERE s1.target = $1 AND u.push_token IS NOT NULL`,
+    [uid],
+  );
+  return (r?.rows ?? []).map((x) => ({ uid: x.uid as string, token: x.token as string }));
 }
 export function addReport(reporter: string, target: string): void {
   void run('INSERT INTO reports (reporter, target) VALUES ($1,$2)', [reporter, target]);

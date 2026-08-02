@@ -44,6 +44,12 @@ class NetworkClient {
       onError: (_) => _retry(),
       cancelOnError: true,
     );
+    hello();
+  }
+
+  /// (Re)introduce ourselves. Called on connect, and again whenever identity
+  /// changes mid-session (e.g. Sign in with Apple upgrading the uid).
+  void hello() {
     final s = AppSession.instance;
     send({
       't': 'hello',
@@ -85,4 +91,6 @@ class NetworkClient {
   void block(String target) => send({'t': 'block', 'target': target});
   void save(String target) => send({'t': 'save', 'target': target});
   void unsave(String target) => send({'t': 'unsave', 'target': target});
+  void unblock(String target) => send({'t': 'unblock', 'target': target});
+  void pushToken(String token) => send({'t': 'pushToken', 'token': token});
 }

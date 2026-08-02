@@ -4,6 +4,7 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'config.dart';
 import 'core/analytics.dart';
+import 'core/push.dart';
 import 'models/game.dart';
 import 'models/person.dart';
 import 'net/network_client.dart';
@@ -76,6 +77,11 @@ class _RootState extends State<_Root> {
     }
     if (!mounted) return;
     _to(AppSession.instance.onboarded ? _Step.home : _Step.welcome);
+    // returning users: register for pushes once home settles (first-run users
+    // are asked right after onboarding instead — see the permission step)
+    if (AppSession.instance.onboarded) {
+      Timer(const Duration(seconds: 3), Push.init);
+    }
     // deep links AFTER the first screen is decided, so a cold-start link can
     // override it (fail-soft: links just don't work if the plugin balks)
     try {
@@ -123,6 +129,7 @@ class _RootState extends State<_Root> {
         if (_step != _Step.live && _step != _Step.finding) {
           NetworkClient.instance.leaveCell();
         }
+        Push.resend(); // fresh connection never saw our push token
       case 'presence':
         final n = (m['live'] as num?)?.toInt();
         if (n != null) {
@@ -275,6 +282,7 @@ class _RootState extends State<_Root> {
           AppSession.instance.completeOnboarding();
           Track.event('onboarding_done');
           _to(_Step.home);
+          Timer(const Duration(seconds: 2), Push.init);
         }),
       _Step.home => MainShell(
           onPlay: () => _to(_Step.mode),
