@@ -131,7 +131,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   bool _bottleDone = true;
 
   // your PiP in 1:1 — draggable; null = default anchor (bottom-right)
-  Offset? _pipPos;
 
   // talk-first: games played this hang (simulated ceremony every 3rd)
   int _gamesPlayed = 0;
@@ -1392,32 +1391,16 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       );
     }
 
-    // 1:1 — them full screen, you as a draggable PiP (default bottom-right).
+    // 1:1 — a proper split screen: their full feed cover-cropped into the top
+    // half, yours cover-cropped into the bottom half. Two equal people, two
+    // equal halves — no postage-stamp PiP, no squashing (cover fit crops the
+    // camera frame into the half instead of distorting it).
     if (n == 1) {
-      return LayoutBuilder(builder: (context, box) {
-        const pw = 128.0, ph = 184.0;
-        final pad = MediaQuery.of(context).padding;
-        final def = Offset(box.maxWidth - pw - 12, box.maxHeight - ph - 220);
-        var pos = _pipPos ?? def;
-        pos = Offset(
-          pos.dx.clamp(8.0, box.maxWidth - pw - 8.0),
-          pos.dy.clamp(pad.top + 56.0, box.maxHeight - ph - 12.0),
-        );
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            _face(0, radius: 0),
-            Positioned(
-              left: pos.dx,
-              top: pos.dy,
-              child: GestureDetector(
-                onPanUpdate: (d) => setState(() => _pipPos = pos + d.delta),
-                child: _pip(),
-              ),
-            ),
-          ],
-        );
-      });
+      return Column(children: [
+        Expanded(child: _face(0, radius: 0)),
+        const SizedBox(height: 2),
+        Expanded(child: _selfFace()),
+      ]);
     }
 
     // groups — perfect 2-column grid, you are one of the tiles.
@@ -1434,29 +1417,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       if (end < tiles.length) rows.add(const SizedBox(height: 2));
     }
     return Column(children: rows);
-  }
-
-  Widget _pip() {
-    return Container(
-      width: 128,
-      height: 184,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.25)),
-        boxShadow: const [BoxShadow(color: Color(0xB3000000), blurRadius: 22, offset: Offset(0, 8))],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            widget.live ? _selfVideo() : const SelfView(),
-            if (_lucky == cell.people.length)
-              const Positioned(left: 6, top: 6, child: _StarChip()),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _face(int i, {double radius = 0}) {
