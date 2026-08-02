@@ -1,17 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
+import '../net/api_client.dart';
+import '../net/network_client.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
 import '../widgets/aurora.dart';
+import '../widgets/avatar.dart';
 import '../widgets/glass.dart';
+import 'edit_profile_screen.dart';
 
-/// Onboarding that shapes the experience — four beats, one question each,
+/// Onboarding that shapes the experience — seven beats, one question each,
 /// huge type, zero clutter:
 ///   1 · your name        (identity — pick or shuffle a handle)
 ///   2 · your age         (18+ gate)
 ///   3 · you / meet       (the matchmaking signal)
 ///   4 · your vibe        (what kind of rooms find you)
+///   5 · your face        (photo — skippable, the orb is a fine identity)
+///   6 · where + words    (city/country + languages — matchmaking signals)
+///   7 · looking + into   (what you want + interests)
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.onDone});
   final VoidCallback onDone;
@@ -30,6 +38,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _gender;
   String _lookingFor = 'Everyone';
   final Set<String> _vibes = {};
+  // identity v2
+  final _cityCtl = TextEditingController();
+  final _countryCtl = TextEditingController();
+  final Set<String> _langs = {'English'};
+  final Set<String> _looking = {};
+  final Set<String> _interests = {};
+  bool _photoUploading = false;
 
   static const _genders = ['Woman', 'Man', 'Nonbinary', 'Other'];
   static const _prefs = ['Everyone', 'Women', 'Men'];
@@ -45,11 +60,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool get _handleOk =>
       RegExp(r'^[a-z0-9_]{3,14}$').hasMatch(_handleCtl.text.trim().toLowerCase());
 
+  static const _lastStep = 6;
+
   bool _canAdvance() => switch (_step) {
         0 => _handleOk,
         1 => _age >= 18,
         2 => _gender != null,
-        _ => _vibes.isNotEmpty,
+        3 => _vibes.isNotEmpty,
+        _ => true, // photo / place / interests are welcome but never a wall
       };
 
   void _next() {
@@ -57,18 +75,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Buzz.commit();
     Sfx.pop();
     FocusScope.of(context).unfocus();
-    if (_step < 3) {
+    if (_step < _lastStep) {
       _page.animateToPage(_step + 1,
           duration: M.base, curve: M.ease);
     } else {
-      AppSession.instance.setHandle(_handleCtl.text);
-      AppSession.instance.setProfile(
+      final s = AppSession.instance;
+      s.setHandle(_handleCtl.text);
+      s.setProfile(
         age: _age,
         gender: _gender,
         lookingFor: _lookingFor,
         vibes: _vibes.toList(),
       );
+      s.setIdentityDetails(
+        city: _cityCtl.text.trim(),
+        country: _countryCtl.text.trim(),
+        languages: _langs.toList(),
+        lookingForChips: _looking.toList(),
+        interests: _interests.toList(),
+      );
+      NetworkClient.instance.setProfile({
+        'age': _age,
+        'city': _cityCtl.text.trim(),
+        'country': _countryCtl.text.trim(),
+        'languages': _langs.toList(),
+        'lookingFor': _looking.toList(),
+        'interests': _interests.toList(),
+      });
       widget.onDone();
+    }
+  }
+
+  Future<void> _pickPhoto() async {
+    if (_photoUploading) return;
+    Buzz.tick();
+    try {
+      final x = await ImagePicker().pickImage(
+          source: ImageSource.gallery, maxWidth: 720, maxHeight: 720, imageQuality: 80);
+      if (x == null || !mounted) return;
+      setState(() => _photoUploading = true);
+      final bytes = await x.readAsBytes();
+      final id = await Api.uploadMedia(bytes, kind: 'avatar', mime: 'image/jpeg');
+      if (!mounted) return;
+      setState(() {
+        _photoUploading = false;
+        if (id != null) AppSession.instance.setPhotoId(id);
+      });
+    } catch (_) {
+      if (mounted) setState(() => _photoUploading = false);
     }
   }
 
@@ -82,6 +136,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void dispose() {
     _page.dispose();
     _handleCtl.dispose();
+    _cityCtl.dispose();
+    _countryCtl.dispose();
     super.dispose();
   }
 
@@ -118,7 +174,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(100),
                           child: LinearProgressIndicator(
-                            value: (_step + 1) / 4,
+                            value: (_step + 1) / (_lastStep + 1),
                             minHeight: 3,
                             backgroundColor: C.char2,
                             valueColor: const AlwaysStoppedAnimation<Color>(C.sig),
@@ -126,7 +182,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       const SizedBox(width: 14),
-                      Text('${_step + 1}/4', style: T.tiny),
+                      Text('${_step + 1}/${_lastStep + 1}', style: T.tiny),
                     ],
                   ),
                   Expanded(
@@ -139,11 +195,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _stepAge(r),
                         _stepIdentity(r),
                         _stepVibes(r),
+                        _stepPhoto(r),
+                        _stepWhere(r),
+                        _stepInterests(r),
                       ],
                     ),
                   ),
                   Cta(
-                    label: _step < 3 ? 'Continue' : 'Let’s go',
+                    label: _step < _lastStep
+                        ? (_step == 4 && AppSession.instance.photoId == null
+                            ? 'Skip for now'
+                            : 'Continue')
+                        : 'Let’s go',
                     onTap: _canAdvance() ? _next : null,
                   ),
                   const SizedBox(height: 16),
@@ -292,6 +355,164 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // ---- step 5 · photo (skippable) -------------------------------------------
+  Widget _stepPhoto(Responsive r) {
+    return _StepShell(
+      headline: 'Put a face\nto the vibe.',
+      accent: 'face',
+      sub: 'Optional — your glow works too. You can add one any time.',
+      scale: r.scale,
+      child: Center(
+        child: AnimatedBuilder(
+          animation: AppSession.instance,
+          builder: (context, _) {
+            final s = AppSession.instance;
+            return Press(
+              haptic: false,
+              onTap: _pickPhoto,
+              child: Column(
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Avatar(hue: s.myHue, photoId: s.photoId, size: 132, ring: C.sig),
+                      Positioned(
+                        right: 0, bottom: 0,
+                        child: Container(
+                          width: 40, height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white,
+                            border: Border.all(color: C.black, width: 3),
+                          ),
+                          child: _photoUploading
+                              ? const Padding(
+                                  padding: EdgeInsets.all(10),
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.black))
+                              : const Icon(Icons.camera_alt_rounded,
+                                  size: 18, color: Colors.black),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    s.photoId == null ? 'tap to add a photo' : 'looking good ✓',
+                    style: T.sub.copyWith(
+                        color: s.photoId == null ? C.tx2 : C.sig,
+                        fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  // ---- step 6 · where + languages -------------------------------------------
+  Widget _stepWhere(Responsive r) {
+    return _StepShell(
+      headline: 'Where in\nthe world?',
+      accent: 'world',
+      sub: 'Helps us find your people — nothing precise, ever.',
+      scale: r.scale,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: _miniField(_cityCtl, 'city')),
+              const SizedBox(width: 10),
+              Expanded(child: _miniField(_countryCtl, 'country')),
+            ],
+          ),
+          const SizedBox(height: 26),
+          Text('YOU SPEAK', style: T.eyebrow),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final l in EditProfileScreen.languages)
+                _vibeChip('', l, _langs.contains(l), () {
+                  Buzz.tick();
+                  setState(() => _langs.contains(l) ? _langs.remove(l) : _langs.add(l));
+                }),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---- step 7 · looking for + interests -------------------------------------
+  Widget _stepInterests(Responsive r) {
+    return _StepShell(
+      headline: 'What are you\nhere for?',
+      accent: 'here',
+      sub: 'Pick what fits — the matches get better with every tap.',
+      scale: r.scale,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final l in EditProfileScreen.lookingFor)
+                _vibeChip('', l, _looking.contains(l), () {
+                  Buzz.tick();
+                  setState(() =>
+                      _looking.contains(l) ? _looking.remove(l) : _looking.add(l));
+                }),
+            ],
+          ),
+          const SizedBox(height: 26),
+          Text('YOU’RE INTO', style: T.eyebrow),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final i in EditProfileScreen.interests)
+                _vibeChip('', i, _interests.contains(i), () {
+                  Buzz.tick();
+                  setState(() =>
+                      _interests.contains(i) ? _interests.remove(i) : _interests.add(i));
+                }),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniField(TextEditingController ctl, String hint) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: C.hair2),
+      ),
+      child: TextField(
+        controller: ctl,
+        maxLength: 32,
+        style: T.body.copyWith(color: Colors.white, fontSize: 15.5),
+        decoration: InputDecoration(
+          isDense: true,
+          counterText: '',
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 13),
+          hintText: hint,
+          hintStyle: T.body.copyWith(color: C.tx3, fontSize: 15.5),
+        ),
+      ),
+    );
+  }
+
   // ---- pieces ---------------------------------------------------------------
   Widget _roundBtn(IconData icon, VoidCallback? onTap) {
     return Press(
@@ -355,8 +576,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 16)),
-            const SizedBox(width: 8),
+            if (emoji.isNotEmpty) ...[
+              Text(emoji, style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: 8),
+            ],
             Text(label,
                 style: T.body.copyWith(
                     color: on ? Colors.black : C.tx2,

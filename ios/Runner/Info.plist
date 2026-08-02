@@ -9,7 +9,9 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Rivlr uses your camera so you can meet and talk to people live.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Rivlr uses your microphone so people can hear you on live calls.</string>
+	<string>Rivlr uses your microphone so people can hear you on live calls and voice notes.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Rivlr lets you pick a profile photo and share photos with friends you matched with.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

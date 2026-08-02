@@ -537,6 +537,100 @@ export async function getPushToken(uid: string): Promise<string | null> {
   return (r?.rows?.[0]?.push_token as string | null) ?? null;
 }
 
+// ---- profiles --------------------------------------------------------------
+const PROFILE_FIELDS = ['bio', 'city', 'country', 'pronouns'] as const;
+const PROFILE_JSON = ['languages', 'looking_for', 'interests'] as const;
+
+export function setProfile(uid: string, m: Record<string, unknown>): void {
+  const sets: string[] = [];
+  const params: unknown[] = [uid];
+  for (const f of PROFILE_FIELDS) {
+    if (typeof m[f] === 'string') {
+      params.push((m[f] as string).slice(0, f === 'bio' ? 240 : 48));
+      sets.push(`${f} = $${params.length}`);
+    }
+  }
+  for (const f of PROFILE_JSON) {
+    const key = f === 'looking_for' ? 'lookingFor' : f;
+    if (Array.isArray(m[key])) {
+      const arr = (m[key] as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 12);
+      params.push(JSON.stringify(arr));
+      sets.push(`${f} = $${params.length}`);
+    }
+  }
+  if (typeof m.age === 'number' && m.age >= 18 && m.age <= 99) {
+    params.push(Math.trunc(m.age));
+    sets.push(`age = $${params.length}`);
+  }
+  if (!sets.length) return;
+  void run(`UPDATE users SET ${sets.join(', ')} WHERE uid = $1`, params);
+}
+
+/// The full public profile card: identity + traits + record + badges +
+/// mutuals + your relationship to them.
+export async function profileCard(viewer: string, uid: string): Promise<Record<string, unknown> | null> {
+  const u = await run(
+    `SELECT name, hue, photo_media_id, active_title, age, bio, city, country,
+            pronouns, languages, looking_for, interests, created_at, last_seen
+     FROM users WHERE uid=$1`, [uid]);
+  const row = u?.rows?.[0];
+  if (!row) return null;
+
+  const [traits, myVote, stats, badges, mutuals, met, enc] = await Promise.all([
+    run('SELECT trait, COUNT(*)::int AS n FROM personality_votes WHERE target=$1 GROUP BY trait', [uid]),
+    run('SELECT trait FROM personality_votes WHERE voter=$1 AND target=$2', [viewer, uid]),
+    run('SELECT * FROM user_stats WHERE uid=$1', [uid]),
+    run('SELECT badge FROM user_badges WHERE uid=$1 ORDER BY earned_at DESC', [uid]),
+    run(
+      `SELECT u.uid, u.name, u.hue, u.photo_media_id FROM friendships f1
+       JOIN friendships f2 ON (f2.a = LEAST($2, CASE WHEN f1.a=$1 THEN f1.b ELSE f1.a END)
+                           AND f2.b = GREATEST($2, CASE WHEN f1.a=$1 THEN f1.b ELSE f1.a END)
+                           AND f2.state='friends')
+       JOIN users u ON u.uid = CASE WHEN f1.a=$1 THEN f1.b ELSE f1.a END
+       WHERE (f1.a=$1 OR f1.b=$1) AND f1.state='friends'
+         AND CASE WHEN f1.a=$1 THEN f1.b ELSE f1.a END <> $2
+       LIMIT 6`, [uid, viewer]),
+    run('SELECT 1 FROM encounters WHERE a=LEAST($1,$2) AND b=GREATEST($1,$2) LIMIT 1', [viewer, uid]),
+    run(
+      `SELECT COALESCE(SUM(secs),0)::int AS secs,
+              COUNT(DISTINCT CASE WHEN a=$1 THEN b_country ELSE a_country END)
+                FILTER (WHERE CASE WHEN a=$1 THEN b_country ELSE a_country END IS NOT NULL)::int AS countries
+       FROM encounters WHERE a=$1 OR b=$1`, [uid]),
+  ]);
+
+  const st = stats?.rows?.[0] ?? {};
+  const fs = await friendState(viewer, uid);
+  return {
+    uid,
+    name: row.name, hue: Number(row.hue ?? 210),
+    photoId: row.photo_media_id == null ? null : Number(row.photo_media_id),
+    title: row.active_title ?? null,
+    age: row.age == null ? null : Number(row.age),
+    bio: row.bio ?? '', city: row.city ?? null, country: row.country ?? null,
+    pronouns: row.pronouns ?? null,
+    languages: row.languages ?? [], lookingFor: row.looking_for ?? [],
+    interests: row.interests ?? [],
+    joined: String(row.created_at), lastSeen: row.last_seen ? String(row.last_seen) : null,
+    traits: Object.fromEntries((traits?.rows ?? []).map((x) => [x.trait, Number(x.n)])),
+    myTraitVote: myVote?.rows?.[0]?.trait ?? null,
+    stats: {
+      rooms: Number(st.rooms ?? 0), wins: Number(st.rooms_won ?? 0),
+      laughs: Number(st.laughs ?? 0), games: Number(st.games ?? 0),
+      friends: Number(st.friends_made ?? 0), streak: Number(st.streak ?? 0),
+      chaos: Number(st.chaos ?? 0), legend: Number(st.legend_ratings ?? 0),
+      hours: Math.round(Number(enc?.rows?.[0]?.secs ?? 0) / 360) / 10,
+      countries: Number(enc?.rows?.[0]?.countries ?? 0),
+    },
+    badges: (badges?.rows ?? []).map((x) => x.badge as string),
+    mutuals: (mutuals?.rows ?? []).map((x) => ({
+      uid: x.uid, name: x.name, hue: Number(x.hue ?? 210),
+      photoId: x.photo_media_id == null ? null : Number(x.photo_media_id),
+    })),
+    friendState: fs,
+    canVote: !!met?.rows?.length && viewer !== uid,
+  };
+}
+
 /// Extend account deletion across the social tables (called from db.deleteUser path).
 export function deleteSocial(uid: string): void {
   void run('DELETE FROM friendships WHERE a=$1 OR b=$1', [uid]);

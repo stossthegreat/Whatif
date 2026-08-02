@@ -275,6 +275,20 @@ export async function traitVote(user: User, m: Record<string, unknown>): Promise
   dbs.bumpRep(target, 1);
 }
 
+// ---- profiles --------------------------------------------------------------
+export function setProfile(user: User, m: Record<string, unknown>): void {
+  if (!dbEnabled) return err(user, 'noDb');
+  dbs.setProfile(user.uid, m);
+}
+
+export async function profile(user: User, m: Record<string, unknown>): Promise<void> {
+  if (!dbEnabled) return err(user, 'noDb');
+  const uid = typeof m.uid === 'string' ? m.uid : user.uid;
+  const card = await dbs.profileCard(user.uid, uid);
+  if (!card) return err(user, 'noUser');
+  send(user, { t: 'profileCard', ...card });
+}
+
 // ---- moderation reputation hooks -------------------------------------------
 export function onReported(targetUid: string): void {
   if (dbEnabled) dbs.bumpRep(targetUid, -5);

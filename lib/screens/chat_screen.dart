@@ -1,13 +1,19 @@
 import 'dart:async';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 import '../core/analytics.dart';
 import '../core/haptics.dart';
+import '../net/api_client.dart';
 import '../net/network_client.dart';
 import '../state/chat.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
+import 'friend_profile_screen.dart';
 
 /// Hooks the app shell exposes so deep surfaces (chat, notifications) can
 /// drive the play flow without owning the step machine.
@@ -42,6 +48,14 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _typingOff;
   bool _sentTyping = false;
 
+  // media
+  final _rec = AudioRecorder();
+  final _player = AudioPlayer();
+  bool _recording = false;
+  bool _uploading = false;
+  DateTime? _recStart;
+  int? _playingMediaId;
+
   static const _reactions = ['❤️', '😂', '🔥', '👀', '💀', '👑'];
 
   @override
@@ -58,7 +72,97 @@ class _ChatScreenState extends State<ChatScreen> {
     ChatStore.instance.closeThread();
     _ctl.dispose();
     _scroll.dispose();
+    _rec.dispose();
+    _player.dispose();
     super.dispose();
+  }
+
+  // ---- media sending --------------------------------------------------------
+  Future<void> _pickPhoto() async {
+    if (_uploading) return;
+    Buzz.tick();
+    try {
+      final x = await ImagePicker().pickImage(
+          source: ImageSource.gallery, maxWidth: 1080, maxHeight: 1080, imageQuality: 72);
+      if (x == null || !mounted) return;
+      setState(() => _uploading = true);
+      final bytes = await x.readAsBytes();
+      final id = await Api.uploadMedia(bytes, kind: 'photo', mime: 'image/jpeg');
+      if (!mounted) return;
+      setState(() => _uploading = false);
+      if (id != null) {
+        ChatStore.instance.sendMedia(widget.uid, 'photo', id);
+      } else {
+        _toast('photo didn’t send — try again');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _startRecording() async {
+    if (_recording || _uploading) return;
+    try {
+      if (!await _rec.hasPermission()) return;
+      final dir = await getTemporaryDirectory();
+      await _rec.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000),
+          path: '${dir.path}/vn_${DateTime.now().millisecondsSinceEpoch}.m4a');
+      Buzz.impact();
+      setState(() { _recording = true; _recStart = DateTime.now(); });
+    } catch (_) {/* mic denied — nothing to do */}
+  }
+
+  Future<void> _stopRecording({bool cancel = false}) async {
+    if (!_recording) return;
+    final path = await _rec.stop();
+    final dur = DateTime.now().difference(_recStart ?? DateTime.now());
+    setState(() => _recording = false);
+    if (cancel || path == null || dur.inMilliseconds < 600) return;
+    setState(() => _uploading = true);
+    try {
+      final bytes = await XFile(path).readAsBytes();
+      final id = await Api.uploadMedia(bytes, kind: 'voice', mime: 'audio/m4a');
+      if (!mounted) return;
+      setState(() => _uploading = false);
+      if (id != null) {
+        ChatStore.instance
+            .sendMedia(widget.uid, 'voice', id, meta: {'durMs': dur.inMilliseconds});
+      } else {
+        _toast('voice note didn’t send');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _playVoice(Msg msg) async {
+    final id = msg.mediaId;
+    if (id == null) return;
+    Buzz.tick();
+    if (_playingMediaId == id) {
+      await _player.stop();
+      setState(() => _playingMediaId = null);
+      return;
+    }
+    setState(() => _playingMediaId = id);
+    await _player.stop();
+    await _player.play(UrlSource(Api.mediaUrl(id)));
+    _player.onPlayerComplete.first.then((_) {
+      if (mounted && _playingMediaId == id) setState(() => _playingMediaId = null);
+    });
+  }
+
+  void _gifPanel() {
+    Buzz.tick();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _GifSheet(onPick: (g) {
+        Navigator.pop(ctx);
+        ChatStore.instance.sendGif(widget.uid, g.tinyUrl);
+      }),
+    );
   }
 
   void _send() {
@@ -237,7 +341,15 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      IdentityOrb(hue: widget.hue, size: 36),
+                      Press(
+                        haptic: false,
+                        onTap: () {
+                          Buzz.tick();
+                          FriendProfileScreen.push(context,
+                              uid: widget.uid, name: widget.name, hue: widget.hue);
+                        },
+                        child: IdentityOrb(hue: widget.hue, size: 36),
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
@@ -313,6 +425,49 @@ class _ChatScreenState extends State<ChatScreen> {
                   padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
                   child: Row(
                     children: [
+                      if (NetworkClient.instance.gifsEnabled) ...[
+                        Press(
+                          onTap: _gifPanel,
+                          child: Container(
+                            width: 40, height: 40,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                                shape: BoxShape.circle, border: Border.all(color: C.hair2)),
+                            child: Text('GIF',
+                                style: T.tiny.copyWith(
+                                    fontSize: 9.5, color: C.tx2, fontWeight: FontWeight.w800)),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      if (NetworkClient.instance.mediaEnabled) ...[
+                        Press(
+                          onTap: _pickPhoto,
+                          child: Container(
+                            width: 40, height: 40,
+                            decoration: BoxDecoration(
+                                shape: BoxShape.circle, border: Border.all(color: C.hair2)),
+                            child: const Icon(Icons.photo_rounded, size: 18, color: C.tx2),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onLongPressStart: (_) => _startRecording(),
+                          onLongPressEnd: (_) => _stopRecording(),
+                          onLongPressCancel: () => _stopRecording(cancel: true),
+                          child: Container(
+                            width: 40, height: 40,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _recording ? C.live : Colors.transparent,
+                              border: Border.all(color: _recording ? C.live : C.hair2),
+                            ),
+                            child: Icon(Icons.mic_rounded,
+                                size: 18, color: _recording ? Colors.white : C.tx2),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       Expanded(
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -333,8 +488,13 @@ class _ChatScreenState extends State<ChatScreen> {
                               isDense: true,
                               border: InputBorder.none,
                               contentPadding: const EdgeInsets.symmetric(vertical: 13),
-                              hintText: 'message @${widget.name}…',
-                              hintStyle: T.body.copyWith(color: C.tx3, fontSize: 15),
+                              hintText: _recording
+                                  ? 'recording… release to send'
+                                  : _uploading
+                                      ? 'sending…'
+                                      : 'message @${widget.name}…',
+                              hintStyle: T.body.copyWith(
+                                  color: _recording ? C.live : C.tx3, fontSize: 15),
                             ),
                           ),
                         ),
@@ -370,6 +530,56 @@ class _ChatScreenState extends State<ChatScreen> {
     final Widget content;
     if (msg.kind == 'invite') {
       content = _inviteBubble(msg, mine);
+    } else if (msg.kind == 'photo' && msg.mediaId != null) {
+      content = ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image.network(
+          Api.mediaUrl(msg.mediaId!),
+          width: 220,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => Container(
+            width: 220, height: 120,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+                color: C.glass, borderRadius: BorderRadius.circular(16)),
+            child: Text('photo expired', style: T.tiny),
+          ),
+        ),
+      );
+    } else if (msg.kind == 'gif' && msg.body.isNotEmpty) {
+      content = ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image.network(msg.body, width: 200, fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const SizedBox.shrink()),
+      );
+    } else if (msg.kind == 'voice') {
+      final secs = (((msg.meta['durMs'] as num?) ?? 0) / 1000).round();
+      final playing = _playingMediaId != null && _playingMediaId == msg.mediaId;
+      content = Press(
+        haptic: false,
+        onTap: () => _playVoice(msg),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: mine ? Colors.white : C.glass2,
+            borderRadius: BorderRadius.circular(18),
+            border: mine ? null : Border.all(color: C.hair),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(playing ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                  size: 22, color: mine ? Colors.black : Colors.white),
+              const SizedBox(width: 8),
+              Text('🎤 ${secs > 0 ? '${secs}s' : 'voice note'}',
+                  style: T.body.copyWith(
+                      color: mine ? Colors.black : Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14)),
+            ],
+          ),
+        ),
+      );
     } else {
       content = Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -474,6 +684,112 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// GIF search sheet — Tenor through the server proxy. Feature-flagged: this
+/// sheet is only reachable when the server says gifs are on.
+class _GifSheet extends StatefulWidget {
+  const _GifSheet({required this.onPick});
+  final void Function(Gif) onPick;
+
+  @override
+  State<_GifSheet> createState() => _GifSheetState();
+}
+
+class _GifSheetState extends State<_GifSheet> {
+  final _q = TextEditingController();
+  Timer? _debounce;
+  List<Gif> _gifs = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _search('trending');
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _q.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search(String q) async {
+    setState(() => _loading = true);
+    final r = await Api.searchGifs(q.isEmpty ? 'trending' : q);
+    if (mounted) setState(() { _gifs = r; _loading = false; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        height: 420,
+        decoration: const BoxDecoration(
+          color: C.char,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: C.hair2, borderRadius: BorderRadius.circular(4))),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: C.glass,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: C.hair2),
+                ),
+                child: TextField(
+                  controller: _q,
+                  autofocus: true,
+                  onChanged: (v) {
+                    _debounce?.cancel();
+                    _debounce = Timer(const Duration(milliseconds: 450), () => _search(v.trim()));
+                  },
+                  style: T.body.copyWith(color: Colors.white, fontSize: 15),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    hintText: 'search GIFs…',
+                    hintStyle: T.body.copyWith(color: C.tx3, fontSize: 15),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(
+                      child: SizedBox(
+                          width: 22, height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2.2, color: C.tx3)))
+                  : GridView.builder(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 20),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3, mainAxisSpacing: 6, crossAxisSpacing: 6),
+                      itemCount: _gifs.length,
+                      itemBuilder: (context, i) => Press(
+                        haptic: false,
+                        onTap: () => widget.onPick(_gifs[i]),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(_gifs[i].tinyUrl, fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => const ColoredBox(color: C.char2)),
+                        ),
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

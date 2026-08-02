@@ -2,6 +2,7 @@ import { store, type User } from './store.js';
 import { dbEnabled } from './db.js';
 import * as dbs from './db_social.js';
 import { sendPush, pushEnabled } from './push.js';
+import { claimForPair } from './media.js';
 
 /// Messaging between matched friends. WS carries the realtime layer; Postgres
 /// is the source of truth; offline delivery rides push. Ordering = message id.
@@ -32,6 +33,11 @@ export async function dm(user: User, m: Record<string, unknown>): Promise<void> 
   if ((kind === 'voice' || kind === 'photo') && mediaId == null) return;
   if (store.isBlocked(user.uid, to)) return err(user, 'blocked');
   if ((await dbs.friendState(user.uid, to)) !== 'friends') return err(user, 'notFriends');
+  if (mediaId != null) {
+    // the media must be YOURS and unclaimed — then it belongs to this thread
+    const ok = await claimForPair(mediaId, user.uid, dbs.pairKey(user.uid, to));
+    if (!ok) return err(user, 'badMedia');
+  }
 
   const row = await dbs.insertMessage(user.uid, to, user.uid, kind, body, mediaId, meta);
   if (!row) return err(user, 'noDb');

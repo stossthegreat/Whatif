@@ -231,14 +231,21 @@ class ChatStore extends ChangeNotifier {
   // ---- verbs ---------------------------------------------------------------
   void sendText(String to, String body) => _send(to, 'text', body);
   void sendInvite(String to, String code) => _send(to, 'invite', code);
+  void sendGif(String to, String url) => _send(to, 'gif', url);
 
-  void _send(String to, String kind, String body) {
+  void sendMedia(String to, String kind, int mediaId, {Map<String, dynamic> meta = const {}}) =>
+      _send(to, kind, '', mediaId: mediaId, meta: meta);
+
+  void _send(String to, String kind, String body,
+      {int? mediaId, Map<String, dynamic> meta = const {}}) {
     final tmp = 'tmp${_tmpSeq++}';
     _tmpPeer[tmp] = to;
     thread(to).add(Msg(
-      id: -1, tmp: tmp, from: _myUid, kind: kind, body: body, at: DateTime.now(),
+      id: -1, tmp: tmp, from: _myUid, kind: kind, body: body,
+      mediaId: mediaId, meta: meta, at: DateTime.now(),
     ));
-    NetworkClient.instance.dm(to, kind, body, tmp: tmp);
+    NetworkClient.instance.dm(to, kind, body, tmp: tmp, mediaId: mediaId,
+        meta: meta.isEmpty ? null : meta);
     notifyListeners();
   }
 

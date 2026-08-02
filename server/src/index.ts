@@ -20,6 +20,7 @@ import * as social from './social.js';
 import * as chat from './chat.js';
 import * as dbs from './db_social.js';
 import { mintAuthToken } from './auth.js';
+import { mountMedia, startRetentionSweep, gifsEnabled } from './media.js';
 
 const PORT = Number(process.env.PORT || 8080);
 const ALLOW_SOLO = (process.env.ALLOW_SOLO || 'true') === 'true';
@@ -614,6 +615,8 @@ app.get('/privacy', (_req, res) => res.type('html').send(legal.page('Privacy Pol
 app.get('/terms', (_req, res) => res.type('html').send(legal.page('Terms of Service', legal.terms)));
 app.get('/rules', (_req, res) => res.type('html').send(legal.page('House Rules', legal.rules)));
 app.get('/delete-account', (_req, res) => res.type('html').send(legal.page('Delete your account', legal.deleteAccount)));
+mountMedia(app);
+startRetentionSweep();
 app.get('/stats', (_req, res) => res.json({
   online: store.onlineCount, queued: store.queue.length, cells: store.cells.size, livekit: !!LIVEKIT_URL,
 }));
@@ -650,7 +653,7 @@ wss.on('connection', (ws) => {
           t: 'welcome', id, uid: user.uid, name: user.name, hue: user.hue,
           live: LIVE_BASELINE + store.onlineCount,
           http: { token: mintAuthToken(user.uid), base: process.env.PUBLIC_URL || '' },
-          features: { social: db.dbEnabled, media: false, gifs: false },
+          features: { social: db.dbEnabled, media: db.dbEnabled, gifs: gifsEnabled },
         });
         notifyLive(user);
         void social.hydrate(user);
@@ -796,6 +799,8 @@ wss.on('connection', (ws) => {
       case 'pinChat': void social.pinChat(user, m); break;
       case 'friends': void social.snapshot(user); break;
       case 'traitVote': void social.traitVote(user, m); break;
+      case 'setProfile': social.setProfile(user, m); break;
+      case 'profile': void social.profile(user, m); break;
       case 'dm': void chat.dm(user, m); break;
       case 'dmHistory': void chat.history(user, m); break;
       case 'dmRead': void chat.read(user, m); break;

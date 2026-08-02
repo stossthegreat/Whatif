@@ -6,6 +6,8 @@ import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
+import 'chat_screen.dart';
+import 'friend_profile_screen.dart';
 
 /// Your people — the whole graph on one screen. Friends (online first),
 /// Close, Favourites, Recently met (the "accidentally pressed Next" recovery),
@@ -211,6 +213,14 @@ class _FriendsScreenState extends State<FriendsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              _sheetRow(ctx, Icons.person_rounded, 'View profile', C.tx, () {
+                FriendProfileScreen.push(context, uid: f.uid, name: f.name, hue: f.hue);
+              }),
+              const Divider(height: 1, color: C.hair),
+              _sheetRow(ctx, Icons.chat_bubble_rounded, 'Message', C.tx, () {
+                ChatScreen.push(context, uid: f.uid, name: f.name, hue: f.hue);
+              }),
+              const Divider(height: 1, color: C.hair),
               _sheetRow(ctx, f.tier >= 1 ? Icons.favorite_rounded : Icons.favorite_outline_rounded,
                   f.tier >= 1 ? 'Remove Close Friend' : 'Close Friend', C.tx, () {
                 SocialState.instance.setTier(f, f.tier >= 1 ? 0 : 1);
@@ -265,10 +275,23 @@ class _FriendsScreenState extends State<FriendsScreen> {
           padding: const EdgeInsets.symmetric(vertical: 9),
           child: Row(
             children: [
-              IdentityOrb(hue: r.hue, size: 44),
+              Press(
+                haptic: false,
+                onTap: () {
+                  Buzz.tick();
+                  FriendProfileScreen.push(context, uid: r.uid, name: r.name, hue: r.hue);
+                },
+                child: IdentityOrb(hue: r.hue, size: 44),
+              ),
               const SizedBox(width: 13),
               Expanded(
-                child: Column(
+                child: Press(
+                  haptic: false,
+                  onTap: () {
+                    Buzz.tick();
+                    FriendProfileScreen.push(context, uid: r.uid, name: r.name, hue: r.hue);
+                  },
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('@${r.name}',
@@ -278,6 +301,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                             color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15.5)),
                     Text(r.ago, style: T.tiny.copyWith(color: C.tx3)),
                   ],
+                ),
                 ),
               ),
               Press(

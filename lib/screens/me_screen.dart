@@ -5,9 +5,11 @@ import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
+import 'edit_profile_screen.dart';
 import 'moments_screen.dart';
 import 'settings_screen.dart';
 import 'friends_screen.dart';
+import '../widgets/avatar.dart';
 
 /// YOU — one page, everything. Your glow, your rank, the badges rooms voted
 /// you, the stats, your people (sparks), your moments. Not six screens; one
@@ -72,9 +74,36 @@ class MeScreen extends StatelessWidget {
                 Center(
                   child: Column(
                     children: [
-                      IdentityOrb(hue: s.myHue, size: 104, ring: C.sig),
+                      Press(
+                        haptic: false,
+                        onTap: () { Buzz.tick(); EditProfileScreen.push(context); },
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Avatar(hue: s.myHue, photoId: s.photoId, size: 104, ring: C.sig),
+                            Positioned(
+                              right: -2, bottom: -2,
+                              child: Container(
+                                width: 30, height: 30,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white,
+                                  border: Border.all(color: C.black, width: 3),
+                                ),
+                                child: const Icon(Icons.edit_rounded, size: 13, color: Colors.black),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 16),
                       Text('@${s.myHandle}', style: T.big.copyWith(fontSize: 27)),
+                      if (s.bio.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(s.bio,
+                            textAlign: TextAlign.center,
+                            style: T.tiny.copyWith(color: C.tx2, fontSize: 13)),
+                      ],
                       const SizedBox(height: 9),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),

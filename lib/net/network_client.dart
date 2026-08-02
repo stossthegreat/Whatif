@@ -19,6 +19,11 @@ class NetworkClient {
   String? myId;
   String? myName;
   double? myHue;
+  // HTTP surface (media uploads/fetch) — minted fresh in every welcome
+  String httpToken = '';
+  String httpBase = '';
+  bool mediaEnabled = false;
+  bool gifsEnabled = false;
   bool _closing = false;
 
   bool get connected => _ch != null;
@@ -36,6 +41,19 @@ class NetworkClient {
             myId = m['id'] as String?;
             myName = m['name'] as String?;
             myHue = (m['hue'] as num?)?.toDouble();
+            final http = (m['http'] as Map?)?.cast<String, dynamic>();
+            httpToken = (http?['token'] as String?) ?? '';
+            final base = (http?['base'] as String?) ?? '';
+            // derive from the ws url when the server doesn't know its public base
+            httpBase = base.isNotEmpty
+                ? base
+                : AppConfig.backend
+                    .replaceFirst('wss://', 'https://')
+                    .replaceFirst('ws://', 'http://')
+                    .replaceFirst(RegExp(r'/ws$'), '');
+            final feats = (m['features'] as Map?)?.cast<String, dynamic>();
+            mediaEnabled = feats?['media'] == true;
+            gifsEnabled = feats?['gifs'] == true;
           }
           _events.add(m);
         } catch (_) {/* ignore malformed */}
@@ -123,4 +141,6 @@ class NetworkClient {
   void typing(String to, bool on) => send({'t': 'typing', 'to': to, 'on': on});
   void reactMsg(int id, String? e) => send({'t': 'reactMsg', 'id': id, 'e': e});
   void chatsList() => send({'t': 'chats'});
+  void profile([String? uid]) => send({'t': 'profile', if (uid != null) 'uid': uid});
+  void setProfile(Map<String, dynamic> fields) => send({'t': 'setProfile', ...fields});
 }
