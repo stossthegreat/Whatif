@@ -28,6 +28,10 @@ const PORT = Number(process.env.PORT || 8080);
 const ALLOW_SOLO = (process.env.ALLOW_SOLO || 'true') === 'true';
 const SOLO_WAIT_MS = Number(process.env.SOLO_WAIT_MS || 6000);
 const LIVE_BASELINE = Number(process.env.LIVE_BASELINE || 0);
+// P2P: 1:1 stranger rooms carry video phone-to-phone (server only signals);
+// LiveKit is the automatic fallback and still carries groups + calls.
+// Kill-switch: set P2P=false on Railway and redeploy.
+const P2P_ENABLED = (process.env.P2P ?? 'true') === 'true';
 const REPORT_KICK = Number(process.env.REPORT_KICK || 3);
 
 const NAMES = ['kai', 'noor', 'remy', 'sasha', 'theo', 'luca', 'emi', 'dro', 'wren',
@@ -464,7 +468,9 @@ async function formCell(memberIds: string[], modeOverride?: 'call') {
     });
     const token = await mintToken(room, id, u.name);
     send(u, { t: 'cell', room, url: LIVEKIT_URL, token, people: others,
-      game: rounds[0], rounds, golden: cell.golden, luckyId: cell.luckyId, mode });
+      game: rounds[0], rounds, golden: cell.golden, luckyId: cell.luckyId, mode,
+      // exactly-two stranger rooms may go phone-to-phone; groups/calls never
+      p2p: P2P_ENABLED && mode !== 'call' && live.length === 2 });
   }
 
   // talk-first: the room opens as a hang. In HANG mode games start when the
@@ -914,6 +920,16 @@ wss.on('connection', (ws) => {
           db.removeBlock(user.uid, m.target);
         }
         break;
+      case 'rtc': {
+        // P2P signaling relay: offer/answer/ICE between two members of the
+        // SAME cell. The server never inspects the payload.
+        const to = typeof m.to === 'string' ? m.to : '';
+        const cell = user.cellId ? store.cells.get(user.cellId) : undefined;
+        if (!to || !cell || !cell.members.includes(to) || !cell.members.includes(user.id)) break;
+        const peer = store.users.get(to);
+        if (peer) send(peer, { t: 'rtc', from: user.id, d: m.d });
+        break;
+      }
       case 'pushToken':
         if (typeof m.token === 'string' && m.token.length) {
           db.savePushToken(user.uid, m.token.slice(0, 512));
