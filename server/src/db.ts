@@ -18,7 +18,7 @@ const pool = URL
 
 export const dbEnabled = !!pool;
 
-async function run(q: string, params: unknown[] = []): Promise<pg.QueryResult | null> {
+export async function run(q: string, params: unknown[] = []): Promise<pg.QueryResult | null> {
   if (!pool) return null;
   try {
     return await pool.query(q, params);

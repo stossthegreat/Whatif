@@ -16,6 +16,8 @@ export interface User {
   cellId: string | null;
   queuedAt: number;
   lastPong: number;
+  tz?: number;                 // client tz offset minutes (Night Owl badge etc.)
+  friendUids?: Set<string>;    // hydrated on hello — for presence broadcasts
 }
 
 /// One round as sent on the wire (and replayed on revive).
@@ -33,6 +35,12 @@ export interface Cell {
   room: string;
   members: string[]; // connection ids
   kind: GameKind;
+  // ---- social layer: snapshots that survive members leaving --------------
+  joinedAt: Map<string, number>;                    // conn-id -> ms joined
+  leftAt: Map<string, number>;                      // conn-id -> ms left
+  meta: Map<string, { uid: string; name: string; hue: number }>;
+  prompted: Set<string>;                            // conn-ids already sent ratePrompt
+  credited: Set<string>;                            // conn-ids already given room credit
   // ---- server-authoritative session state ----
   rounds: RoundWire[];
   roundIdx: number;

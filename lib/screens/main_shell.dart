@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
-import '../state/session.dart';
+import '../state/social.dart';
 import '../theme/tokens.dart';
 import 'home_screen.dart';
 import 'me_screen.dart';
@@ -85,12 +85,12 @@ class _MainShellState extends State<MainShell> {
                       const Expanded(child: SizedBox()), // lane for the orb
                       Expanded(
                         child: AnimatedBuilder(
-                          animation: AppSession.instance,
+                          animation: SocialState.instance,
                           builder: (context, _) => _NavCell(
                             icon: _tab == 1 ? Icons.person_rounded : Icons.person_outline_rounded,
                             label: 'Profile',
                             selected: _tab == 1,
-                            badge: AppSession.instance.mutualCount,
+                            badge: SocialState.instance.reqCount,
                             onTap: () => _go(1),
                           ),
                         ),

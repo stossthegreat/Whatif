@@ -10,7 +10,11 @@ import 'models/person.dart';
 import 'net/network_client.dart';
 import 'net/rtc_service.dart';
 import 'state/session.dart';
+import 'state/social.dart';
 import 'theme/tokens.dart';
+import 'widgets/match_overlay.dart';
+import 'widgets/rating_overlay.dart';
+import 'screens/friends_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/signin_screen.dart';
 import 'screens/profile_screen.dart';
@@ -72,6 +76,7 @@ class _RootState extends State<_Root> {
     // stable uid and we can skip onboarding for returning users.
     await AppSession.instance.load();
     if (AppConfig.isLive) {
+      SocialState.instance.attach(); // before connect so it sees the welcome
       NetworkClient.instance.connect();
       _netSub = NetworkClient.instance.events.listen(_onNet);
     }
@@ -306,12 +311,40 @@ class _RootState extends State<_Root> {
         ),
     };
 
-    return AnimatedSwitcher(
-      duration: M.base,
-      switchInCurve: M.ease,
-      switchOutCurve: M.ease,
-      transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
-      child: KeyedSubtree(key: ValueKey('${_step.name}$_drop'), child: screen),
+    return Stack(
+      children: [
+        AnimatedSwitcher(
+          duration: M.base,
+          switchInCurve: M.ease,
+          switchOutCurve: M.ease,
+          transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+          child: KeyedSubtree(key: ValueKey('${_step.name}$_drop'), child: screen),
+        ),
+        // ---- social overlays: never a blocking step, always floating -------
+        AnimatedBuilder(
+          animation: SocialState.instance,
+          builder: (context, _) {
+            final s = SocialState.instance;
+            // the meet-again question — over finding/home only, never mid-room
+            if (s.pendingRates.isNotEmpty &&
+                (_step == _Step.finding || _step == _Step.home)) {
+              return RatingOverlay(
+                key: ValueKey('rate${s.pendingRates.first.cellId}${s.pendingRates.first.uid}'),
+                item: s.pendingRates.first,
+              );
+            }
+            // 🎉 the match celebration — anywhere except live rooms
+            if (s.celebrations.isNotEmpty && _step != _Step.live) {
+              return MatchOverlay(
+                key: ValueKey('match${s.celebrations.first.uid}'),
+                friend: s.celebrations.first,
+                onSeePeople: () => FriendsScreen.push(context),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+        ),
+      ],
     );
   }
 }

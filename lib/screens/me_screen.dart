@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
 import '../state/session.dart';
+import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
 import 'moments_screen.dart';
 import 'settings_screen.dart';
-import 'sparks_screen.dart';
+import 'friends_screen.dart';
 
 /// YOU — one page, everything. Your glow, your rank, the badges rooms voted
 /// you, the stats, your people (sparks), your moments. Not six screens; one
@@ -122,22 +123,41 @@ class MeScreen extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(child: _Stat(emoji: '🤥', value: '${s.lies}', label: 'lies caught')),
                   const SizedBox(width: 8),
-                  Expanded(child: _Stat(emoji: '✨', value: '${s.mutualCount}', label: 'mutuals')),
+                  Expanded(
+                      child: AnimatedBuilder(
+                          animation: SocialState.instance,
+                          builder: (context, _) => _Stat(
+                              emoji: '✨',
+                              value: '${SocialState.instance.friends.length}',
+                              label: 'friends'))),
                 ]),
                 const SizedBox(height: 24),
 
-                // your people (sparks live here now — not a tab)
-                _SectionHead(
-                  title: 'your people ✨',
-                  trailing: s.sparks.isEmpty ? null : 'see all',
-                  onTrailing: s.sparks.isEmpty ? null : () => SparksScreen.push(context),
+                // your people — the matched friendships (rating both ways)
+                AnimatedBuilder(
+                  animation: SocialState.instance,
+                  builder: (context, _) {
+                    final friends = SocialState.instance.friends;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _SectionHead(
+                          title: 'your people ✨',
+                          trailing: friends.isEmpty ? null : 'see all',
+                          onTrailing:
+                              friends.isEmpty ? null : () => FriendsScreen.push(context),
+                        ),
+                        const SizedBox(height: 10),
+                        if (friends.isEmpty)
+                          Text(
+                              'Meet someone, both say “meet again” — they land here forever.',
+                              style: T.tiny)
+                        else
+                          for (final f in friends.take(3)) _PersonRow(friend: f),
+                      ],
+                    );
+                  },
                 ),
-                const SizedBox(height: 10),
-                if (s.sparks.isEmpty)
-                  Text('Spark someone mid-room — they land here. When it’s mutual, that’s ✨.',
-                      style: T.tiny)
-                else
-                  for (final sp in s.sparks.take(3)) _PersonRow(spark: sp),
                 const SizedBox(height: 24),
 
                 // moments (BeReal-memories style — inside the profile)
@@ -262,8 +282,8 @@ class _Stat extends StatelessWidget {
 }
 
 class _PersonRow extends StatelessWidget {
-  const _PersonRow({required this.spark});
-  final Spark spark;
+  const _PersonRow({required this.friend});
+  final FriendInfo friend;
 
   @override
   Widget build(BuildContext context) {
@@ -274,42 +294,23 @@ class _PersonRow extends StatelessWidget {
         decoration: BoxDecoration(
           color: C.glass,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: spark.mutual ? C.sig.withOpacity(0.5) : C.hair),
+          border: Border.all(color: C.sig.withOpacity(0.5)),
         ),
         child: Row(
           children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                IdentityOrb(hue: spark.hue, size: 38),
-                if (spark.liveNow)
-                  Positioned(
-                    right: -1, bottom: -1,
-                    child: Container(
-                      width: 12, height: 12,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: C.live,
-                        border: Border.all(color: C.black, width: 2),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            IdentityOrb(hue: friend.hue, size: 38, live: friend.online),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    Text('@${spark.name}',
+                    Text('@${friend.name}',
                         style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
-                    if (spark.mutual) ...[
-                      const SizedBox(width: 6),
-                      const Text('✨', style: TextStyle(fontSize: 12)),
-                    ],
+                    const SizedBox(width: 6),
+                    const Text('✨', style: TextStyle(fontSize: 12)),
                   ]),
-                  Text(spark.vibe, style: T.tiny),
+                  Text(friend.online ? 'online now' : 'away', style: T.tiny),
                 ],
               ),
             ),

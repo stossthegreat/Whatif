@@ -58,6 +58,7 @@ class NetworkClient {
       'gender': s.gender,
       'meet': s.lookingFor ?? 'Everyone',
       'vibes': s.myVibes,
+      'tz': DateTime.now().timeZoneOffset.inMinutes,
     });
   }
 
@@ -94,4 +95,17 @@ class NetworkClient {
   void unblock(String target) => send({'t': 'unblock', 'target': target});
   void pushToken(String token) => send({'t': 'pushToken', 'token': token});
   void deleteAccount() => send({'t': 'deleteAccount'});
+
+  // ---- social layer ---------------------------------------------------------
+  void rate(String target, String cell, int score) =>
+      send({'t': 'rate', 'target': target, 'cell': cell, 'score': score});
+  void friendRequest(String target) => send({'t': 'friendRequest', 'target': target});
+  void friendAccept(String target) => send({'t': 'friendAccept', 'target': target});
+  void friendDecline(String target) => send({'t': 'friendDecline', 'target': target});
+  void unfriend(String target) => send({'t': 'unfriend', 'target': target});
+  void setTier(String target, int tier) => send({'t': 'setTier', 'target': target, 'tier': tier});
+  void pinChat(String target, bool on) => send({'t': 'pinChat', 'target': target, 'on': on});
+  void friendsSnapshot() => send({'t': 'friends'});
+  void traitVote(String target, String trait) =>
+      send({'t': 'traitVote', 'target': target, 'trait': trait});
 }

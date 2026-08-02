@@ -16,6 +16,9 @@ import { mintToken, LIVEKIT_URL } from './livekit.js';
 import * as db from './db.js';
 import { sendPush, pushEnabled } from './push.js';
 import * as legal from './legal.js';
+import * as social from './social.js';
+import * as dbs from './db_social.js';
+import { mintAuthToken } from './auth.js';
 
 const PORT = Number(process.env.PORT || 8080);
 const ALLOW_SOLO = (process.env.ALLOW_SOLO || 'true') === 'true';
@@ -53,6 +56,7 @@ function meetOk(meet: Meet, gender?: string): boolean {
 function compatible(a: User, b: User): boolean {
   return a.uid !== b.uid
     && !store.isBlocked(a.uid, b.uid)
+    && !social.isNeverPair(a.uid, b.uid) // "never again" is forever
     && (a.mode ?? 'hang') === (b.mode ?? 'hang') // roulette matches roulette
     && meetOk(a.meet, b.gender)
     && meetOk(b.meet, a.gender);
@@ -87,6 +91,8 @@ async function joinCell(cell: Cell, u: User) {
   u.state = 'incell';
   u.cellId = cell.id;
   cell.members.push(u.id);
+  cell.joinedAt.set(u.id, Date.now());
+  cell.meta.set(u.id, { uid: u.uid, name: u.name, hue: u.hue });
   // the room learns someone walked in
   broadcastCell(cell.id, { t: 'peerJoined', id: u.id, uid: u.uid, name: u.name, hue: u.hue }, u.id);
   // the newcomer gets the full room
@@ -402,11 +408,20 @@ async function formCell(memberIds: string[]) {
   const cellId = randomUUID();
   const room = `cell_${cellId}`;
   const mode = (store.users.get(live[0])?.mode ?? 'hang');
+  const now = Date.now();
   const cell: Cell = {
     id: cellId, room, members: [...live], kind: rounds[0].kind as GameKind,
     rounds, roundIdx: -1, answers: new Map(), votes: new Map(),
     golden: Math.random() < 0.04, luckyId: pick(live), timers: [],
     gamesPlayed: 0, inRound: false, mode, seqPos: 0,
+    joinedAt: new Map(live.map((id) => [id, now])),
+    leftAt: new Map(),
+    meta: new Map(live.map((id) => {
+      const o = store.users.get(id)!;
+      return [id, { uid: o.uid, name: o.name, hue: o.hue }];
+    })),
+    prompted: new Set(),
+    credited: new Set(),
   };
   store.cells.set(cellId, cell);
   noteMatch();
@@ -446,6 +461,9 @@ function leaveCell(u: User) {
   // a resumed seat means this connection is no longer a member — its late
   // close event must not tear down the room it was reconnected into
   if (!cell.members.includes(u.id)) return;
+  cell.leftAt.set(u.id, Date.now());
+  // social layer: encounters + rate prompt + room credit for the leaver
+  social.onCellLeave(cell, u);
   cell.members = cell.members.filter((x) => x !== u.id);
   broadcastCell(cell.id, { t: 'peerLeft', id: u.id });
   if (cell.members.length < 2) {
@@ -454,7 +472,13 @@ function leaveCell(u: User) {
     store.cells.delete(cell.id);
     for (const id of remaining) {
       const other = store.users.get(id);
-      if (other) { send(other, { t: 'ended' }); enqueue(other); } // fluid recompose
+      if (other) {
+        // the room is over for them too — same social close-out, then requeue
+        cell.leftAt.set(id, Date.now());
+        social.onCellLeave(cell, other);
+        send(other, { t: 'ended' });
+        enqueue(other); // fluid recompose
+      }
     }
   }
 }
@@ -473,6 +497,12 @@ function resumeCell(user: User) {
     const old = store.users.get(oldId)!;
     cell.members = cell.members.map((mid) => (mid === oldId ? user.id : mid));
     if (cell.luckyId === oldId) cell.luckyId = user.id;
+    // carry the social snapshots over to the new connection id
+    const j = cell.joinedAt.get(oldId);
+    if (j != null) { cell.joinedAt.set(user.id, j); cell.joinedAt.delete(oldId); }
+    cell.meta.set(user.id, { uid: user.uid, name: user.name, hue: user.hue });
+    cell.meta.delete(oldId);
+    cell.leftAt.delete(oldId);
     for (const r of cell.rounds) if (r.targetId === oldId) r.targetId = user.id;
     for (const r of cell.seqBeats ?? []) if (r.targetId === oldId) r.targetId = user.id;
     old.cellId = null;
@@ -614,8 +644,15 @@ wss.on('connection', (ws) => {
         if (typeof m.name === 'string' && m.name.trim()) user.name = m.name.trim().slice(0, 16);
         if (typeof m.gender === 'string') user.gender = m.gender;
         if (m.meet === 'Women' || m.meet === 'Men' || m.meet === 'Everyone') user.meet = m.meet;
-        send(user, { t: 'welcome', id, uid: user.uid, name: user.name, hue: user.hue, live: LIVE_BASELINE + store.onlineCount });
+        if (typeof m.tz === 'number' && Number.isFinite(m.tz)) user.tz = Math.trunc(m.tz);
+        send(user, {
+          t: 'welcome', id, uid: user.uid, name: user.name, hue: user.hue,
+          live: LIVE_BASELINE + store.onlineCount,
+          http: { token: mintAuthToken(user.uid), base: process.env.PUBLIC_URL || '' },
+          features: { social: db.dbEnabled, media: false, gifs: false },
+        });
         notifyLive(user);
+        void social.hydrate(user);
         resumeCell(user); // wifi blip? re-seat them in the room they were in
         const vibes = Array.isArray(m.vibes)
           ? (m.vibes as unknown[]).filter((v): v is string => typeof v === 'string').slice(0, 12)
@@ -748,6 +785,16 @@ wss.on('connection', (ws) => {
         }
         break;
       }
+      // ---- social layer (each case a one-line delegate) ----
+      case 'rate': void social.rate(user, m); break;
+      case 'friendRequest': if (typeof m.target === 'string') void social.friendRequest(user, m.target); break;
+      case 'friendAccept': if (typeof m.target === 'string') void social.friendAccept(user, m.target); break;
+      case 'friendDecline': if (typeof m.target === 'string') void social.friendDecline(user, m.target); break;
+      case 'unfriend': if (typeof m.target === 'string') void social.unfriend(user, m.target); break;
+      case 'setTier': void social.setTier(user, m); break;
+      case 'pinChat': void social.pinChat(user, m); break;
+      case 'friends': void social.snapshot(user); break;
+      case 'traitVote': void social.traitVote(user, m); break;
       case 'save': if (typeof m.target === 'string') onSave(user, m.target); break;
       case 'unsave':
         if (typeof m.target === 'string') {
@@ -755,7 +802,12 @@ wss.on('connection', (ws) => {
           db.removeSave(user.uid, m.target);
         }
         break;
-      case 'report': if (typeof m.target === 'string') onReport(m.target, user.uid); break;
+      case 'report':
+        if (typeof m.target === 'string') {
+          onReport(m.target, user.uid);
+          social.onReported(m.target);
+        }
+        break;
       case 'unblock':
         if (typeof m.target === 'string') {
           store.unblock(user.uid, m.target);
@@ -771,6 +823,7 @@ wss.on('connection', (ws) => {
         // the privacy policy promises immediate server-side deletion — honour it
         console.log(`[delete] account ${user.uid}`);
         db.deleteUser(user.uid);
+        dbs.deleteSocial(user.uid);
         store.purgeSocial(user.uid);
         dequeue(id); leaveParty(id); leaveCell(user);
         try { ws.close(); } catch { /* ignore */ }
@@ -781,6 +834,7 @@ wss.on('connection', (ws) => {
           store.block(user.uid, m.target);
           db.addBlock(user.uid, m.target);
           onReport(m.target, user.uid);
+          social.onBlocked(user, m.target);
         }
         leaveCell(user); enqueue(user);
         break;
@@ -791,7 +845,10 @@ wss.on('connection', (ws) => {
     dequeue(id);
     leaveParty(id);
     leaveCell(user);
-    if (store.byUid.get(user.uid) === id) store.byUid.delete(user.uid);
+    if (store.byUid.get(user.uid) === id) {
+      social.broadcastPresence(user, false);
+      store.byUid.delete(user.uid);
+    }
     store.users.delete(id);
   });
   ws.on('error', () => { /* close handler cleans up */ });
@@ -801,7 +858,10 @@ server.listen(PORT, () => {
   console.log(`Rivlr server on :${PORT}  (livekit ${LIVEKIT_URL ? 'ON' : 'OFF'}, solo ${ALLOW_SOLO}, db ${db.dbEnabled ? 'ON' : 'OFF'})`);
 });
 
+social.init(send);
+
 void db.initDb().then(async () => {
+  await dbs.initSocial();
   // matches-today survives restarts — pick up where the day left off
   const n = await db.loadMatches(matchesDay);
   if (n > matchesToday) matchesToday = n;
