@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
@@ -158,7 +157,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    WakelockPlus.enable(); // never sleep on a live call
+    // wakelock is owned by the step machine in app.dart — enabling/disabling
+    // per-screen raced across transitions and let live rooms fall asleep
     Buzz.pop();
     Sfx.match();
     // the arrival stamp — the room's name slams across the faces, then clears
@@ -456,7 +456,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    WakelockPlus.disable();
     _timer.dispose();
     _idle?.cancel();
     _speak?.cancel();
@@ -493,14 +492,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       Sfx.combo();
     }
     setState(() {});
-  }
-
-  void _react() {
-    Buzz.tap();
-    Sfx.pop();
-    _bumpCombo();
-    _float('😂');
-    if (widget.live) NetworkClient.instance.react('😂');
   }
 
   // ---- game timer plumbing --------------------------------------------------
@@ -1167,6 +1158,35 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     );
   }
 
+  /// Group rooms: pick WHO before report/block (1:1 skips straight through).
+  void _pickPersonSheet() {
+    Buzz.commit();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(12),
+        child: Glass(
+          radius: 26,
+          padding: const EdgeInsets.all(6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final p in cell.people) ...[
+                _sheetRow(Icons.block_rounded, '@${p.name}', C.tx, () {
+                  Navigator.pop(ctx);
+                  _openReport(p);
+                }),
+                const Divider(height: 1, color: C.hair),
+              ],
+              _sheetRow(null, 'Cancel', C.tx2, () => Navigator.pop(ctx), center: true),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _openReport(Person p) {
     Buzz.commit();
     final name = p.name;
@@ -1287,6 +1307,10 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                 _topBar(),
                 if (_phase != _Phase.awards) _rail(),
                 if (_phase != _Phase.awards) _caption(),
+                // NEXT — the one-tap skip. Calls don't skip; empty rooms are
+                // already waiting for the next person.
+                if (_phase != _Phase.awards && !_isCall && cell.people.isNotEmpty)
+                  _nextBtn(),
                 if (_combo >= 3)
                   Positioned(
                     right: 12,
@@ -1580,6 +1604,48 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     );
   }
 
+  /// The skip pill — bottom-left, opposite the rail. Same gradient as the
+  /// Play orb so "this moves you forward" reads instantly.
+  Widget _nextBtn() {
+    return Positioned(
+      left: 12,
+      bottom: 224,
+      child: Press(
+        onTap: () {
+          Buzz.pop();
+          Sfx.pop();
+          widget.onNext();
+        },
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 12, 14, 12),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [C.sig, C.purpleDeep],
+            ),
+            borderRadius: BorderRadius.circular(100),
+            border: Border.all(color: Colors.white.withOpacity(0.22), width: 1.5),
+            boxShadow: [
+              BoxShadow(color: C.sig.withOpacity(0.35), blurRadius: 18, spreadRadius: -4),
+              const BoxShadow(color: Color(0x99000000), blurRadius: 14, offset: Offset(0, 6)),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('next',
+                  style: T.body.copyWith(
+                      color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+              const SizedBox(width: 4),
+              const Icon(Icons.skip_next_rounded, size: 24, color: Colors.white),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // ---- right action rail ----------------------------------------------------
   Widget _rail() {
     return Positioned(
@@ -1626,21 +1692,34 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               onTap: _openAddPeople,
             ),
             const SizedBox(height: 18),
+            _RailAction(
+              icon: Icons.star_rounded,
+              iconColor: const Color(0xFFFFD54A),
+              label: 'save',
+              onTap: () {
+                if (cell.people.length == 1) {
+                  _save(cell.people.first);
+                } else if (cell.people.isNotEmpty) {
+                  _openAddPeople();
+                }
+              },
+            ),
+            const SizedBox(height: 18),
           ],
+          // block is deliberately the LOUDEST thing on the rail — safety is
+          // never buried in a menu
           _RailAction(
-            icon: Icons.favorite_rounded,
-            iconColor: C.live,
-            label: _reactCount > 0 ? '$_reactCount' : 'react',
-            onTap: _react,
-          ),
-          const SizedBox(height: 18),
-          _RailAction(
-            icon: Icons.ios_share_rounded,
+            icon: Icons.block_rounded,
             iconColor: Colors.white,
-            label: 'share',
+            label: 'block',
+            size: 62,
+            bg: C.live,
             onTap: () {
-              Buzz.commit();
-              _toast('✨ moment saved — share it from your profile');
+              if (cell.people.length == 1) {
+                _openReport(cell.people.first);
+              } else if (cell.people.isNotEmpty) {
+                _pickPersonSheet();
+              }
             },
           ),
         ],
@@ -2408,11 +2487,20 @@ class _GameRowState extends State<_GameRow> with SingleTickerProviderStateMixin 
 
 /// One item in the right-side action rail.
 class _RailAction extends StatelessWidget {
-  const _RailAction({required this.icon, required this.label, required this.onTap, this.iconColor = Colors.white});
+  const _RailAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.iconColor = Colors.white,
+    this.size = 48,
+    this.bg = const Color(0x40000000),
+  });
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final Color iconColor;
+  final double size;
+  final Color bg;
 
   @override
   Widget build(BuildContext context) {
@@ -2422,9 +2510,9 @@ class _RailAction extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 48, height: 48,
-            decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0x40000000)),
-            child: Icon(icon, size: 27, color: iconColor),
+            width: size, height: size,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: bg),
+            child: Icon(icon, size: size * 0.56, color: iconColor),
           ),
           const SizedBox(height: 5),
           Text(label,

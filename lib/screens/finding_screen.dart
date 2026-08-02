@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
 import '../theme/tokens.dart';
@@ -36,7 +35,6 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    WakelockPlus.enable(); // don't let the screen sleep while matching
     _c.addListener(_onTick);
     _spin();
   }
@@ -86,7 +84,6 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
 
   @override
   void dispose() {
-    WakelockPlus.disable();
     _c.dispose();
     super.dispose();
   }

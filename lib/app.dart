@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:app_links/app_links.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter/material.dart';
 import 'config.dart';
 import 'core/analytics.dart';
@@ -173,6 +174,16 @@ class _RootState extends State<_Root> {
   void _to(_Step s) {
     Track.screen(s.name);
     setState(() => _step = s);
+    _wakelock(s);
+  }
+
+  /// Screen sleep is managed HERE and only here. The per-screen
+  /// enable/disable pairs raced across transitions (both are async platform
+  /// calls, so finding's dispose-disable could land AFTER live's
+  /// init-enable) — leaving a live room free to dim and sleep mid-call.
+  void _wakelock(_Step s) {
+    final awake = s == _Step.finding || s == _Step.live || s == _Step.party;
+    WakelockPlus.toggle(enable: awake);
   }
 
   // ---- live mode (server-driven) -------------------------------------------
@@ -287,6 +298,7 @@ class _RootState extends State<_Root> {
       _drop++;
       _step = _Step.live;
     });
+    _wakelock(_Step.live);
   }
 
   RoundDef _roundFromServer(Map<String, dynamic> g) {
@@ -353,6 +365,7 @@ class _RootState extends State<_Root> {
       _drop++;
       _step = _Step.live;
     });
+    _wakelock(_Step.live);
   }
 
   // ---- verbs ----------------------------------------------------------------
