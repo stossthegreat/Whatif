@@ -143,6 +143,15 @@ export function addReport(reporter: string, target: string): void {
   void run('INSERT INTO reports (reporter, target) VALUES ($1,$2)', [reporter, target]);
 }
 
+/// Account deletion — the privacy policy's §8 made real. Removes the user
+/// row, saves in both directions, their blocks, and the push token. Report
+/// ROWS naming them are kept (community-safety retention, policy §7).
+export function deleteUser(uid: string): void {
+  void run('DELETE FROM saves WHERE uid = $1 OR target = $1', [uid]);
+  void run('DELETE FROM blocks WHERE uid = $1', [uid]);
+  void run('DELETE FROM users WHERE uid = $1', [uid]);
+}
+
 export function bumpMatches(day: string): void {
   void run(
     `INSERT INTO day_stats (day, matches) VALUES ($1, 1)

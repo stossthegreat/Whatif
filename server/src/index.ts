@@ -15,6 +15,7 @@ import { store, type User, type Meet, type Cell, type RoundWire } from './store.
 import { mintToken, LIVEKIT_URL } from './livekit.js';
 import * as db from './db.js';
 import { sendPush, pushEnabled } from './push.js';
+import * as legal from './legal.js';
 
 const PORT = Number(process.env.PORT || 8080);
 const ALLOW_SOLO = (process.env.ALLOW_SOLO || 'true') === 'true';
@@ -577,6 +578,11 @@ setInterval(() => {
 const app = express();
 app.get('/', (_req, res) => res.json({ ok: true, service: 'rivlr', live: LIVE_BASELINE + store.onlineCount }));
 app.get('/health', (_req, res) => res.json({ ok: true }));
+// public legal pages — these URLs go in App Store Connect / Play Console
+app.get('/privacy', (_req, res) => res.type('html').send(legal.page('Privacy Policy', legal.privacy)));
+app.get('/terms', (_req, res) => res.type('html').send(legal.page('Terms of Service', legal.terms)));
+app.get('/rules', (_req, res) => res.type('html').send(legal.page('House Rules', legal.rules)));
+app.get('/delete-account', (_req, res) => res.type('html').send(legal.page('Delete your account', legal.deleteAccount)));
 app.get('/stats', (_req, res) => res.json({
   online: store.onlineCount, queued: store.queue.length, cells: store.cells.size, livekit: !!LIVEKIT_URL,
 }));
@@ -761,6 +767,15 @@ wss.on('connection', (ws) => {
           db.savePushToken(user.uid, m.token.slice(0, 512));
         }
         break;
+      case 'deleteAccount': {
+        // the privacy policy promises immediate server-side deletion — honour it
+        console.log(`[delete] account ${user.uid}`);
+        db.deleteUser(user.uid);
+        store.purgeSocial(user.uid);
+        dequeue(id); leaveParty(id); leaveCell(user);
+        try { ws.close(); } catch { /* ignore */ }
+        break;
+      }
       case 'block':
         if (typeof m.target === 'string') {
           store.block(user.uid, m.target);

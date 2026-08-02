@@ -93,4 +93,5 @@ class NetworkClient {
   void unsave(String target) => send({'t': 'unsave', 'target': target});
   void unblock(String target) => send({'t': 'unblock', 'target': target});
   void pushToken(String token) => send({'t': 'pushToken', 'token': token});
+  void deleteAccount() => send({'t': 'deleteAccount'});
 }

@@ -94,6 +94,9 @@ showing real strangers' faces — use your own two devices.
       enabling them (Codemagic fetches the fresh profile automatically)
 - [ ] TestFlight build passes on 2 devices: match, voice both ways, camera
       upright, party code join, deep link, mute, block → never rematch
-- [ ] Privacy policy URL: host LegalCopy.privacy text anywhere public
-      (GitHub Pages is fine) and paste the URL in App Store Connect
+- [ ] Privacy policy URL — the server hosts it, paste into App Store
+      Connect / Play Console:
+      https://whatif-production-051b.up.railway.app/privacy
+      Also live: /terms · /rules · /delete-account (the delete-account URL
+      is REQUIRED by Google Play's data-deletion policy for Android)
 - [ ] Demo video ready in case review asks (screen-record a 2-device match)

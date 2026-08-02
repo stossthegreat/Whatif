@@ -112,7 +112,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _link('Delete account', () => _confirmDelete(context), color: C.live),
                   ]),
                   const SizedBox(height: 26),
-                  Center(child: Text('Rivlr · 1.0.0 (32)', style: T.tiny)),
+                  Center(child: Text('Rivlr · 1.0.0 (33)', style: T.tiny)),
                 ],
               ),
             ),
@@ -134,7 +134,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: T.body.copyWith(color: C.tx2))),
           TextButton(
             onPressed: () {
-              AppSession.instance.signOut(); // wipes device data + identity
+              // server first (deletes DB rows), then wipe the device
+              NetworkClient.instance.deleteAccount();
+              AppSession.instance.signOut();
               Navigator.pop(ctx);
               Navigator.pop(context);
               widget.onSignOut();

@@ -1,70 +1,33 @@
-import 'package:flutter/material.dart';
-import '../theme/tokens.dart';
-import '../widgets/glass.dart';
+/// Public legal pages, served at /privacy, /terms, /rules, /delete-account.
+/// These URLs go into App Store Connect and Google Play Console. The text
+/// MIRRORS lib/screens/legal_screen.dart — change one, change both.
 
-/// A pushed page for Privacy, Terms, House Rules and About — title + body.
-class LegalScreen extends StatelessWidget {
-  const LegalScreen({super.key, required this.title, required this.body});
-  final String title;
-  final String body;
-
-  static void push(BuildContext context, String title, String body) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => LegalScreen(title: title, body: body),
-    ));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: C.black,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 22),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Press(
-                    onTap: () => Navigator.of(context).maybePop(),
-                    child: Container(
-                      width: 38, height: 38,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
-                      child: const Icon(Icons.arrow_back_rounded, size: 20, color: C.tx2),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(child: Text(title, style: T.big.copyWith(fontSize: 24))),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Text(body, style: T.body.copyWith(height: 1.55, color: C.tx2)),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+export function page(title: string, body: string): string {
+  const esc = body
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br/>');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>${title} · Rivlr</title>
+<style>
+  body{background:#000;color:#cfcfd4;font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0}
+  main{max-width:720px;margin:0 auto;padding:48px 24px 96px}
+  h1{color:#fff;font-size:28px;letter-spacing:-0.5px}
+  .mark{color:#fff;font-weight:800;font-size:22px;margin-bottom:32px}
+  .mark span{color:#A36BFF}
+  a{color:#A36BFF}
+</style></head><body><main>
+<div class="mark"><span>R</span>ivlr</div>
+<h1>${title}</h1>
+<p>${esc}</p>
+</main></body></html>`;
 }
 
-/// Rivlr legal + info copy. The SAME text is served publicly by the server at
-/// /privacy, /terms, /rules and /delete-account (server/src/legal.ts) — if you
-/// change one, change both.
-class LegalCopy {
-  LegalCopy._();
-
-  static const privacy = '''PRIVACY POLICY
+export const privacy = `PRIVACY POLICY
 Rivlr — live social video
 Effective date: 2 August 2026 · Version 3.0
 
-This policy explains what Rivlr ("Rivlr", "we", "us", "our") collects, why, how long we keep it, who we share it with, and every choice you have. We designed Rivlr to need as little of your data as possible: the product is live conversation between people, not their data. This policy is also available at any time from Settings → Privacy Policy and on the web.
+This policy explains what Rivlr ("Rivlr", "we", "us", "our") collects, why, how long we keep it, who we share it with, and every choice you have. We designed Rivlr to need as little of your data as possible: the product is live conversation between people, not their data. This policy is also available at any time from Settings → Privacy Policy inside the app.
 
 1. WHO WE ARE / DATA CONTROLLER
 Rivlr is a live social video app for adults (18+). For the purposes of the UK GDPR and EU GDPR, the data controller is the operator of Rivlr, reachable at appsdevelop2025@gmail.com. That address handles ALL privacy matters: questions, rights requests, complaints, and under-18 reports.
@@ -89,10 +52,10 @@ While you play: round answers, votes, and reactions are processed in server memo
 To make the social layer work across devices and restarts we store server-side, keyed to your identifier: your handle, avatar hue, age-gate confirmation, stated preferences and vibes, your saves/sparks and blocks, report records, and (if you enable notifications) your push token. This is the complete list.
 
 2.6 Analytics
-We use Google Firebase Analytics to understand which screens and games people use — events like "game started" or "screen viewed", associated with an app instance, not your handle. We use it to improve the product, never for advertising. We do not use data for cross-app tracking, and we answer "no" to tracking under Apple's App Tracking Transparency because we do not track.
+We use Google Firebase Analytics to understand which screens and games people use — events like "game started" or "screen viewed", associated with an app instance, not your handle. We use it to improve the product, never for advertising. We do not use data for cross-app tracking.
 
 2.7 Push notifications (optional)
-If you allow notifications, we store a device push token so we can tell you things like a mutual spark coming online. Sending uses Apple Push Notification service and Google Firebase Cloud Messaging. Turn notifications off in iOS Settings at any time; the token stops being used.
+If you allow notifications, we store a device push token so we can tell you things like a mutual spark coming online. Sending uses Apple Push Notification service and Google Firebase Cloud Messaging. Turn notifications off in your device Settings at any time; the token stops being used.
 
 2.8 Technical data
 Connection metadata (such as IP address and connection identifiers) is processed transiently to deliver the service, as with any internet application. We do not build advertising or tracking profiles from it.
@@ -115,7 +78,7 @@ Connection metadata (such as IP address and connection identifiers) is processed
 • To operate, debug, and secure the service
 
 5. LEGAL BASES (EEA/UK USERS)
-Where GDPR/UK GDPR applies we rely on: performance of a contract (running the service you asked for — matching, games, sparks); legitimate interests (safety, security, abuse prevention, aggregate analytics); and consent (camera/microphone access, push notifications — both revocable at any time in iOS Settings). We do not use automated decision-making producing legal effects; the only automated action is removal after repeated community reports, which you can contest by email.
+Where GDPR/UK GDPR applies we rely on: performance of a contract (running the service you asked for — matching, games, sparks); legitimate interests (safety, security, abuse prevention, aggregate analytics); and consent (camera/microphone access, push notifications — both revocable at any time in device Settings). We do not use automated decision-making producing legal effects; the only automated action is removal after repeated community reports, which you can contest by email.
 
 6. WHO WE SHARE WITH (PROCESSORS)
 We share data only with the parties needed to run Rivlr:
@@ -135,7 +98,7 @@ We never share with data brokers or advertisers. We may disclose information if 
 • Backups of our database roll off automatically within 30 days
 
 8. DELETING YOUR ACCOUNT
-Settings → Delete account removes your device data AND instructs our servers to delete your account record, sparks, blocks and push token immediately; residual copies leave backups within 30 days. No app access? Email appsdevelop2025@gmail.com from any address with your handle and we will delete within 30 days. Deletion is permanent — sparks cannot be recovered.
+In-app: Settings → Delete account removes your device data AND instructs our servers to delete your account record, sparks, blocks and push token immediately; residual copies leave backups within 30 days. No app access? Email appsdevelop2025@gmail.com from any address with your handle and we will delete within 30 days. Deletion is permanent — sparks cannot be recovered. See /delete-account for the step-by-step guide.
 
 9. YOUR RIGHTS
 Depending on where you live you may have the right to access, correct, delete, or receive a copy of your data, to object to or restrict processing, to withdraw consent, and to not be discriminated against for exercising rights. To exercise any of them: appsdevelop2025@gmail.com — we respond within 30 days, and we may ask you to verify control of the account. EEA/UK users may also complain to their supervisory authority (in the UK, the ICO at ico.org.uk).
@@ -157,9 +120,9 @@ The app uses no cookies and no cross-site tracking; there is nothing for a "Do N
 Material changes will be presented in the app before they take effect, with the new effective date above. Continued use after that date means the new version applies.
 
 15. CONTACT
-appsdevelop2025@gmail.com — privacy questions, rights requests, complaints, safety.''';
+appsdevelop2025@gmail.com — privacy questions, rights requests, complaints, safety.`;
 
-  static const terms = '''TERMS OF SERVICE & END USER LICENCE AGREEMENT
+export const terms = `TERMS OF SERVICE & END USER LICENCE AGREEMENT
 Rivlr — live social video
 Effective date: 2 August 2026 · Version 3.0
 
@@ -224,9 +187,9 @@ If any provision of these terms is found unenforceable, the rest remain in effec
 These terms are governed by the laws of England and Wales, and disputes are subject to the exclusive jurisdiction of its courts — except where the law of your country of residence grants you mandatory consumer protections and venue, which remain yours.
 
 17. CONTACT
-appsdevelop2025@gmail.com''';
+appsdevelop2025@gmail.com`;
 
-  static const rules = '''THE HOUSE RULES
+export const rules = `THE HOUSE RULES
 
 Four rules. They keep this place good.
 
@@ -242,15 +205,25 @@ We never record rooms — that's a promise. You don't record them either. No scr
 4. THE ROOM PROTECTS ITSELF
 Long-press any face to report or block — one tap, instant. Community reports remove people automatically. Blocked people can never be matched with you again.
 
-Breaking these gets you removed. The room decides fast.''';
+Breaking these gets you removed. The room decides fast.`;
 
-  static const about = '''Rivlr — you never know who you'll get.
+export const deleteAccount = `DELETE YOUR RIVLR ACCOUNT
+This page exists so you can always find out how to delete your account and data — with or without the app installed. (Required by Google Play's account-deletion policy; applies equally to iOS.)
 
-A live social platform. Press one button and, seconds later, you're face-to-face with people you've never met — sometimes one, sometimes a room. Talk as long as you like; play a game whenever the vibe calls for it; the room votes, and the wheel decides what happens next.
+WHAT DELETION REMOVES
+• Your account record: handle, avatar colour, age confirmation, preferences and vibes
+• Your sparks (saves) and mutual connections — both directions
+• Your blocks and your push notification token
+• All data on your device (stats, badges, moment cards)
+Report records may be retained up to 24 months for community safety (they identify the reported behaviour, not your live media — remember: rooms are never recorded, so there is no video or audio of you anywhere to delete). Residual copies leave rolling database backups within 30 days.
 
-Never recorded. Ever. That's why people are actually themselves here.
+OPTION 1 — IN THE APP (INSTANT)
+1. Open Rivlr
+2. Tap the settings gear (top right of Home)
+3. Scroll to ACCOUNT → Delete account
+4. Confirm. Your device data is wiped and our servers delete your account immediately.
 
-Not a dating app. Not a lobby. The most unpredictable place on the internet.
+OPTION 2 — BY EMAIL (NO APP NEEDED)
+Email appsdevelop2025@gmail.com with the subject "Delete my account" and the handle you used. We delete within 30 days and confirm by reply. If you signed in with Apple you can also revoke Rivlr under Settings → Apple ID → Sign-In & Security → Sign in with Apple on your device.
 
-Made with care. This is an early build — thank you for being here first.''';
-}
+Deletion is permanent. Sparks and mutuals cannot be recovered.`;

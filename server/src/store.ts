@@ -110,6 +110,15 @@ class Store {
     return n;
   }
 
+  /// Account deletion: drop every in-memory trace of a uid's social graph.
+  purgeSocial(uid: string) {
+    for (const t of this.saves.get(uid) ?? []) this.savedBy.get(t)?.delete(uid);
+    for (const s of this.savedBy.get(uid) ?? []) this.saves.get(s)?.delete(uid);
+    this.saves.delete(uid);
+    this.savedBy.delete(uid);
+    this.blocks.delete(uid);
+  }
+
   /// Pour one user's persisted social graph (from Postgres) into the
   /// in-memory maps on hello. Additive — live state always wins.
   hydrateSocial(uid: string, d: {
