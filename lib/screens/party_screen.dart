@@ -15,8 +15,11 @@ import '../widgets/identity_orb.dart';
 /// engine throws the whole group into a session. Elite-minimal: the code IS the
 /// screen.
 class PartyScreen extends StatefulWidget {
-  const PartyScreen({super.key, required this.onBack});
+  const PartyScreen({super.key, required this.onBack, this.initialCode});
   final VoidCallback onBack;
+
+  /// A code that arrived via deep link — prefilled and auto-joined.
+  final String? initialCode;
 
   @override
   State<PartyScreen> createState() => _PartyScreenState();
@@ -48,6 +51,14 @@ class _PartyScreenState extends State<PartyScreen> {
       _sub = NetworkClient.instance.events.listen(_onNet);
       NetworkClient.instance.host();
       Track.event('party_hosted');
+      final code = widget.initialCode;
+      if (code != null && code.length >= 4) {
+        _joinCtl.text = code;
+        // small beat so the hello/host round-trip lands first
+        Timer(const Duration(milliseconds: 700), () {
+          if (mounted) _join();
+        });
+      }
     }
   }
 
@@ -96,7 +107,7 @@ class _PartyScreenState extends State<PartyScreen> {
     Buzz.commit();
     Sfx.pop();
     Share.share(
-      'Drop into my Rivlr room 🎥 — open Rivlr, tap "Join with a code", enter $code. You never know who you’ll get.',
+      'Drop into my Rivlr room 🎥 code $code — tap rivlr://join/$code or open Rivlr and enter it. You never know who you’ll get.',
     );
   }
 

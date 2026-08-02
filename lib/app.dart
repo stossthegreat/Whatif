@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'config.dart';
 import 'core/analytics.dart';
@@ -56,6 +57,8 @@ class _RootState extends State<_Root> {
   Cell? _cell;
   int _drop = 0;
   StreamSubscription<Map<String, dynamic>>? _netSub;
+  StreamSubscription<Uri>? _linkSub;
+  String? _partyCode; // arrived via rivlr://join/CODE
 
   @override
   void initState() {
@@ -73,11 +76,35 @@ class _RootState extends State<_Root> {
     }
     if (!mounted) return;
     _to(AppSession.instance.onboarded ? _Step.home : _Step.welcome);
+    // deep links AFTER the first screen is decided, so a cold-start link can
+    // override it (fail-soft: links just don't work if the plugin balks)
+    try {
+      final links = AppLinks();
+      final initial = await links.getInitialLink();
+      if (initial != null) _onLink(initial);
+      _linkSub = links.uriLinkStream.listen(_onLink);
+    } catch (_) {}
+  }
+
+  /// rivlr://join/CODE — jump straight into the friends-room screen with the
+  /// code prefilled and auto-joined (once onboarded; brand-new users finish
+  /// onboarding first and the code keeps waiting for them).
+  void _onLink(Uri u) {
+    if (u.scheme != 'rivlr') return;
+    final segs = [u.host, ...u.pathSegments].where((s) => s.isNotEmpty).toList();
+    if (segs.isNotEmpty && segs.first.toLowerCase() == 'join' && segs.length >= 2) {
+      final code = segs[1].toUpperCase();
+      if (code.length < 4) return;
+      Track.event('deep_link_join');
+      _partyCode = code;
+      if (AppSession.instance.onboarded && mounted) _to(_Step.party);
+    }
   }
 
   @override
   void dispose() {
     _netSub?.cancel();
+    _linkSub?.cancel();
     super.dispose();
   }
 
@@ -89,6 +116,13 @@ class _RootState extends State<_Root> {
   // ---- live mode (server-driven) -------------------------------------------
   void _onNet(Map<String, dynamic> m) {
     switch (m['t']) {
+      case 'welcome':
+        // after a reconnect: if we're not in (or looking for) a room, make
+        // sure the server doesn't think we still hold a seat from before the
+        // drop — otherwise resume would yank us back into a room we left.
+        if (_step != _Step.live && _step != _Step.finding) {
+          NetworkClient.instance.leaveCell();
+        }
       case 'presence':
         final n = (m['live'] as num?)?.toInt();
         if (n != null) {
@@ -111,6 +145,13 @@ class _RootState extends State<_Root> {
   }
 
   void _onCell(Map<String, dynamic> m) {
+    // rooms are only expected while matching, in a party lobby, or already
+    // live (resume/re-roll). Anywhere else — e.g. a stale resume racing a
+    // leave we sent after reconnecting at home — release the seat and stay.
+    if (_step != _Step.party && _step != _Step.finding && _step != _Step.live) {
+      NetworkClient.instance.leaveCell();
+      return;
+    }
     final cell = _cellFromServer(m);
     AppSession.instance.noteCell(cell);
     Track.event('matched', {
@@ -240,7 +281,13 @@ class _RootState extends State<_Root> {
           onParty: () => _to(_Step.party),
           onSignOut: () => _to(_Step.welcome)),
       _Step.mode => ModeScreen(onPick: _play, onBack: () => _to(_Step.home)),
-      _Step.party => PartyScreen(onBack: () => _to(_Step.home)),
+      _Step.party => PartyScreen(
+          key: ValueKey('party${_partyCode ?? ''}'),
+          initialCode: _partyCode,
+          onBack: () {
+            _partyCode = null;
+            _to(_Step.home);
+          }),
       _Step.finding => FindingScreen(onDone: _dropSimulated, waitForExternal: live),
       _Step.live => LiveScreen(
           key: ValueKey(_drop),

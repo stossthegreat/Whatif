@@ -106,6 +106,18 @@ class Store {
     this.reports.set(uid, n);
     return n;
   }
+
+  /// Pour one user's persisted social graph (from Postgres) into the
+  /// in-memory maps on hello. Additive — live state always wins.
+  hydrateSocial(uid: string, d: {
+    saves: string[]; savedBy: string[]; blocks: string[]; blockedBy: string[]; reports: number;
+  }) {
+    for (const t of d.saves) { this.ensure(this.saves, uid).add(t); this.ensure(this.savedBy, t).add(uid); }
+    for (const s of d.savedBy) { this.ensure(this.saves, s).add(uid); this.ensure(this.savedBy, uid).add(s); }
+    for (const t of d.blocks) this.ensure(this.blocks, uid).add(t);
+    for (const b of d.blockedBy) this.ensure(this.blocks, b).add(uid);
+    if (d.reports > (this.reports.get(uid) ?? 0)) this.reports.set(uid, d.reports);
+  }
 }
 
 export const store = new Store();

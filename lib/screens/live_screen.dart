@@ -1471,6 +1471,20 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (widget.live) ...[
+            _RailAction(
+              icon: RtcService.instance.micOn ? Icons.mic_rounded : Icons.mic_off_rounded,
+              iconColor: RtcService.instance.micOn ? Colors.white : C.live,
+              label: RtcService.instance.micOn ? 'mic' : 'muted',
+              onTap: () {
+                final on = !RtcService.instance.micOn;
+                Track.event('mic_toggled', {'on': on ? 1 : 0});
+                Buzz.tick();
+                RtcService.instance.setMic(on);
+              },
+            ),
+            const SizedBox(height: 18),
+          ],
           _RailAction(
             icon: Icons.favorite_rounded,
             iconColor: C.live,

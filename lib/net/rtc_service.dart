@@ -12,9 +12,22 @@ class RtcService {
   Room? _room;
   final ValueNotifier<int> rev = ValueNotifier<int>(0);
 
+  /// Whether the local mic is live. Always back on when a new room starts —
+  /// nobody wants to join their next room silently muted from the last one.
+  bool micOn = true;
+
+  Future<void> setMic(bool on) async {
+    micOn = on;
+    try {
+      await _room?.localParticipant?.setMicrophoneEnabled(on);
+    } catch (_) {}
+    _bump();
+  }
+
   Future<void> join(String url, String token) async {
     if (url.isEmpty || token.isEmpty) return; // video disabled — placeholders show
     await leave();
+    micOn = true;
     // speakerOn: a face-to-face video app plays through the loudspeaker, not
     // the earpiece — without this iOS can route voices somewhere inaudible.
     final room = Room(

@@ -13,6 +13,7 @@ import { randomUUID } from 'crypto';
 import { rollGame, rollMemberCount, SEQ_PACK, seqByName, type GameKind, type SeqDef } from './games.js';
 import { store, type User, type Meet, type Cell, type RoundWire } from './store.js';
 import { mintToken, LIVEKIT_URL } from './livekit.js';
+import * as db from './db.js';
 
 const PORT = Number(process.env.PORT || 8080);
 const ALLOW_SOLO = (process.env.ALLOW_SOLO || 'true') === 'true';
@@ -385,6 +386,7 @@ function noteMatch() {
   const day = new Date().toISOString().slice(0, 10);
   if (day !== matchesDay) { matchesDay = day; matchesToday = 0; }
   matchesToday += 1;
+  db.bumpMatches(day);
 }
 
 async function formCell(memberIds: string[]) {
@@ -439,6 +441,9 @@ function leaveCell(u: User) {
   const cell = store.cells.get(u.cellId);
   u.cellId = null;
   if (!cell) return;
+  // a resumed seat means this connection is no longer a member — its late
+  // close event must not tear down the room it was reconnected into
+  if (!cell.members.includes(u.id)) return;
   cell.members = cell.members.filter((x) => x !== u.id);
   broadcastCell(cell.id, { t: 'peerLeft', id: u.id });
   if (cell.members.length < 2) {
@@ -452,10 +457,49 @@ function leaveCell(u: User) {
   }
 }
 
+/// A returning uid whose previous connection is still holding a seat in a live
+/// cell (wifi blip — the dead socket hasn't been reaped yet) takes that seat
+/// over: same room, fresh token. Others see a quick leave/rejoin.
+function resumeCell(user: User) {
+  for (const cell of store.cells.values()) {
+    const oldId = cell.members.find((mid) => {
+      if (mid === user.id) return false;
+      const o = store.users.get(mid);
+      return !!o && o.uid === user.uid;
+    });
+    if (!oldId) continue;
+    const old = store.users.get(oldId)!;
+    cell.members = cell.members.map((mid) => (mid === oldId ? user.id : mid));
+    if (cell.luckyId === oldId) cell.luckyId = user.id;
+    for (const r of cell.rounds) if (r.targetId === oldId) r.targetId = user.id;
+    for (const r of cell.seqBeats ?? []) if (r.targetId === oldId) r.targetId = user.id;
+    old.cellId = null;
+    store.users.delete(oldId);
+    try { old.ws.terminate(); } catch { /* already dead */ }
+    user.state = 'incell';
+    user.cellId = cell.id;
+    broadcastCell(cell.id, { t: 'peerLeft', id: oldId }, user.id);
+    void (async () => {
+      const token = await mintToken(cell.room, user.id, user.name);
+      if (user.cellId !== cell.id) return; // they left while the token minted
+      const others = cell.members.filter((x) => x !== user.id).map((x) => {
+        const o = store.users.get(x)!;
+        return { id: x, uid: o.uid, name: o.name, hue: o.hue };
+      });
+      send(user, { t: 'cell', room: cell.room, url: LIVEKIT_URL, token, people: others,
+        game: cell.rounds[0], rounds: cell.rounds, golden: cell.golden,
+        luckyId: cell.luckyId, mode: cell.mode });
+      broadcastCell(cell.id, { t: 'peerJoined', id: user.id, uid: user.uid, name: user.name, hue: user.hue }, user.id);
+    })();
+    return;
+  }
+}
+
 // ---- sparks (real connections) --------------------------------------------
 function onSave(u: User, targetUid: string) {
   if (!targetUid) return;
   store.addSave(u.uid, targetUid);
+  db.addSave(u.uid, targetUid);
   if (store.hasSaved(targetUid, u.uid)) {
     const other = store.userByUid(targetUid);
     send(u, { t: 'sparkMutual', uid: targetUid, name: other?.name ?? 'someone' });
@@ -471,8 +515,9 @@ function notifyLive(u: User) {
 }
 
 // ---- moderation ------------------------------------------------------------
-function onReport(target: string) {
+function onReport(target: string, reporter = '') {
   const n = store.report(target);
+  db.addReport(reporter, target);
   console.log(`[report] ${target} (${n})`);
   if (n >= REPORT_KICK) {
     const u = store.userByUid(target);
@@ -549,6 +594,22 @@ wss.on('connection', (ws) => {
         if (m.meet === 'Women' || m.meet === 'Men' || m.meet === 'Everyone') user.meet = m.meet;
         send(user, { t: 'welcome', id, uid: user.uid, name: user.name, hue: user.hue, live: LIVE_BASELINE + store.onlineCount });
         notifyLive(user);
+        resumeCell(user); // wifi blip? re-seat them in the room they were in
+        const vibes = Array.isArray(m.vibes)
+          ? (m.vibes as unknown[]).filter((v): v is string => typeof v === 'string').slice(0, 12)
+          : [];
+        db.upsertUser({ uid: user.uid, name: user.name, hue: user.hue, gender: user.gender, meet: user.meet, vibes });
+        void db.loadSocial(user.uid).then((d) => {
+          if (!d) return;
+          if (store.userByUid(user.uid) !== user) return; // reconnected again meanwhile
+          store.hydrateSocial(user.uid, { ...d, saves: d.saves.map((s) => s.target) });
+          // replay mutual sparks so a fresh install gets its people back
+          for (const s of d.saves) {
+            if (store.hasSaved(s.target, user.uid)) {
+              send(user, { t: 'sparkMutual', uid: s.target, name: s.name ?? 'someone' });
+            }
+          }
+        });
         break;
       }
       case 'play':
@@ -666,10 +727,19 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'save': if (typeof m.target === 'string') onSave(user, m.target); break;
-      case 'unsave': if (typeof m.target === 'string') store.removeSave(user.uid, m.target); break;
-      case 'report': if (typeof m.target === 'string') onReport(m.target); break;
+      case 'unsave':
+        if (typeof m.target === 'string') {
+          store.removeSave(user.uid, m.target);
+          db.removeSave(user.uid, m.target);
+        }
+        break;
+      case 'report': if (typeof m.target === 'string') onReport(m.target, user.uid); break;
       case 'block':
-        if (typeof m.target === 'string') { store.block(user.uid, m.target); onReport(m.target); }
+        if (typeof m.target === 'string') {
+          store.block(user.uid, m.target);
+          db.addBlock(user.uid, m.target);
+          onReport(m.target, user.uid);
+        }
         leaveCell(user); enqueue(user);
         break;
     }
@@ -686,5 +756,11 @@ wss.on('connection', (ws) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Rivlr server on :${PORT}  (livekit ${LIVEKIT_URL ? 'ON' : 'OFF'}, solo ${ALLOW_SOLO})`);
+  console.log(`Rivlr server on :${PORT}  (livekit ${LIVEKIT_URL ? 'ON' : 'OFF'}, solo ${ALLOW_SOLO}, db ${db.dbEnabled ? 'ON' : 'OFF'})`);
+});
+
+void db.initDb().then(async () => {
+  // matches-today survives restarts — pick up where the day left off
+  const n = await db.loadMatches(matchesDay);
+  if (n > matchesToday) matchesToday = n;
 });
