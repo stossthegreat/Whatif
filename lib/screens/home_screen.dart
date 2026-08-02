@@ -5,9 +5,16 @@ import '../config.dart';
 import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../models/game.dart';
+import '../state/chat.dart';
 import '../state/session.dart';
+import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
+import '../widgets/identity_orb.dart';
+import 'chat_screen.dart' show AppNav;
+import 'chats_screen.dart';
+import 'friend_profile_screen.dart';
+import 'friends_screen.dart';
 import 'settings_screen.dart';
 
 /// HOME — one job: get you to press Start within half a second.
@@ -91,6 +98,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     children: [
                       const Wordmark(size: 30),
                       const Spacer(),
+                      const _RequestsChip(),
+                      const _MessagesBtn(),
+                      const SizedBox(width: 8),
                       const _LivePill(),
                       const SizedBox(width: 8),
                       _RoundBtn(
@@ -126,6 +136,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               ],
                             ),
                           ),
+                          // ---- RECENTLY MET — pressing Next never loses anyone
+                          const _RecentlyMetRail(),
                           // ---- TRENDING — swipeable game cards
                           Padding(
                             padding: EdgeInsets.only(left: r.gutter, right: r.gutter, bottom: 12),
@@ -150,6 +162,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             child: _ChaosBanner(onTap: widget.onPlay),
                           ),
                           const SizedBox(height: 26),
+                          // ---- HAPPENING NOW — bounded friend activity feed
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: r.gutter),
+                            child: const _FeedSection(),
+                          ),
                           // ---- FRIENDS
                           Padding(
                             padding: EdgeInsets.symmetric(horizontal: r.gutter),
@@ -449,19 +466,42 @@ class _ChaosBannerState extends State<_ChaosBanner> {
 
   @override
   Widget build(BuildContext context) {
-    final m = _left.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = _left.inSeconds.remainder(60).toString().padLeft(2, '0');
-    final fg = _live ? Colors.black : Colors.white;
-    final fg2 = _live ? Colors.black.withOpacity(0.6) : C.tx3;
+    // a live seasonal event owns this slot; Chaos Hour is the everyday ritual
+    final social = SocialState.instance;
+    final ev = social.eventEndsAt;
+    final eventLive = social.eventName != null && ev != null && ev.isAfter(DateTime.now());
+
+    final String title;
+    final String subtitle;
+    final String clock;
+    final bool hot;
+    if (eventLive) {
+      final left = ev.difference(DateTime.now());
+      title = '⚡ ${social.eventName!.toUpperCase()}';
+      subtitle = 'limited time · exclusive badges';
+      clock = left.inDays >= 1
+          ? '${left.inDays}d ${left.inHours.remainder(24)}h'
+          : '${left.inHours}:${left.inMinutes.remainder(60).toString().padLeft(2, '0')}';
+      hot = true;
+    } else {
+      final m = _left.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final s = _left.inSeconds.remainder(60).toString().padLeft(2, '0');
+      title = _live ? '⚡ CHAOS HOUR — LIVE' : 'CHAOS HOUR';
+      subtitle = '2× badges · wilder games · top of every hour';
+      clock = '$m:$s';
+      hot = _live;
+    }
+    final fg = hot ? Colors.black : Colors.white;
+    final fg2 = hot ? Colors.black.withOpacity(0.6) : C.tx3;
     return Press(
       onTap: () { Buzz.tick(); Track.event('chaos_banner_tap'); widget.onTap(); },
       child: AnimatedContainer(
         duration: M.base,
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         decoration: BoxDecoration(
-          color: _live ? Colors.white : C.glass,
+          color: hot ? Colors.white : C.glass,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: _live ? Colors.white : C.hair),
+          border: Border.all(color: hot ? Colors.white : C.hair),
         ),
         child: Row(
           children: [
@@ -469,17 +509,17 @@ class _ChaosBannerState extends State<_ChaosBanner> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_live ? '⚡ CHAOS HOUR — LIVE' : 'CHAOS HOUR',
+                  Text(title,
                       style: T.body.copyWith(color: fg, fontWeight: FontWeight.w800, fontSize: 15, letterSpacing: 0.4)),
                   const SizedBox(height: 4),
-                  Text('2× badges · wilder games · top of every hour',
+                  Text(subtitle,
                       style: T.tiny.copyWith(color: fg2, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
             const SizedBox(width: 12),
             Text(
-              '$m:$s',
+              clock,
               style: T.huge(26).copyWith(
                 color: fg,
                 fontFeatures: const [FontFeature.tabularFigures()],
@@ -495,25 +535,35 @@ class _ChaosBannerState extends State<_ChaosBanner> {
 
 // ---- friends ---------------------------------------------------------------
 
-/// People you saved, live ones first. Only renders when you actually have
-/// sparks — no hollow placeholder rows.
+/// Your real friends (the matched ones), online first. Hidden entirely until
+/// you have some — no hollow placeholder rows.
 class _FriendsSection extends StatelessWidget {
   const _FriendsSection();
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: AppSession.instance,
+      animation: SocialState.instance,
       builder: (context, _) {
-        final sparks = [...AppSession.instance.sparks]
-          ..sort((a, b) => (b.liveNow ? 1 : 0) - (a.liveNow ? 1 : 0));
-        if (sparks.isEmpty) return const SizedBox.shrink();
+        final friends = SocialState.instance.friends;
+        if (friends.isEmpty) return const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('FRIENDS', style: T.eyebrow),
+            Row(
+              children: [
+                Text('YOUR PEOPLE', style: T.eyebrow),
+                const Spacer(),
+                Press(
+                  haptic: false,
+                  onTap: () { Buzz.tick(); FriendsScreen.push(context); },
+                  child: Text('see all  ›',
+                      style: T.tiny.copyWith(color: C.tx2, fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
             const SizedBox(height: 10),
-            for (final s in sparks.take(4)) _FriendRow(spark: s),
+            for (final f in friends.take(4)) _FriendRow(friend: f),
             const SizedBox(height: 6),
           ],
         );
@@ -523,74 +573,281 @@ class _FriendsSection extends StatelessWidget {
 }
 
 class _FriendRow extends StatelessWidget {
-  const _FriendRow({required this.spark});
-  final Spark spark;
+  const _FriendRow({required this.friend});
+  final FriendInfo friend;
 
   @override
   Widget build(BuildContext context) {
-    final c = HSLColor.fromAHSL(1, spark.hue, 0.6, 0.62).toColor();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Stack(
+    return Press(
+      haptic: false,
+      onTap: () { Buzz.tick(); FriendsScreen.push(context); },
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          children: [
+            IdentityOrb(hue: friend.hue, size: 36, live: friend.online),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('@${friend.name}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: T.body.copyWith(
+                          color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                  Text(
+                    friend.online ? 'online now' : 'away',
+                    style: T.tiny.copyWith(
+                      color: friend.online ? const Color(0xFF3BE07A) : C.tx3,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The "accidentally pressed Next" recovery — people you just met, one tap
+/// from becoming permanent. A headline surface, right under the hero.
+class _RecentlyMetRail extends StatelessWidget {
+  const _RecentlyMetRail();
+
+  @override
+  Widget build(BuildContext context) {
+    final r = Responsive.of(context);
+    return AnimatedBuilder(
+      animation: SocialState.instance,
+      builder: (context, _) {
+        final recent = SocialState.instance.recent;
+        if (recent.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(left: r.gutter, right: r.gutter, bottom: 12),
+              child: Text('RECENTLY MET', style: T.eyebrow),
+            ),
+            SizedBox(
+              height: 92,
+              child: ListView.separated(
+                physics: const BouncingScrollPhysics(),
+                scrollDirection: Axis.horizontal,
+                padding: EdgeInsets.symmetric(horizontal: r.gutter),
+                itemCount: recent.length,
+                separatorBuilder: (_, i) => const SizedBox(width: 16),
+                itemBuilder: (context, i) {
+                  final m = recent[i];
+                  return Press(
+                    haptic: false,
+                    onTap: () { Buzz.tick(); FriendsScreen.push(context, tab: 3); },
+                    child: Column(
+                      children: [
+                        IdentityOrb(hue: m.hue, size: 52),
+                        const SizedBox(height: 7),
+                        Text('@${m.name}',
+                            style: T.tiny.copyWith(
+                                color: Colors.white, fontWeight: FontWeight.w700, fontSize: 11.5)),
+                        Text(m.ago, style: T.tiny.copyWith(color: C.tx3, fontSize: 10)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 22),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// HAPPENING NOW — a bounded activity module, never a scroll pit. Friend
+/// badges/titles/rooms, plus your unread + requests lines. Every line taps
+/// somewhere useful. Hidden entirely when nothing's happening.
+class _FeedSection extends StatelessWidget {
+  const _FeedSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([SocialState.instance, ChatStore.instance]),
+      builder: (context, _) {
+        final s = SocialState.instance;
+        final unread = ChatStore.instance.unreadTotal;
+        final rows = <Widget>[];
+
+        for (final f in s.feed.take(5)) {
+          final line = switch (f.kind) {
+            'badge' => '🏅 @${f.name} earned ${f.x}',
+            'title' => '👑 @${f.name} is now “${f.x}”',
+            'party' => '🎮 @${f.name} opened a room',
+            _ => '',
+          };
+          if (line.isEmpty) continue;
+          rows.add(_row(context, line,
+              trailing: f.kind == 'party' ? 'Join' : null,
+              onTap: () {
+                Buzz.tick();
+                if (f.kind == 'party') {
+                  AppNav.joinPartyCode?.call(f.x);
+                  return;
+                }
+                final friend =
+                    s.friends.where((x) => x.uid == f.uid).toList();
+                if (friend.isNotEmpty) {
+                  FriendProfileScreen.push(context,
+                      uid: f.uid, name: f.name, hue: friend.first.hue);
+                }
+              }));
+        }
+        if (unread > 0) {
+          rows.add(_row(context, '💬 $unread unread message${unread == 1 ? '' : 's'}',
+              onTap: () { Buzz.tick(); ChatsScreen.push(context); }));
+        }
+        if (s.reqCount > 0) {
+          rows.add(_row(context, '⭐ ${s.reqCount} friend request${s.reqCount == 1 ? '' : 's'}',
+              onTap: () { Buzz.tick(); FriendsScreen.push(context, tab: 4); }));
+        }
+        if (rows.isEmpty) return const SizedBox.shrink();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('HAPPENING NOW', style: T.eyebrow),
+            const SizedBox(height: 10),
+            ...rows,
+            const SizedBox(height: 16),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _row(BuildContext context, String text, {String? trailing, VoidCallback? onTap}) {
+    return Press(
+      haptic: false,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: T.body.copyWith(
+                      color: C.tx2, fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+            if (trailing != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                decoration: BoxDecoration(
+                    color: Colors.white, borderRadius: BorderRadius.circular(100)),
+                child: Text(trailing,
+                    style: T.tiny.copyWith(
+                        color: Colors.black, fontWeight: FontWeight.w800, fontSize: 11)),
+              )
+            else
+              const Icon(Icons.chevron_right_rounded, size: 16, color: C.tx3),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Messages entry — badge shows total unread across every conversation.
+class _MessagesBtn extends StatelessWidget {
+  const _MessagesBtn();
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: ChatStore.instance,
+      builder: (context, _) {
+        final n = ChatStore.instance.unreadTotal;
+        return Press(
+          onTap: () { Buzz.tick(); ChatsScreen.push(context); },
+          child: Stack(
             clipBehavior: Clip.none,
             children: [
               Container(
-                width: 36, height: 36,
-                alignment: Alignment.center,
+                width: 34, height: 34,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(colors: [c.withOpacity(0.85), c.withOpacity(0.4)]),
-                  border: Border.all(color: C.hair2),
-                ),
-                child: Text(spark.name.characters.first.toUpperCase(),
-                    style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
+                    shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
+                child: const Icon(Icons.chat_bubble_outline_rounded, size: 16, color: C.tx2),
               ),
-              if (spark.liveNow)
+              if (n > 0)
                 Positioned(
-                  right: -1, bottom: -1,
+                  right: -4, top: -4,
                   child: Container(
-                    width: 11, height: 11,
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    constraints: const BoxConstraints(minWidth: 16),
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle, color: C.live,
-                      border: Border.all(color: C.black, width: 2),
-                    ),
+                        color: C.sig, borderRadius: BorderRadius.circular(100)),
+                    child: Text('$n',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 10, color: Colors.white, fontWeight: FontWeight.w800)),
                   ),
                 ),
             ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(spark.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-                    ),
-                    if (spark.mutual) ...const [
-                      SizedBox(width: 6),
-                      Icon(Icons.favorite_rounded, size: 12, color: C.sig),
-                    ],
-                  ],
-                ),
-                Text(
-                  spark.liveNow ? 'live now' : spark.vibe,
-                  style: T.tiny.copyWith(
-                    color: spark.liveNow ? C.live : C.tx3,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+        );
+      },
+    );
+  }
+}
+
+/// Pending friend requests — a quiet purple chip beside the live pill.
+class _RequestsChip extends StatelessWidget {
+  const _RequestsChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: SocialState.instance,
+      builder: (context, _) {
+        final n = SocialState.instance.reqCount;
+        if (n == 0) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: Press(
+            haptic: false,
+            onTap: () { Buzz.tick(); FriendsScreen.push(context, tab: 4); },
+            child: Container(
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: C.sig.withOpacity(0.16),
+                borderRadius: BorderRadius.circular(100),
+                border: Border.all(color: C.sig.withOpacity(0.5)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.person_add_rounded, size: 14, color: C.sig),
+                  const SizedBox(width: 6),
+                  Text('$n',
+                      style: T.tiny.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      )),
+                ],
+              ),
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

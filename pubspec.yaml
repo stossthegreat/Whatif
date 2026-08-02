@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+35
+version: 1.0.0+39
 
 environment:
   sdk: ^3.8.0
@@ -64,6 +64,12 @@ dependencies:
 
   # Deep links: rivlr://join/CODE opens the app straight into a friend's room.
   app_links: ^6.3.0
+
+  # Social layer media: profile photos + photo messages (library picker),
+  # voice notes (recorder), HTTP uploads to the server's media API.
+  image_picker: ^1.1.2
+  record: ^5.1.2
+  http: ^1.2.2
 
   # Sign in with Apple — identity that survives reinstalls. The Apple user id
   # becomes the stable uid, so sparks and mutuals come back with the account.

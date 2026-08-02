@@ -15,11 +15,14 @@ import '../widgets/identity_orb.dart';
 /// engine throws the whole group into a session. Elite-minimal: the code IS the
 /// screen.
 class PartyScreen extends StatefulWidget {
-  const PartyScreen({super.key, required this.onBack, this.initialCode});
+  const PartyScreen({super.key, required this.onBack, this.initialCode, this.inviteUid});
   final VoidCallback onBack;
 
   /// A code that arrived via deep link — prefilled and auto-joined.
   final String? initialCode;
+
+  /// Chat invite flow: once the room code exists, DM it to this friend.
+  final String? inviteUid;
 
   @override
   State<PartyScreen> createState() => _PartyScreenState();
@@ -38,6 +41,7 @@ class _PartyScreenState extends State<PartyScreen> {
 
   String? _code;
   String? _hostId;
+  bool _invited = false;
   List<_PartyMember> _members = const [];
   String? _error;
   bool _starting = false;
@@ -78,6 +82,13 @@ class _PartyScreenState extends State<PartyScreen> {
       case 'welcome':
         NetworkClient.instance.host();
       case 'party':
+        // chat-invite flow: the moment we have a code, DM it to the friend
+        final newCode = m['code'] as String?;
+        final invitee = widget.inviteUid;
+        if (invitee != null && newCode != null && newCode != _code && !_invited) {
+          _invited = true;
+          NetworkClient.instance.dm(invitee, 'invite', newCode);
+        }
         setState(() {
           _error = null;
           _code = m['code'] as String?;

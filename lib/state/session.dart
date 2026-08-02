@@ -96,6 +96,14 @@ class AppSession extends ChangeNotifier {
       rulesAccepted = p.getBool('rulesAccepted') ?? false;
       appleUserId = p.getString('appleUserId');
       blocked.addAll(p.getStringList('blocked') ?? const []);
+      bio = p.getString('bio') ?? '';
+      city = p.getString('city') ?? '';
+      country = p.getString('country') ?? '';
+      pronouns = p.getString('pronouns') ?? '';
+      lookingForChips = p.getStringList('lookingChips') ?? [];
+      interests = p.getStringList('interests') ?? [];
+      languages = p.getStringList('languages') ?? [];
+      photoId = p.getInt('photoId');
       // persist the freshly-generated identity the first time
       if (p.getString('uid') == null) await _persist();
     } catch (_) {/* first run / no store — defaults are fine */}
@@ -181,6 +189,51 @@ class AppSession extends ChangeNotifier {
   int? age;
   String? gender;
   String? lookingFor;
+
+  // ---- identity v2 (mirrored server-side via setProfile) ----
+  String bio = '';
+  String city = '';
+  String country = '';
+  String pronouns = '';
+  List<String> lookingForChips = [];
+  List<String> interests = [];
+  List<String> languages = [];
+  int? photoId; // server media id of the avatar
+
+  void setIdentityDetails({
+    String? bio,
+    String? city,
+    String? country,
+    String? pronouns,
+    List<String>? lookingForChips,
+    List<String>? interests,
+    List<String>? languages,
+  }) {
+    if (bio != null) this.bio = bio;
+    if (city != null) this.city = city;
+    if (country != null) this.country = country;
+    if (pronouns != null) this.pronouns = pronouns;
+    if (lookingForChips != null) this.lookingForChips = lookingForChips;
+    if (interests != null) this.interests = interests;
+    if (languages != null) this.languages = languages;
+    final p = _prefs;
+    if (p != null) {
+      p.setString('bio', this.bio);
+      p.setString('city', this.city);
+      p.setString('country', this.country);
+      p.setString('pronouns', this.pronouns);
+      p.setStringList('lookingChips', this.lookingForChips);
+      p.setStringList('interests', this.interests);
+      p.setStringList('languages', this.languages);
+    }
+    notifyListeners();
+  }
+
+  void setPhotoId(int id) {
+    photoId = id;
+    _prefs?.setInt('photoId', id);
+    notifyListeners();
+  }
 
   // ---- settings ----
   bool soundOn = true;

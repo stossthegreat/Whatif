@@ -9,8 +9,15 @@ import 'models/game.dart';
 import 'models/person.dart';
 import 'net/network_client.dart';
 import 'net/rtc_service.dart';
+import 'state/chat.dart';
 import 'state/session.dart';
+import 'state/social.dart';
 import 'theme/tokens.dart';
+import 'widgets/incoming_call_overlay.dart';
+import 'widgets/match_overlay.dart';
+import 'widgets/rating_overlay.dart';
+import 'screens/chat_screen.dart';
+import 'screens/friends_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/signin_screen.dart';
 import 'screens/profile_screen.dart';
@@ -25,9 +32,13 @@ import 'screens/live_screen.dart';
 class RivlrApp extends StatelessWidget {
   const RivlrApp({super.key});
 
+  /// Global navigator — deep links and push taps route through it.
+  static final navKey = GlobalKey<NavigatorState>();
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navKey,
       title: 'Rivlr',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -60,10 +71,40 @@ class _RootState extends State<_Root> {
   StreamSubscription<Map<String, dynamic>>? _netSub;
   StreamSubscription<Uri>? _linkSub;
   String? _partyCode; // arrived via rivlr://join/CODE
+  String? _partyInviteUid; // host a room and DM this friend the code
+  bool _pendingCallVideo = true; // camera state for the next call cell
 
   @override
   void initState() {
     super.initState();
+    // deep surfaces (chat threads, invite bubbles) drive the play flow
+    // through these hooks instead of owning the step machine
+    AppNav.joinPartyCode = (code) {
+      if (!mounted) return;
+      _partyInviteUid = null;
+      _partyCode = code;
+      _to(_Step.party);
+    };
+    AppNav.hostPartyFor = (uid) {
+      if (!mounted) return;
+      _partyCode = null;
+      _partyInviteUid = uid;
+      _to(_Step.party);
+    };
+    AppNav.startCall = (uid, video) {
+      if (!mounted) return;
+      _pendingCallVideo = video;
+      Track.event('call_invite', {'video': video ? 1 : 0});
+      NetworkClient.instance.callInvite(uid, video: video);
+      final ctx = RivlrApp.navKey.currentContext;
+      if (ctx != null) {
+        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: C.char2,
+          content: Text('📞 ringing…', style: T.body.copyWith(color: Colors.white)),
+        ));
+      }
+    };
     _boot();
   }
 
@@ -72,6 +113,8 @@ class _RootState extends State<_Root> {
     // stable uid and we can skip onboarding for returning users.
     await AppSession.instance.load();
     if (AppConfig.isLive) {
+      SocialState.instance.attach(); // before connect so they see the welcome
+      ChatStore.instance.attach(AppSession.instance.myUid);
       NetworkClient.instance.connect();
       _netSub = NetworkClient.instance.events.listen(_onNet);
     }
@@ -104,6 +147,18 @@ class _RootState extends State<_Root> {
       Track.event('deep_link_join');
       _partyCode = code;
       if (AppSession.instance.onboarded && mounted) _to(_Step.party);
+    }
+    // rivlr://chat/<uid> — from a message push
+    if (segs.isNotEmpty && segs.first.toLowerCase() == 'chat' && segs.length >= 2) {
+      final uid = segs[1];
+      final friend = SocialState.instance.friends
+          .where((f) => f.uid == uid)
+          .toList();
+      if (friend.isEmpty || !AppSession.instance.onboarded) return;
+      final ctx = RivlrApp.navKey.currentContext;
+      if (ctx != null) {
+        ChatScreen.push(ctx, uid: friend.first.uid, name: friend.first.name, hue: friend.first.hue);
+      }
     }
   }
 
@@ -141,7 +196,40 @@ class _RootState extends State<_Root> {
         _onCell(m);
       case 'ended':
         RtcService.instance.leave();
-        if (mounted && _step == _Step.live) _to(_Step.finding); // server re-queued us
+        if (mounted && _step == _Step.live) {
+          // calls end back at home; stranger rooms recompose into a new match
+          _to((_cell?.mode ?? '') == 'call' ? _Step.home : _Step.finding);
+        }
+      case 'call':
+        // ringing — but never interrupt a live room: auto-decline as busy
+        if (_step == _Step.live) {
+          final id = (m['callId'] as String?) ?? '';
+          if (id.isNotEmpty) NetworkClient.instance.callDecline(id);
+          SocialState.instance.clearIncomingCall();
+        }
+      case 'badge':
+        final label = m['label'] as String?;
+        final ctx = RivlrApp.navKey.currentContext;
+        if (label != null && ctx != null) {
+          ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: C.char2,
+            content: Text('🏅 Badge earned — $label',
+                style: T.body.copyWith(color: Colors.white)),
+          ));
+        }
+      case 'callState':
+        final st = m['state'] as String?;
+        final ctx2 = RivlrApp.navKey.currentContext;
+        if (ctx2 != null && (st == 'declined' || st == 'timeout' || st == 'busy')) {
+          ScaffoldMessenger.of(ctx2).showSnackBar(SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: C.char2,
+            content: Text(
+                st == 'busy' ? 'they’re in a room right now' : 'no answer — try later',
+                style: T.body.copyWith(color: Colors.white)),
+          ));
+        }
       case 'sparkMutual':
         if (m['name'] is String) {
           AppSession.instance.markMutual(m['name'] as String, uid: m['uid'] as String?);
@@ -152,10 +240,12 @@ class _RootState extends State<_Root> {
   }
 
   void _onCell(Map<String, dynamic> m) {
-    // rooms are only expected while matching, in a party lobby, or already
-    // live (resume/re-roll). Anywhere else — e.g. a stale resume racing a
-    // leave we sent after reconnecting at home — release the seat and stay.
-    if (_step != _Step.party && _step != _Step.finding && _step != _Step.live) {
+    final isCall = m['mode'] == 'call';
+    // rooms are only expected while matching, in a party lobby, already live
+    // (resume/re-roll), or when a CALL was just accepted. Anywhere else —
+    // e.g. a stale resume racing a leave we sent after reconnecting at
+    // home — release the seat and stay.
+    if (!isCall && _step != _Step.party && _step != _Step.finding && _step != _Step.live) {
       NetworkClient.instance.leaveCell();
       return;
     }
@@ -167,7 +257,8 @@ class _RootState extends State<_Root> {
     });
     final url = (m['url'] as String?) ?? '';
     final token = (m['token'] as String?) ?? '';
-    RtcService.instance.join(url, token); // fire-and-forget; tiles fill on rev
+    // voice calls start camera-off; flipping it on mid-call upgrades to video
+    RtcService.instance.join(url, token, camera: !isCall || _pendingCallVideo);
     setState(() {
       _cell = cell;
       _drop++;
@@ -290,10 +381,12 @@ class _RootState extends State<_Root> {
           onSignOut: () => _to(_Step.welcome)),
       _Step.mode => ModeScreen(onPick: _play, onBack: () => _to(_Step.home)),
       _Step.party => PartyScreen(
-          key: ValueKey('party${_partyCode ?? ''}'),
+          key: ValueKey('party${_partyCode ?? ''}${_partyInviteUid ?? ''}'),
           initialCode: _partyCode,
+          inviteUid: _partyInviteUid,
           onBack: () {
             _partyCode = null;
+            _partyInviteUid = null;
             _to(_Step.home);
           }),
       _Step.finding => FindingScreen(onDone: _dropSimulated, waitForExternal: live),
@@ -306,12 +399,53 @@ class _RootState extends State<_Root> {
         ),
     };
 
-    return AnimatedSwitcher(
-      duration: M.base,
-      switchInCurve: M.ease,
-      switchOutCurve: M.ease,
-      transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
-      child: KeyedSubtree(key: ValueKey('${_step.name}$_drop'), child: screen),
+    return Stack(
+      children: [
+        AnimatedSwitcher(
+          duration: M.base,
+          switchInCurve: M.ease,
+          switchOutCurve: M.ease,
+          transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+          child: KeyedSubtree(key: ValueKey('${_step.name}$_drop'), child: screen),
+        ),
+        // ---- social overlays: never a blocking step, always floating -------
+        AnimatedBuilder(
+          animation: SocialState.instance,
+          builder: (context, _) {
+            final s = SocialState.instance;
+            // a ringing call outranks everything (rooms auto-decline earlier)
+            final call = s.incomingCall;
+            if (call != null && _step != _Step.live) {
+              return IncomingCallOverlay(
+                key: ValueKey('call${call.callId}'),
+                call: call,
+                onAccept: () {
+                  _pendingCallVideo = call.video;
+                  NetworkClient.instance.callAccept(call.callId);
+                  SocialState.instance.clearIncomingCall();
+                },
+              );
+            }
+            // the meet-again question — over finding/home only, never mid-room
+            if (s.pendingRates.isNotEmpty &&
+                (_step == _Step.finding || _step == _Step.home)) {
+              return RatingOverlay(
+                key: ValueKey('rate${s.pendingRates.first.cellId}${s.pendingRates.first.uid}'),
+                item: s.pendingRates.first,
+              );
+            }
+            // 🎉 the match celebration — anywhere except live rooms
+            if (s.celebrations.isNotEmpty && _step != _Step.live) {
+              return MatchOverlay(
+                key: ValueKey('match${s.celebrations.first.uid}'),
+                friend: s.celebrations.first,
+                onSeePeople: () => FriendsScreen.push(context),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+        ),
+      ],
     );
   }
 }

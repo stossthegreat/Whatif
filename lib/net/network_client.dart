@@ -19,6 +19,11 @@ class NetworkClient {
   String? myId;
   String? myName;
   double? myHue;
+  // HTTP surface (media uploads/fetch) — minted fresh in every welcome
+  String httpToken = '';
+  String httpBase = '';
+  bool mediaEnabled = false;
+  bool gifsEnabled = false;
   bool _closing = false;
 
   bool get connected => _ch != null;
@@ -36,6 +41,19 @@ class NetworkClient {
             myId = m['id'] as String?;
             myName = m['name'] as String?;
             myHue = (m['hue'] as num?)?.toDouble();
+            final http = (m['http'] as Map?)?.cast<String, dynamic>();
+            httpToken = (http?['token'] as String?) ?? '';
+            final base = (http?['base'] as String?) ?? '';
+            // derive from the ws url when the server doesn't know its public base
+            httpBase = base.isNotEmpty
+                ? base
+                : AppConfig.backend
+                    .replaceFirst('wss://', 'https://')
+                    .replaceFirst('ws://', 'http://')
+                    .replaceFirst(RegExp(r'/ws$'), '');
+            final feats = (m['features'] as Map?)?.cast<String, dynamic>();
+            mediaEnabled = feats?['media'] == true;
+            gifsEnabled = feats?['gifs'] == true;
           }
           _events.add(m);
         } catch (_) {/* ignore malformed */}
@@ -58,6 +76,7 @@ class NetworkClient {
       'gender': s.gender,
       'meet': s.lookingFor ?? 'Everyone',
       'vibes': s.myVibes,
+      'tz': DateTime.now().timeZoneOffset.inMinutes,
     });
   }
 
@@ -94,4 +113,40 @@ class NetworkClient {
   void unblock(String target) => send({'t': 'unblock', 'target': target});
   void pushToken(String token) => send({'t': 'pushToken', 'token': token});
   void deleteAccount() => send({'t': 'deleteAccount'});
+
+  // ---- social layer ---------------------------------------------------------
+  void rate(String target, String cell, int score) =>
+      send({'t': 'rate', 'target': target, 'cell': cell, 'score': score});
+  void friendRequest(String target) => send({'t': 'friendRequest', 'target': target});
+  void friendAccept(String target) => send({'t': 'friendAccept', 'target': target});
+  void friendDecline(String target) => send({'t': 'friendDecline', 'target': target});
+  void unfriend(String target) => send({'t': 'unfriend', 'target': target});
+  void setTier(String target, int tier) => send({'t': 'setTier', 'target': target, 'tier': tier});
+  void pinChat(String target, bool on) => send({'t': 'pinChat', 'target': target, 'on': on});
+  void friendsSnapshot() => send({'t': 'friends'});
+  void traitVote(String target, String trait) =>
+      send({'t': 'traitVote', 'target': target, 'trait': trait});
+
+  // ---- messaging ------------------------------------------------------------
+  void dm(String to, String kind, String body, {String? tmp, int? mediaId, Map<String, dynamic>? meta}) =>
+      send({
+        't': 'dm', 'to': to, 'kind': kind, 'body': body,
+        if (tmp != null) 'tmp': tmp,
+        if (mediaId != null) 'mediaId': mediaId,
+        if (meta != null) 'meta': meta,
+      });
+  void dmHistory(String withUid, {int? before}) =>
+      send({'t': 'dmHistory', 'with': withUid, if (before != null) 'before': before});
+  void dmRead(String withUid, int upTo) => send({'t': 'dmRead', 'with': withUid, 'upTo': upTo});
+  void typing(String to, bool on) => send({'t': 'typing', 'to': to, 'on': on});
+  void reactMsg(int id, String? e) => send({'t': 'reactMsg', 'id': id, 'e': e});
+  void chatsList() => send({'t': 'chats'});
+  void profile([String? uid]) => send({'t': 'profile', if (uid != null) 'uid': uid});
+  void setProfile(Map<String, dynamic> fields) => send({'t': 'setProfile', ...fields});
+  void titles() => send({'t': 'titles'});
+  void setTitle(String title) => send({'t': 'setTitle', 'title': title});
+  void callInvite(String to, {required bool video}) =>
+      send({'t': 'callInvite', 'to': to, 'video': video});
+  void callAccept(String callId) => send({'t': 'callAccept', 'callId': callId});
+  void callDecline(String callId) => send({'t': 'callDecline', 'callId': callId});
 }

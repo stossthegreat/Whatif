@@ -138,6 +138,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   /// roulette rooms: no choices — games auto-chain
   bool get _roulette => (widget.cell.mode ?? 'hang') == 'roulette';
+  bool get _isCall => (widget.cell.mode ?? 'hang') == 'call';
 
   Cell get cell => widget.cell;
   GameDef get game => cell.rounds[_round].game;
@@ -1453,7 +1454,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                 const SizedBox(width: 7),
               ],
               Text(
-                _golden ? 'GOLDEN · ${cell.roomName}' : '${cell.roomName} · ${cell.people.length + 1}',
+                _isCall
+                    ? '🔒 private call'
+                    : _golden
+                        ? 'GOLDEN · ${cell.roomName}'
+                        : '${cell.roomName} · ${cell.people.length + 1}',
                 style: T.tiny.copyWith(
                   color: _golden ? gold : Colors.white,
                   letterSpacing: 0.4,
@@ -1487,6 +1492,20 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                 Track.event('mic_toggled', {'on': on ? 1 : 0});
                 Buzz.tick();
                 RtcService.instance.setMic(on);
+              },
+            ),
+            const SizedBox(height: 18),
+          ],
+          if (widget.live && _isCall) ...[
+            _RailAction(
+              icon: RtcService.instance.camOn
+                  ? Icons.videocam_rounded
+                  : Icons.videocam_off_rounded,
+              iconColor: RtcService.instance.camOn ? Colors.white : C.live,
+              label: RtcService.instance.camOn ? 'camera' : 'cam off',
+              onTap: () {
+                Buzz.tick();
+                RtcService.instance.setCam(!RtcService.instance.camOn);
               },
             ),
             const SizedBox(height: 18),
