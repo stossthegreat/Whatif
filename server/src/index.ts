@@ -705,6 +705,17 @@ wss.on('connection', (ws) => {
     try { m = JSON.parse(raw.toString()); } catch { return; }
     switch (m.t) {
       case 'hello': {
+        void (async () => {
+        // Apple id is a RECOVERY KEY: if it already maps to an account, that
+        // account's uid wins (reinstalls get their whole graph back); if not,
+        // it links to whatever uid this session uses. Zero data migration.
+        let appleLink: string | null = null;
+        if (typeof m.appleId === 'string' && m.appleId.length) {
+          const appleId = (m.appleId as string).slice(0, 64);
+          const canonical = db.dbEnabled ? await dbs.uidForApple(appleId) : null;
+          if (canonical) m = { ...m, uid: canonical };
+          else appleLink = appleId;
+        }
         if (typeof m.uid === 'string' && m.uid.length) {
           store.byUid.delete(user.uid);
           user.uid = m.uid.slice(0, 64);
@@ -729,6 +740,7 @@ wss.on('connection', (ws) => {
           ? (m.vibes as unknown[]).filter((v): v is string => typeof v === 'string').slice(0, 12)
           : [];
         db.upsertUser({ uid: user.uid, name: user.name, hue: user.hue, gender: user.gender, meet: user.meet, vibes });
+        if (appleLink && db.dbEnabled) dbs.linkApple(user.uid, appleLink);
         void db.loadSocial(user.uid).then((d) => {
           if (!d) return;
           if (store.userByUid(user.uid) !== user) return; // reconnected again meanwhile
@@ -740,6 +752,7 @@ wss.on('connection', (ws) => {
             }
           }
         });
+        })();
         break;
       }
       case 'play':

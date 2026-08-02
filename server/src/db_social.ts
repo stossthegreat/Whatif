@@ -29,8 +29,11 @@ export async function initSocial(): Promise<void> {
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_media_id BIGINT',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS tz_offset_min INT',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS active_title TEXT',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_id TEXT',
   ];
   for (const q of alters) await run(q);
+  await run(`CREATE UNIQUE INDEX IF NOT EXISTS users_apple_idx
+             ON users(apple_id) WHERE apple_id IS NOT NULL`);
 
   await run(`CREATE TABLE IF NOT EXISTS media (
     id BIGSERIAL PRIMARY KEY,
@@ -494,6 +497,25 @@ export function bumpRep(uid: string, delta: number): void {
        rep = GREATEST(-100, LEAST(100, user_stats.rep + $2))`,
     [uid, delta],
   );
+}
+
+/// Apple-as-recovery-key: the random uid stays the permanent identity;
+/// apple_id maps back to it so a reinstall recovers the whole graph with
+/// ZERO data migration.
+export async function uidForApple(appleId: string): Promise<string | null> {
+  const r = await run('SELECT uid FROM users WHERE apple_id = $1', [appleId]);
+  return (r?.rows?.[0]?.uid as string | undefined) ?? null;
+}
+
+/// Link (first writer wins — an apple id can never point at two accounts;
+/// the partial unique index rejects theft attempts). Upsert form so it works
+/// even when it races the user row's own INSERT on a first-ever hello.
+export function linkApple(uid: string, appleId: string): void {
+  void run(
+    `INSERT INTO users (uid, apple_id) VALUES ($1, $2)
+     ON CONFLICT (uid) DO UPDATE SET
+       apple_id = COALESCE(users.apple_id, EXCLUDED.apple_id)`,
+    [uid, appleId]);
 }
 
 export async function userCard(uid: string):
