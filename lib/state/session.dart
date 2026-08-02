@@ -142,15 +142,24 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sign in with Apple succeeded. The Apple user id becomes the stable uid —
-  /// identity (sparks, mutuals, blocks) now survives reinstalls and devices.
+  /// Sign in with Apple. The random uid stays the PERMANENT identity — the
+  /// Apple id is a recovery key linked to it server-side, so signing in later
+  /// never migrates anything, and a reinstall gets the whole graph back.
   String? appleUserId;
   void setAppleIdentity(String id) {
     appleUserId = id;
-    myUid = 'apple:$id';
     signedIn = true;
     _prefs?.setString('appleUserId', id);
     _persist();
+    notifyListeners();
+  }
+
+  /// The server resolved our Apple id to an existing account — adopt its uid
+  /// (this is the reinstall-recovery path).
+  void adoptUid(String uid) {
+    if (uid.isEmpty || uid == myUid) return;
+    myUid = uid;
+    _prefs?.setString('uid', uid);
     notifyListeners();
   }
 

@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
-import '../core/analytics.dart';
+import '../core/apple_auth.dart';
 import '../core/haptics.dart';
-import '../net/network_client.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
 import '../widgets/aurora.dart';
@@ -45,33 +43,13 @@ class _SignInScreenState extends State<SignInScreen> {
     if (_busy) return;
     setState(() { _busy = true; _error = null; });
     Buzz.tick();
-    try {
-      // scopes deliberately EMPTY: we want only the anonymous user identifier,
-      // never name or email — exactly what the privacy policy promises.
-      final cred = await SignInWithApple.getAppleIDCredential(
-        scopes: const [],
-      );
-      Track.event('apple_signin');
-      final auid = cred.userIdentifier;
-      if (auid != null && auid.isNotEmpty) {
-        AppSession.instance.setAppleIdentity(auid);
-        // the backend keys everything by uid — re-introduce ourselves so
-        // sparks and mutuals attach to the Apple identity from now on
-        NetworkClient.instance.hello();
-      }
-      if (!mounted) return;
+    final ok = await appleSignIn();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
       _proceed(signedIn: true);
-    } on SignInWithAppleAuthorizationException catch (e) {
-      // user cancelled — not an error, just stay
-      if (mounted && e.code != AuthorizationErrorCode.canceled) {
-        setState(() => _error = 'Apple sign-in didn’t work — try again or continue as guest');
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error = 'Apple sign-in didn’t work — try again or continue as guest');
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
+    } else {
+      setState(() => _error = 'Apple sign-in didn’t work — try again or continue as guest');
     }
   }
 

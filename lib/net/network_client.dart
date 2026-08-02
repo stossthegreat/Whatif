@@ -41,6 +41,12 @@ class NetworkClient {
             myId = m['id'] as String?;
             myName = m['name'] as String?;
             myHue = (m['hue'] as num?)?.toDouble();
+            // reinstall recovery: the server resolved our Apple id to the
+            // account's canonical uid — adopt it and everything comes back
+            final wUid = m['uid'] as String?;
+            if (wUid != null && wUid != AppSession.instance.myUid) {
+              AppSession.instance.adoptUid(wUid);
+            }
             final http = (m['http'] as Map?)?.cast<String, dynamic>();
             httpToken = (http?['token'] as String?) ?? '';
             final base = (http?['base'] as String?) ?? '';
@@ -77,6 +83,7 @@ class NetworkClient {
       'meet': s.lookingFor ?? 'Everyone',
       'vibes': s.myVibes,
       'tz': DateTime.now().timeZoneOffset.inMinutes,
+      if (s.appleUserId != null) 'appleId': s.appleUserId,
     });
   }
 

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../core/apple_auth.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
 import '../state/session.dart';
@@ -112,6 +113,26 @@ class _MatchOverlayState extends State<MatchOverlay> with SingleTickerProviderSt
                                       style: T.body.copyWith(color: C.tx3, fontWeight: FontWeight.w600)),
                                 ),
                               ),
+                              if (!AppSession.instance.signedIn) ...[
+                                const SizedBox(height: 14),
+                                Press(
+                                  haptic: false,
+                                  onTap: () async {
+                                    Buzz.commit();
+                                    await appleSignIn();
+                                    if (mounted) setState(() {});
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                                    child: Text(
+                                      '⭐ you’re a guest — sign in with Apple so your people are never lost',
+                                      textAlign: TextAlign.center,
+                                      style: T.tiny.copyWith(
+                                          color: C.sig, fontWeight: FontWeight.w700, height: 1.5),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
