@@ -21,6 +21,7 @@ class AppNav {
   AppNav._();
   static void Function(String code)? joinPartyCode;   // join a friend's room
   static void Function(String uid)? hostPartyFor;     // start a room + invite
+  static void Function(String uid, bool video)? startCall; // ring a friend
 }
 
 /// One conversation. Text now; voice/photo/GIF buttons appear when the media
@@ -551,6 +552,24 @@ class _ChatScreenState extends State<ChatScreen> {
         borderRadius: BorderRadius.circular(16),
         child: Image.network(msg.body, width: 200, fit: BoxFit.cover,
             errorBuilder: (_, _, _) => const SizedBox.shrink()),
+      );
+    } else if (msg.kind == 'call') {
+      final secs = ((msg.meta['secs'] as num?) ?? 0).toInt();
+      final missed = msg.meta['missed'] == true;
+      final video = msg.meta['video'] == true;
+      content = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: missed ? C.live.withOpacity(0.5) : C.hair2),
+        ),
+        child: Text(
+          missed
+              ? (video ? '📹 missed video call' : '📞 missed call')
+              : '${video ? '📹' : '📞'} Call · ${secs >= 60 ? '${secs ~/ 60}m ${secs % 60}s' : '${secs}s'}',
+          style: T.body.copyWith(
+              color: missed ? C.live : C.tx2, fontSize: 14, fontWeight: FontWeight.w600),
+        ),
       );
     } else if (msg.kind == 'voice') {
       final secs = (((msg.meta['durMs'] as num?) ?? 0) / 1000).round();

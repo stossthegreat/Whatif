@@ -175,6 +175,28 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                         ),
                     ],
                   ),
+                  if (friendState == 'friends') ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ghostBtn('📞 Voice call', () {
+                            Buzz.commit();
+                            Navigator.of(context).popUntil((r) => r.isFirst);
+                            AppNav.startCall?.call(widget.uid, false);
+                          }),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _ghostBtn('📹 Video call', () {
+                            Buzz.commit();
+                            Navigator.of(context).popUntil((r) => r.isFirst);
+                            AppNav.startCall?.call(widget.uid, true);
+                          }),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 26),
                   // personality — votes from people who actually met them
                   Text('PERSONALITY', style: T.eyebrow),

@@ -39,6 +39,9 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final s = AppSession.instance;
+  List<String> _titles = const [];
+  String? _activeTitle;
+  StreamSubscription<Map<String, dynamic>>? _titleSub;
   late final _bio = TextEditingController(text: s.bio);
   late final _city = TextEditingController(text: s.city);
   late final _country = TextEditingController(text: s.country);
@@ -49,7 +52,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _uploading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _titleSub = NetworkClient.instance.events.listen((m) {
+      if (m['t'] == 'titles' && mounted) {
+        setState(() {
+          _titles = ((m['list'] as List?) ?? const []).whereType<String>().toList();
+          _activeTitle = m['active'] as String?;
+        });
+      }
+    });
+    NetworkClient.instance.titles();
+  }
+
+  @override
   void dispose() {
+    _titleSub?.cancel();
     _save(); // leaving the screen saves — no lost edits, no Save button drama
     _bio.dispose();
     _city.dispose();
@@ -174,6 +192,43 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
+                  if (_titles.isNotEmpty) ...[
+                    Text('YOUR TITLE', style: T.eyebrow),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final t in _titles)
+                          Press(
+                            haptic: false,
+                            onTap: () {
+                              Buzz.tick();
+                              setState(() => _activeTitle = t);
+                              NetworkClient.instance.setTitle(t);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: _activeTitle == t
+                                    ? C.sig.withOpacity(0.18)
+                                    : C.glass,
+                                borderRadius: BorderRadius.circular(100),
+                                border: Border.all(
+                                    color: _activeTitle == t ? C.sig : C.hair2),
+                              ),
+                              child: Text(t,
+                                  style: T.tiny.copyWith(
+                                    color: _activeTitle == t ? C.sig : C.tx2,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12.5,
+                                  )),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                   _field('BIO', _bio, hint: 'one line that sounds like you', maxLen: 240, lines: 2),
                   Row(
                     children: [

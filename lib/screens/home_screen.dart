@@ -11,7 +11,9 @@ import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
+import 'chat_screen.dart' show AppNav;
 import 'chats_screen.dart';
+import 'friend_profile_screen.dart';
 import 'friends_screen.dart';
 import 'settings_screen.dart';
 
@@ -160,6 +162,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             child: _ChaosBanner(onTap: widget.onPlay),
                           ),
                           const SizedBox(height: 26),
+                          // ---- HAPPENING NOW — bounded friend activity feed
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: r.gutter),
+                            child: const _FeedSection(),
+                          ),
                           // ---- FRIENDS
                           Padding(
                             padding: EdgeInsets.symmetric(horizontal: r.gutter),
@@ -459,19 +466,42 @@ class _ChaosBannerState extends State<_ChaosBanner> {
 
   @override
   Widget build(BuildContext context) {
-    final m = _left.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = _left.inSeconds.remainder(60).toString().padLeft(2, '0');
-    final fg = _live ? Colors.black : Colors.white;
-    final fg2 = _live ? Colors.black.withOpacity(0.6) : C.tx3;
+    // a live seasonal event owns this slot; Chaos Hour is the everyday ritual
+    final social = SocialState.instance;
+    final ev = social.eventEndsAt;
+    final eventLive = social.eventName != null && ev != null && ev.isAfter(DateTime.now());
+
+    final String title;
+    final String subtitle;
+    final String clock;
+    final bool hot;
+    if (eventLive) {
+      final left = ev.difference(DateTime.now());
+      title = '⚡ ${social.eventName!.toUpperCase()}';
+      subtitle = 'limited time · exclusive badges';
+      clock = left.inDays >= 1
+          ? '${left.inDays}d ${left.inHours.remainder(24)}h'
+          : '${left.inHours}:${left.inMinutes.remainder(60).toString().padLeft(2, '0')}';
+      hot = true;
+    } else {
+      final m = _left.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final s = _left.inSeconds.remainder(60).toString().padLeft(2, '0');
+      title = _live ? '⚡ CHAOS HOUR — LIVE' : 'CHAOS HOUR';
+      subtitle = '2× badges · wilder games · top of every hour';
+      clock = '$m:$s';
+      hot = _live;
+    }
+    final fg = hot ? Colors.black : Colors.white;
+    final fg2 = hot ? Colors.black.withOpacity(0.6) : C.tx3;
     return Press(
       onTap: () { Buzz.tick(); Track.event('chaos_banner_tap'); widget.onTap(); },
       child: AnimatedContainer(
         duration: M.base,
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         decoration: BoxDecoration(
-          color: _live ? Colors.white : C.glass,
+          color: hot ? Colors.white : C.glass,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: _live ? Colors.white : C.hair),
+          border: Border.all(color: hot ? Colors.white : C.hair),
         ),
         child: Row(
           children: [
@@ -479,17 +509,17 @@ class _ChaosBannerState extends State<_ChaosBanner> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_live ? '⚡ CHAOS HOUR — LIVE' : 'CHAOS HOUR',
+                  Text(title,
                       style: T.body.copyWith(color: fg, fontWeight: FontWeight.w800, fontSize: 15, letterSpacing: 0.4)),
                   const SizedBox(height: 4),
-                  Text('2× badges · wilder games · top of every hour',
+                  Text(subtitle,
                       style: T.tiny.copyWith(color: fg2, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
             const SizedBox(width: 12),
             Text(
-              '$m:$s',
+              clock,
               style: T.huge(26).copyWith(
                 color: fg,
                 fontFeatures: const [FontFeature.tabularFigures()],
@@ -634,6 +664,101 @@ class _RecentlyMetRail extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// HAPPENING NOW — a bounded activity module, never a scroll pit. Friend
+/// badges/titles/rooms, plus your unread + requests lines. Every line taps
+/// somewhere useful. Hidden entirely when nothing's happening.
+class _FeedSection extends StatelessWidget {
+  const _FeedSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([SocialState.instance, ChatStore.instance]),
+      builder: (context, _) {
+        final s = SocialState.instance;
+        final unread = ChatStore.instance.unreadTotal;
+        final rows = <Widget>[];
+
+        for (final f in s.feed.take(5)) {
+          final line = switch (f.kind) {
+            'badge' => '🏅 @${f.name} earned ${f.x}',
+            'title' => '👑 @${f.name} is now “${f.x}”',
+            'party' => '🎮 @${f.name} opened a room',
+            _ => '',
+          };
+          if (line.isEmpty) continue;
+          rows.add(_row(context, line,
+              trailing: f.kind == 'party' ? 'Join' : null,
+              onTap: () {
+                Buzz.tick();
+                if (f.kind == 'party') {
+                  AppNav.joinPartyCode?.call(f.x);
+                  return;
+                }
+                final friend =
+                    s.friends.where((x) => x.uid == f.uid).toList();
+                if (friend.isNotEmpty) {
+                  FriendProfileScreen.push(context,
+                      uid: f.uid, name: f.name, hue: friend.first.hue);
+                }
+              }));
+        }
+        if (unread > 0) {
+          rows.add(_row(context, '💬 $unread unread message${unread == 1 ? '' : 's'}',
+              onTap: () { Buzz.tick(); ChatsScreen.push(context); }));
+        }
+        if (s.reqCount > 0) {
+          rows.add(_row(context, '⭐ ${s.reqCount} friend request${s.reqCount == 1 ? '' : 's'}',
+              onTap: () { Buzz.tick(); FriendsScreen.push(context, tab: 4); }));
+        }
+        if (rows.isEmpty) return const SizedBox.shrink();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('HAPPENING NOW', style: T.eyebrow),
+            const SizedBox(height: 10),
+            ...rows,
+            const SizedBox(height: 16),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _row(BuildContext context, String text, {String? trailing, VoidCallback? onTap}) {
+    return Press(
+      haptic: false,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: T.body.copyWith(
+                      color: C.tx2, fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+            if (trailing != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                decoration: BoxDecoration(
+                    color: Colors.white, borderRadius: BorderRadius.circular(100)),
+                child: Text(trailing,
+                    style: T.tiny.copyWith(
+                        color: Colors.black, fontWeight: FontWeight.w800, fontSize: 11)),
+              )
+            else
+              const Icon(Icons.chevron_right_rounded, size: 16, color: C.tx3),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -13,6 +13,7 @@ import 'state/chat.dart';
 import 'state/session.dart';
 import 'state/social.dart';
 import 'theme/tokens.dart';
+import 'widgets/incoming_call_overlay.dart';
 import 'widgets/match_overlay.dart';
 import 'widgets/rating_overlay.dart';
 import 'screens/chat_screen.dart';
@@ -71,6 +72,7 @@ class _RootState extends State<_Root> {
   StreamSubscription<Uri>? _linkSub;
   String? _partyCode; // arrived via rivlr://join/CODE
   String? _partyInviteUid; // host a room and DM this friend the code
+  bool _pendingCallVideo = true; // camera state for the next call cell
 
   @override
   void initState() {
@@ -88,6 +90,20 @@ class _RootState extends State<_Root> {
       _partyCode = null;
       _partyInviteUid = uid;
       _to(_Step.party);
+    };
+    AppNav.startCall = (uid, video) {
+      if (!mounted) return;
+      _pendingCallVideo = video;
+      Track.event('call_invite', {'video': video ? 1 : 0});
+      NetworkClient.instance.callInvite(uid, video: video);
+      final ctx = RivlrApp.navKey.currentContext;
+      if (ctx != null) {
+        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: C.char2,
+          content: Text('📞 ringing…', style: T.body.copyWith(color: Colors.white)),
+        ));
+      }
     };
     _boot();
   }
@@ -180,7 +196,40 @@ class _RootState extends State<_Root> {
         _onCell(m);
       case 'ended':
         RtcService.instance.leave();
-        if (mounted && _step == _Step.live) _to(_Step.finding); // server re-queued us
+        if (mounted && _step == _Step.live) {
+          // calls end back at home; stranger rooms recompose into a new match
+          _to((_cell?.mode ?? '') == 'call' ? _Step.home : _Step.finding);
+        }
+      case 'call':
+        // ringing — but never interrupt a live room: auto-decline as busy
+        if (_step == _Step.live) {
+          final id = (m['callId'] as String?) ?? '';
+          if (id.isNotEmpty) NetworkClient.instance.callDecline(id);
+          SocialState.instance.clearIncomingCall();
+        }
+      case 'badge':
+        final label = m['label'] as String?;
+        final ctx = RivlrApp.navKey.currentContext;
+        if (label != null && ctx != null) {
+          ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: C.char2,
+            content: Text('🏅 Badge earned — $label',
+                style: T.body.copyWith(color: Colors.white)),
+          ));
+        }
+      case 'callState':
+        final st = m['state'] as String?;
+        final ctx2 = RivlrApp.navKey.currentContext;
+        if (ctx2 != null && (st == 'declined' || st == 'timeout' || st == 'busy')) {
+          ScaffoldMessenger.of(ctx2).showSnackBar(SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: C.char2,
+            content: Text(
+                st == 'busy' ? 'they’re in a room right now' : 'no answer — try later',
+                style: T.body.copyWith(color: Colors.white)),
+          ));
+        }
       case 'sparkMutual':
         if (m['name'] is String) {
           AppSession.instance.markMutual(m['name'] as String, uid: m['uid'] as String?);
@@ -191,10 +240,12 @@ class _RootState extends State<_Root> {
   }
 
   void _onCell(Map<String, dynamic> m) {
-    // rooms are only expected while matching, in a party lobby, or already
-    // live (resume/re-roll). Anywhere else — e.g. a stale resume racing a
-    // leave we sent after reconnecting at home — release the seat and stay.
-    if (_step != _Step.party && _step != _Step.finding && _step != _Step.live) {
+    final isCall = m['mode'] == 'call';
+    // rooms are only expected while matching, in a party lobby, already live
+    // (resume/re-roll), or when a CALL was just accepted. Anywhere else —
+    // e.g. a stale resume racing a leave we sent after reconnecting at
+    // home — release the seat and stay.
+    if (!isCall && _step != _Step.party && _step != _Step.finding && _step != _Step.live) {
       NetworkClient.instance.leaveCell();
       return;
     }
@@ -206,7 +257,8 @@ class _RootState extends State<_Root> {
     });
     final url = (m['url'] as String?) ?? '';
     final token = (m['token'] as String?) ?? '';
-    RtcService.instance.join(url, token); // fire-and-forget; tiles fill on rev
+    // voice calls start camera-off; flipping it on mid-call upgrades to video
+    RtcService.instance.join(url, token, camera: !isCall || _pendingCallVideo);
     setState(() {
       _cell = cell;
       _drop++;
@@ -361,6 +413,19 @@ class _RootState extends State<_Root> {
           animation: SocialState.instance,
           builder: (context, _) {
             final s = SocialState.instance;
+            // a ringing call outranks everything (rooms auto-decline earlier)
+            final call = s.incomingCall;
+            if (call != null && _step != _Step.live) {
+              return IncomingCallOverlay(
+                key: ValueKey('call${call.callId}'),
+                call: call,
+                onAccept: () {
+                  _pendingCallVideo = call.video;
+                  NetworkClient.instance.callAccept(call.callId);
+                  SocialState.instance.clearIncomingCall();
+                },
+              );
+            }
             // the meet-again question — over finding/home only, never mid-room
             if (s.pendingRates.isNotEmpty &&
                 (_step == _Step.finding || _step == _Step.home)) {

@@ -15,6 +15,7 @@ class RtcService {
   /// Whether the local mic is live. Always back on when a new room starts —
   /// nobody wants to join their next room silently muted from the last one.
   bool micOn = true;
+  bool camOn = true;
 
   Future<void> setMic(bool on) async {
     micOn = on;
@@ -24,10 +25,21 @@ class RtcService {
     _bump();
   }
 
-  Future<void> join(String url, String token) async {
+  /// Camera toggle — voice calls start with it off; flipping it on mid-call
+  /// upgrades to video (the other side just sees the track appear).
+  Future<void> setCam(bool on) async {
+    camOn = on;
+    try {
+      await _room?.localParticipant?.setCameraEnabled(on);
+    } catch (_) {}
+    _bump();
+  }
+
+  Future<void> join(String url, String token, {bool camera = true}) async {
     if (url.isEmpty || token.isEmpty) return; // video disabled — placeholders show
     await leave();
     micOn = true;
+    camOn = camera;
     // speakerOn: a face-to-face video app plays through the loudspeaker, not
     // the earpiece — without this iOS can route voices somewhere inaudible.
     final room = Room(
@@ -50,7 +62,7 @@ class RtcService {
       await room.localParticipant?.setMicrophoneEnabled(true);
     } catch (_) {}
     try {
-      await room.localParticipant?.setCameraEnabled(true);
+      await room.localParticipant?.setCameraEnabled(camera);
     } catch (_) {}
     _bump();
   }

@@ -54,7 +54,8 @@ export interface Cell {
   roundTimer?: NodeJS.Timeout;   // the current round's deadline (cancellable alone)
   gamesPlayed: number;           // ceremony fires every 3rd game
   inRound: boolean;              // a game is currently running
-  mode: 'roulette' | 'hang';     // roulette = games auto-chain, no choices
+  mode: 'roulette' | 'hang' | 'call'; // call = private 2-person, no auto-games
+  callVideo?: boolean;           // call cells: started as video?
   seqBeats?: RoundWire[];        // the current game's remaining beat chain
   seqPos: number;                // index into seqBeats
 }

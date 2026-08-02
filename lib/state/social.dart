@@ -79,6 +79,26 @@ class RatePromptItem {
   final int secs;
 }
 
+/// An incoming call, ringing right now.
+class IncomingCall {
+  IncomingCall({required this.callId, required this.uid, required this.name, required this.hue, required this.video});
+  final String callId;
+  final String uid;
+  final String name;
+  final double hue;
+  final bool video;
+}
+
+/// One line of friend activity for the Home feed.
+class FeedItem {
+  FeedItem({required this.kind, required this.uid, required this.name, required this.x, required this.at});
+  final String kind; // badge · title · party
+  final String uid;
+  final String name;
+  final String x;
+  final DateTime at;
+}
+
 /// The social layer's client state: friends, requests, recently met, pending
 /// rating prompts, and the match-celebration queue. Fed by the server over
 /// the existing WS event stream.
@@ -92,6 +112,12 @@ class SocialState extends ChangeNotifier {
   List<RecentMeet> recent = [];
   final List<RatePromptItem> pendingRates = [];
   final List<FriendInfo> celebrations = []; // matched / accepted, queued FIFO
+  IncomingCall? incomingCall;
+  final List<FeedItem> feed = []; // rolling friend activity (max 12, in-memory)
+  String? eventKey;               // active seasonal event
+  String? eventName;
+  DateTime? eventEndsAt;
+  String? lastBadgeLabel;         // for the toast
 
   bool _attached = false;
 
@@ -144,7 +170,52 @@ class SocialState extends ChangeNotifier {
       case 'friendRemoved':
         friends.removeWhere((f) => f.uid == m['uid']);
         notifyListeners();
+      case 'call':
+        final from = ((m['from'] as Map?) ?? const {}).cast<String, dynamic>();
+        incomingCall = IncomingCall(
+          callId: (m['callId'] as String?) ?? '',
+          uid: (from['uid'] as String?) ?? '',
+          name: (from['name'] as String?) ?? 'someone',
+          hue: ((from['hue'] as num?) ?? 210).toDouble(),
+          video: m['video'] == true,
+        );
+        notifyListeners();
+      case 'callState':
+        final st = m['state'] as String?;
+        if (st == 'cancelled' || st == 'timeout') {
+          incomingCall = null;
+          notifyListeners();
+        }
+      case 'feedEvent':
+        feed.insert(0, FeedItem(
+          kind: (m['kind'] as String?) ?? '',
+          uid: (m['uid'] as String?) ?? '',
+          name: (m['name'] as String?) ?? 'someone',
+          x: (m['x'] as String?) ?? '',
+          at: DateTime.now(),
+        ));
+        while (feed.length > 12) {
+          feed.removeLast();
+        }
+        notifyListeners();
+      case 'event':
+        eventKey = m['key'] as String?;
+        eventName = m['name'] as String?;
+        eventEndsAt = DateTime.tryParse((m['endsAt'] as String?) ?? '');
+        notifyListeners();
+      case 'badge':
+        lastBadgeLabel = m['label'] as String?;
+        notifyListeners();
     }
+  }
+
+  void clearIncomingCall() {
+    incomingCall = null;
+    notifyListeners();
+  }
+
+  void clearBadgeToast() {
+    lastBadgeLabel = null;
   }
 
   List<Map<String, dynamic>> _list(dynamic v) =>

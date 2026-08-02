@@ -10,7 +10,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'crypto';
-import { rollGame, rollMemberCount, SEQ_PACK, seqByName, type GameKind, type SeqDef } from './games.js';
+import { rollGame, SEQ_PACK, seqByName, type GameKind, type SeqDef } from './games.js';
 import { store, type User, type Meet, type Cell, type RoundWire } from './store.js';
 import { mintToken, LIVEKIT_URL } from './livekit.js';
 import * as db from './db.js';
@@ -21,6 +21,8 @@ import * as chat from './chat.js';
 import * as dbs from './db_social.js';
 import { mintAuthToken } from './auth.js';
 import { mountMedia, startRetentionSweep, gifsEnabled } from './media.js';
+import * as calls from './calls.js';
+import * as matching from './matching.js';
 
 const PORT = Number(process.env.PORT || 8080);
 const ALLOW_SOLO = (process.env.ALLOW_SOLO || 'true') === 'true';
@@ -59,6 +61,7 @@ function compatible(a: User, b: User): boolean {
   return a.uid !== b.uid
     && !store.isBlocked(a.uid, b.uid)
     && !social.isNeverPair(a.uid, b.uid) // "never again" is forever
+    && !matching.hardBlocked(a, b)       // met in the last 24h — keep it fresh
     && (a.mode ?? 'hang') === (b.mode ?? 'hang') // roulette matches roulette
     && meetOk(a.meet, b.gender)
     && meetOk(b.meet, a.gender);
@@ -114,24 +117,33 @@ function dequeue(id: string) {
 }
 
 function tryMatch() {
+  // Strangers match STRICTLY 1:1 (groups exist only via friend codes) — the
+  // proven format, and the seed picks the BEST-scoring partner, not the first.
   let guard = store.queue.length * 2 + 2;
   while (store.queue.length >= 2 && guard-- > 0) {
     const seed = store.users.get(store.queue[0]);
     if (!seed) { store.queue.shift(); continue; }
 
-    const want = rollMemberCount();
-    const members = [seed.id];
-    for (let i = 1; i < store.queue.length && members.length < want; i++) {
+    let best: User | null = null;
+    let bestScore = -Infinity;
+    for (let i = 1; i < store.queue.length; i++) {
       const cand = store.users.get(store.queue[i]);
-      if (!cand) continue;
-      if (members.every((mid) => compatible(store.users.get(mid)!, cand))) members.push(cand.id);
+      if (!cand || !compatible(seed, cand)) continue;
+      const s = matching.score(seed, cand);
+      if (s > bestScore) { bestScore = s; best = cand; }
     }
 
-    if (members.length >= 2) {
-      for (const id of members) dequeue(id);
-      void formCell(members);
+    const waited = Date.now() - seed.queuedAt;
+    // take a great match immediately; take ANY match after 5s — never starve
+    if (best && (bestScore >= 4 || waited > 5000)) {
+      dequeue(seed.id);
+      dequeue(best.id);
+      matching.noteMetNow(seed.uid, best.uid);
+      void formCell([seed.id, best.id]);
     } else {
-      // seed couldn't find a compatible partner right now — rotate and retry
+      // no partner (or holding out for a better one) — rotate so the next
+      // seed gets a look; the guard bounds the churn, and the 1s pulse below
+      // retries once patience windows expire
       store.queue.push(store.queue.shift()!);
     }
   }
@@ -317,6 +329,8 @@ function endRound(cell: Cell) {
     cell.lastWinnerId = winner;
     msg.winnerId = winner;
     msg.tally = Object.fromEntries(tally); // per-face vote counts for the reveal
+    const winnerUid = cell.meta.get(winner)?.uid;
+    if (winnerUid) social.onPointWin(winnerUid); // Storyteller badge fuel
   } else if (kind === 'spin') {
     const winner = round.targetId && cell.members.includes(round.targetId) ? round.targetId : pick(cell.members);
     cell.lastWinnerId = winner;
@@ -350,6 +364,10 @@ function endRound(cell: Cell) {
   // game earns a ceremony. Roulette rooms roll the next game automatically.
   cell.seqBeats = undefined;
   cell.gamesPlayed += 1;
+  for (const mid of cell.members) {
+    const uid = cell.meta.get(mid)?.uid;
+    if (uid) social.onGameComplete(uid);
+  }
   if (cell.gamesPlayed % 3 === 0) {
     later(cell.id, 7000, (c) => sendAwards(c));
     if (cell.mode === 'roulette') {
@@ -386,6 +404,12 @@ function sendAwards(cell: Cell) {
     });
   }
   broadcastCell(cell.id, { t: 'awards', list });
+  for (const a of list) {
+    const uid = cell.meta.get(a.winnerId)?.uid;
+    if (!uid) continue;
+    social.onAward(uid, a.label === 'MVP');
+    if (a.emoji === '😂') social.onLaugh(uid);
+  }
 }
 
 // real "matches today" counter — resets at UTC midnight. Never fabricated:
@@ -399,7 +423,7 @@ function noteMatch() {
   db.bumpMatches(day);
 }
 
-async function formCell(memberIds: string[]) {
+async function formCell(memberIds: string[], modeOverride?: 'call') {
   const live = memberIds.filter((id) => store.users.get(id)?.ws.readyState === WebSocket.OPEN);
   if (live.length === 0) return;
 
@@ -409,7 +433,7 @@ async function formCell(memberIds: string[]) {
 
   const cellId = randomUUID();
   const room = `cell_${cellId}`;
-  const mode = (store.users.get(live[0])?.mode ?? 'hang');
+  const mode = modeOverride ?? (store.users.get(live[0])?.mode ?? 'hang');
   const now = Date.now();
   const cell: Cell = {
     id: cellId, room, members: [...live], kind: rounds[0].kind as GameKind,
@@ -425,6 +449,7 @@ async function formCell(memberIds: string[]) {
     prompted: new Set(),
     credited: new Set(),
   };
+  if (mode === 'call') cell.callVideo = calls.pendingVideo;
   store.cells.set(cellId, cell);
   noteMatch();
 
@@ -443,16 +468,20 @@ async function formCell(memberIds: string[]) {
   }
 
   // talk-first: the room opens as a hang. In HANG mode games start when the
-  // room picks one; in ROULETTE they auto-chain — no choices, that's the deal.
+  // room picks one; in ROULETTE they auto-chain. CALLS get none of it — no
+  // auto-games, no chaos cards: it's your private room (games still work if
+  // you pick one).
   later(cellId, 1300, (c) => broadcastCell(c.id, { t: 'talk' }));
   if (mode === 'roulette') later(cellId, 6000, (c) => startPickedGame(c));
-  const chaosCount = 1 + Math.floor(Math.random() * 2);
-  for (let i = 0; i < chaosCount; i++) {
-    const [e, x] = pick(CHAOS_CARDS);
-    later(cellId, 15000 + Math.floor(Math.random() * 90000), (c) =>
-      broadcastCell(c.id, { t: 'chaos', e, x }));
+  if (mode !== 'call') {
+    const chaosCount = 1 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < chaosCount; i++) {
+      const [e, x] = pick(CHAOS_CARDS);
+      later(cellId, 15000 + Math.floor(Math.random() * 90000), (c) =>
+        broadcastCell(c.id, { t: 'chaos', e, x }));
+    }
   }
-  console.log(`[cell] ${cellId} · ${live.length} people · ${rounds.map((r) => r.name).join(' → ')}${cell.golden ? ' · GOLDEN' : ''}`);
+  console.log(`[cell] ${cellId} · ${live.length} people · ${mode}${cell.golden ? ' · GOLDEN' : ''}`);
 }
 
 function leaveCell(u: User) {
@@ -472,14 +501,25 @@ function leaveCell(u: User) {
     const remaining = [...cell.members];
     clearCellTimers(cell); // never let a dead cell's timers fire into new rooms
     store.cells.delete(cell.id);
+    // a finished CALL leaves a receipt in the thread: "Call · 4 min"
+    if (cell.mode === 'call') {
+      const uids = [...cell.meta.values()].map((x) => x.uid);
+      if (uids.length >= 2) {
+        const joins = [...cell.joinedAt.values()];
+        const secs = Math.max(0, Math.floor((Date.now() - Math.max(...joins)) / 1000));
+        void dbs.insertMessage(uids[0], uids[1], uids[0], 'call', '', null,
+            { secs, video: cell.callVideo === true });
+      }
+    }
     for (const id of remaining) {
       const other = store.users.get(id);
       if (other) {
-        // the room is over for them too — same social close-out, then requeue
         cell.leftAt.set(id, Date.now());
         social.onCellLeave(cell, other);
         send(other, { t: 'ended' });
-        enqueue(other); // fluid recompose
+        // a call ending is not a reason to throw someone at strangers
+        if (cell.mode !== 'call') enqueue(other);
+        else other.state = 'idle';
       }
     }
   }
@@ -579,6 +619,9 @@ function onReport(target: string, reporter = '') {
 
 // ---- background loops ------------------------------------------------------
 setInterval(() => {
+  // quality-holds expire on a clock, not on the next enqueue — without this
+  // pulse two waiting low-score users could sit forever in a quiet queue
+  if (store.queue.length >= 2) tryMatch();
   if (ALLOW_SOLO) {
     const now = Date.now();
     for (const id of [...store.queue]) {
@@ -618,11 +661,16 @@ app.get('/delete-account', (_req, res) => res.type('html').send(legal.page('Dele
 mountMedia(app);
 startRetentionSweep();
 app.get('/stats', (_req, res) => res.json({
-  online: store.onlineCount, queued: store.queue.length, cells: store.cells.size, livekit: !!LIVEKIT_URL,
+  online: store.onlineCount, queued: store.queue.length, cells: store.cells.size,
+  parties: parties.size, livekit: !!LIVEKIT_URL, db: db.dbEnabled, push: pushEnabled,
+  uptimeSec: Math.floor(process.uptime()),
+  memMb: Math.round(process.memoryUsage().rss / 1048576),
 }));
 
 const server = createServer(app);
-const wss = new WebSocketServer({ server, path: '/ws' });
+// 64KB is generous for every legit message (media rides HTTP) — anything
+// bigger is hostile or broken and the socket closes itself.
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024 });
 
 wss.on('connection', (ws) => {
   const id = randomUUID();
@@ -635,7 +683,24 @@ wss.on('connection', (ws) => {
 
   ws.on('pong', () => { user.lastPong = Date.now(); });
 
+  // rate limiting: 40 messages per rolling 5s window. A tripped window costs
+  // ONE strike (excess silently dropped); three struck windows closes the
+  // connection. Bursts survive, sustained abuse doesn't.
+  let msgWindow = Date.now();
+  let msgCount = 0;
+  let strikes = 0;
+  let struckThisWindow = false;
+
   ws.on('message', (raw) => {
+    const now = Date.now();
+    if (now - msgWindow > 5000) { msgWindow = now; msgCount = 0; struckThisWindow = false; }
+    if (++msgCount > 40) {
+      if (!struckThisWindow) {
+        struckThisWindow = true;
+        if (++strikes >= 3) { try { ws.close(); } catch { /* ignore */ } }
+      }
+      return;
+    }
     let m: any;
     try { m = JSON.parse(raw.toString()); } catch { return; }
     switch (m.t) {
@@ -657,6 +722,8 @@ wss.on('connection', (ws) => {
         });
         notifyLive(user);
         void social.hydrate(user);
+        void matching.hydrateHints(user);
+        void social.sendEvent(user);
         resumeCell(user); // wifi blip? re-seat them in the room they were in
         const vibes = Array.isArray(m.vibes)
           ? (m.vibes as unknown[]).filter((v): v is string => typeof v === 'string').slice(0, 12)
@@ -687,6 +754,8 @@ wss.on('connection', (ws) => {
         parties.set(p.code, p);
         partyByUser.set(id, p.code);
         send(user, partyState(p));
+        social.feedToFriends(user,
+            { t: 'feedEvent', kind: 'party', uid: user.uid, name: user.name, x: p.code });
         break;
       }
       case 'joinParty': {
@@ -801,6 +870,12 @@ wss.on('connection', (ws) => {
       case 'traitVote': void social.traitVote(user, m); break;
       case 'setProfile': social.setProfile(user, m); break;
       case 'profile': void social.profile(user, m); break;
+      case 'setTitle': void social.setTitle(user, m); break;
+      case 'titles': void social.titles(user); break;
+      case 'callInvite': void calls.invite(user, m); break;
+      case 'callAccept': void calls.accept(user, m); break;
+      case 'callDecline':
+      case 'callCancel': calls.decline(user, m); break;
       case 'dm': void chat.dm(user, m); break;
       case 'dmHistory': void chat.history(user, m); break;
       case 'dmRead': void chat.read(user, m); break;
@@ -872,6 +947,21 @@ server.listen(PORT, () => {
 
 social.init(send);
 chat.init(send);
+calls.init(send, formCell);
+social.startRepDecay();
+
+// crash guard: one bad code path must never take down every live room.
+process.on('uncaughtException', (e) => console.error('[crash-guard]', e));
+process.on('unhandledRejection', (e) => console.error('[crash-guard:rejection]', e));
+
+// graceful shutdown: Railway redeploys send SIGTERM — close sockets so every
+// client's auto-reconnect fires immediately instead of waiting out a timeout.
+process.on('SIGTERM', () => {
+  console.log('[shutdown] SIGTERM — closing sockets');
+  for (const u of store.users.values()) { try { u.ws.close(); } catch { /* ignore */ } }
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 2000).unref();
+});
 
 void db.initDb().then(async () => {
   await dbs.initSocial();

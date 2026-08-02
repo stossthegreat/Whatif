@@ -143,4 +143,10 @@ class NetworkClient {
   void chatsList() => send({'t': 'chats'});
   void profile([String? uid]) => send({'t': 'profile', if (uid != null) 'uid': uid});
   void setProfile(Map<String, dynamic> fields) => send({'t': 'setProfile', ...fields});
+  void titles() => send({'t': 'titles'});
+  void setTitle(String title) => send({'t': 'setTitle', 'title': title});
+  void callInvite(String to, {required bool video}) =>
+      send({'t': 'callInvite', 'to': to, 'video': video});
+  void callAccept(String callId) => send({'t': 'callAccept', 'callId': callId});
+  void callDecline(String callId) => send({'t': 'callDecline', 'callId': callId});
 }
