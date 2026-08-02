@@ -27,7 +27,7 @@ class Track {
   static Future<void> init() async {
     if (!FirebaseCfg.configured) return;
     try {
-      await Firebase.initializeApp(options: FirebaseCfg.ios);
+      await Firebase.initializeApp(options: FirebaseCfg.current);
       _fa = FirebaseAnalytics.instance;
     } catch (_) {/* analytics never blocks launch */}
   }
