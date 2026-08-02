@@ -54,6 +54,45 @@ class MeScreen extends StatelessWidget {
                         ),
                       ),
                     const Spacer(),
+                    // your people — always one tap away (requests badge included)
+                    AnimatedBuilder(
+                      animation: SocialState.instance,
+                      builder: (context, _) {
+                        final reqs = SocialState.instance.reqCount;
+                        return Press(
+                          onTap: () {
+                            Buzz.tick();
+                            FriendsScreen.push(context, tab: reqs > 0 ? 4 : 0);
+                          },
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
+                                width: 38, height: 38,
+                                decoration: BoxDecoration(
+                                    shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
+                                child: const Icon(Icons.group_rounded, size: 19, color: C.tx2),
+                              ),
+                              if (reqs > 0)
+                                Positioned(
+                                  right: -3, top: -3,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                    constraints: const BoxConstraints(minWidth: 16),
+                                    decoration: BoxDecoration(
+                                        color: C.sig, borderRadius: BorderRadius.circular(100)),
+                                    child: Text('$reqs',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                            fontSize: 10, color: Colors.white, fontWeight: FontWeight.w800)),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 10),
                     Press(
                       onTap: () {
                         Buzz.tick();
@@ -172,14 +211,13 @@ class MeScreen extends StatelessWidget {
                       children: [
                         _SectionHead(
                           title: 'your people ✨',
-                          trailing: friends.isEmpty ? null : 'see all',
-                          onTrailing:
-                              friends.isEmpty ? null : () => FriendsScreen.push(context),
+                          trailing: 'see all',
+                          onTrailing: () => FriendsScreen.push(context),
                         ),
                         const SizedBox(height: 10),
                         if (friends.isEmpty)
                           Text(
-                              'Meet someone, both say “meet again” — they land here forever.',
+                              'Meet someone and tap 👥 in the room to add them — or both say “meet again”. They land here forever.',
                               style: T.tiny)
                         else
                           for (final f in friends.take(3)) _PersonRow(friend: f),

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../core/haptics.dart';
 import '../net/network_client.dart';
 import '../state/chat.dart';
+import '../state/social.dart';
 import '../theme/tokens.dart';
+import '../widgets/avatar.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
 import 'chat_screen.dart';
@@ -25,6 +27,81 @@ class _ChatsScreenState extends State<ChatsScreen> {
   void initState() {
     super.initState();
     NetworkClient.instance.chatsList();
+    NetworkClient.instance.friendsSnapshot(); // the empty state offers friends
+  }
+
+  /// One friend, tappable — used by both the compose sheet and the
+  /// no-conversations state so starting a chat is never more than two taps.
+  Widget _friendRow(BuildContext context, FriendInfo f, {VoidCallback? before}) {
+    return Press(
+      haptic: false,
+      onTap: () {
+        Buzz.tick();
+        before?.call();
+        ChatScreen.push(context, uid: f.uid, name: f.name, hue: f.hue);
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        child: Row(
+          children: [
+            Avatar(hue: f.hue, photoId: f.photoId, size: 44, live: f.online),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Text('@${f.name}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: T.body.copyWith(
+                      color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15.5)),
+            ),
+            const Icon(Icons.chevron_right_rounded, size: 20, color: C.tx3),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _composeSheet(BuildContext context) {
+    final friends = SocialState.instance.friends;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(12),
+        child: Glass(
+          radius: 26,
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('NEW MESSAGE', style: T.eyebrow),
+              const SizedBox(height: 12),
+              if (friends.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'No friends yet — meet someone in a room and tap 👥 to add them.',
+                    style: T.body.copyWith(color: C.tx3, fontSize: 14, height: 1.4),
+                  ),
+                )
+              else
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(ctx).size.height * 0.5),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final f in friends)
+                        _friendRow(context, f, before: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   String _ago(DateTime? t) {
@@ -59,24 +136,50 @@ class _ChatsScreenState extends State<ChatsScreen> {
                   ),
                   const SizedBox(width: 14),
                   Text('Messages', style: T.big.copyWith(fontSize: 26)),
+                  const Spacer(),
+                  // new message — pick any friend, start talking
+                  Press(
+                    onTap: () { Buzz.tick(); _composeSheet(context); },
+                    child: Container(
+                      width: 38, height: 38,
+                      decoration: const BoxDecoration(shape: BoxShape.circle, color: C.sig),
+                      child: const Icon(Icons.add_comment_rounded, size: 18, color: Colors.white),
+                    ),
+                  ),
                 ],
               ),
             ),
             Expanded(
               child: AnimatedBuilder(
-                animation: ChatStore.instance,
+                animation: Listenable.merge([ChatStore.instance, SocialState.instance]),
                 builder: (context, _) {
                   final chats = ChatStore.instance.chats;
                   if (chats.isEmpty) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 44),
-                        child: Text(
-                          'Match with someone — both say “meet again” — and the conversation starts here.',
-                          textAlign: TextAlign.center,
-                          style: T.body.copyWith(color: C.tx3, fontSize: 14.5, height: 1.5),
+                    // never a dead black screen: with friends, offer them right
+                    // here; without, say exactly how conversations start
+                    final friends = SocialState.instance.friends;
+                    if (friends.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 44),
+                          child: Text(
+                            'Meet someone in a room and tap 👥 to add them — once you’re friends, the conversation starts here.',
+                            textAlign: TextAlign.center,
+                            style: T.body.copyWith(color: C.tx3, fontSize: 14.5, height: 1.5),
+                          ),
                         ),
-                      ),
+                      );
+                    }
+                    return ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 30),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text('No conversations yet — message one of your people:',
+                              style: T.tiny.copyWith(color: C.tx3, fontSize: 13)),
+                        ),
+                        for (final f in friends) _friendRow(context, f),
+                      ],
                     );
                   }
                   return ListView.builder(

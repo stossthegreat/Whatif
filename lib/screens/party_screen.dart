@@ -162,167 +162,179 @@ class _PartyScreenState extends State<PartyScreen> {
     return Scaffold(
       backgroundColor: C.black,
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: r.gutter),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Press(
-                    onTap: _back,
-                    child: Container(
-                      width: 38, height: 38,
-                      decoration: BoxDecoration(
-                          shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
-                      child: const Icon(Icons.arrow_back_rounded, size: 20, color: C.tx2),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Text('Room with friends', style: T.big.copyWith(fontSize: 24)),
-                ],
-              ),
-              const Spacer(),
-              // the code — huge, the whole point of the screen
-              Center(
-                child: Column(
-                  children: [
-                    Text('YOUR ROOM CODE',
-                        style: T.eyebrow.copyWith(color: C.tx3, letterSpacing: 3.2, fontSize: 11)),
-                    const SizedBox(height: 14),
-                    _code == null
-                        ? Text(AppConfig.isLive ? '· · · ·' : 'OFFLINE',
-                            style: T.huge(56).copyWith(color: C.tx3, letterSpacing: 8))
-                        : Press(
-                            onTap: () {
-                              Clipboard.setData(ClipboardData(text: _code!));
-                              Buzz.tick();
-                            },
-                            child: Text(
-                              _code!.split('').join(' '),
-                              style: T.huge(64).copyWith(letterSpacing: 6),
-                            ),
-                          ),
-                    const SizedBox(height: 8),
-                    Text('tap to copy · share it anywhere', style: T.tiny),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 28),
-              // who's here
-              if (_members.isNotEmpty)
-                Center(
-                  child: Wrap(
-                    spacing: 14,
-                    runSpacing: 12,
-                    alignment: WrapAlignment.center,
+        // scrollable + min-height: identical layout when everything fits,
+        // scrolls when the keyboard steals the space — the code field always
+        // stays reachable (focused fields auto-scroll into view).
+        child: LayoutBuilder(builder: (context, box) {
+          return SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: box.maxHeight),
+              child: IntrinsicHeight(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: r.gutter),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (final m in _members)
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Press(
+                          onTap: _back,
+                          child: Container(
+                            width: 38, height: 38,
+                            decoration: BoxDecoration(
+                                shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
+                            child: const Icon(Icons.arrow_back_rounded, size: 20, color: C.tx2),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Text('Room with friends', style: T.big.copyWith(fontSize: 24)),
+                      ],
+                    ),
+                    const Spacer(),
+                    // the code — huge, the whole point of the screen
+                    Center(
+                      child: Column(
+                        children: [
+                          Text('YOUR ROOM CODE',
+                              style: T.eyebrow.copyWith(color: C.tx3, letterSpacing: 3.2, fontSize: 11)),
+                          const SizedBox(height: 14),
+                          _code == null
+                              ? Text(AppConfig.isLive ? '· · · ·' : 'OFFLINE',
+                                  style: T.huge(56).copyWith(color: C.tx3, letterSpacing: 8))
+                              : Press(
+                                  onTap: () {
+                                    Clipboard.setData(ClipboardData(text: _code!));
+                                    Buzz.tick();
+                                  },
+                                  child: Text(
+                                    _code!.split('').join(' '),
+                                    style: T.huge(64).copyWith(letterSpacing: 6),
+                                  ),
+                                ),
+                          const SizedBox(height: 8),
+                          Text('tap to copy · share it anywhere', style: T.tiny),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    // who's here
+                    if (_members.isNotEmpty)
+                      Center(
+                        child: Wrap(
+                          spacing: 14,
+                          runSpacing: 12,
+                          alignment: WrapAlignment.center,
                           children: [
-                            IdentityOrb(hue: m.hue, size: 46, ring: m.id == _hostId ? C.sig : null),
-                            const SizedBox(height: 6),
-                            Text(
-                              m.id == NetworkClient.instance.myId ? 'you' : '@${m.name}',
-                              style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
-                            ),
+                            for (final m in _members)
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IdentityOrb(hue: m.hue, size: 46, ring: m.id == _hostId ? C.sig : null),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    m.id == NetworkClient.instance.myId ? 'you' : '@${m.name}',
+                                    style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+                                  ),
+                                ],
+                              ),
                           ],
                         ),
+                      ),
+                    const SizedBox(height: 12),
+                    Center(
+                      child: Text(
+                        _members.length <= 1
+                            ? 'waiting for your people…'
+                            : _isHost
+                                ? '${_members.length} in — start when ready'
+                                : 'waiting for @$hostName to start',
+                        style: T.body.copyWith(color: C.tx2, fontSize: 14),
+                      ),
+                    ),
+                    const Spacer(),
+                    if (_error != null) ...[
+                      Center(child: Text(_error!, style: T.tiny.copyWith(color: C.live))),
+                      const SizedBox(height: 10),
+                    ],
+                    Cta(label: 'Share the code', onTap: _code == null ? null : _share),
+                    const SizedBox(height: 10),
+                    if (_isHost)
+                      Press(
+                        haptic: false,
+                        onTap: _members.length >= 2 && !_starting ? _start : null,
+                        child: Opacity(
+                          opacity: _members.length >= 2 && !_starting ? 1 : 0.4,
+                          child: Container(
+                            height: 56,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(color: C.hair2),
+                            ),
+                            child: Text(
+                              _starting ? 'Starting…' : 'Start the room  ›',
+                              style: T.body.copyWith(color: C.tx, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 18),
+                    // join someone else's room instead
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            height: 52,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: C.hair2),
+                            ),
+                            child: Center(
+                              child: TextField(
+                                controller: _joinCtl,
+                                maxLength: 4,
+                                textCapitalization: TextCapitalization.characters,
+                                style: T.body.copyWith(
+                                    color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: 4),
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  border: InputBorder.none,
+                                  counterText: '',
+                                  hintText: 'got a code?',
+                                  hintStyle: T.body.copyWith(color: C.tx3, letterSpacing: 0),
+                                ),
+                                onSubmitted: (_) => _join(),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Press(
+                          onTap: _join,
+                          child: Container(
+                            height: 52,
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: C.glass,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: C.hair2),
+                            ),
+                            child: Text('Join', style: T.body.copyWith(color: C.tx, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ],
+                    ),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
-              const SizedBox(height: 12),
-              Center(
-                child: Text(
-                  _members.length <= 1
-                      ? 'waiting for your people…'
-                      : _isHost
-                          ? '${_members.length} in — start when ready'
-                          : 'waiting for @$hostName to start',
-                  style: T.body.copyWith(color: C.tx2, fontSize: 14),
-                ),
               ),
-              const Spacer(),
-              if (_error != null) ...[
-                Center(child: Text(_error!, style: T.tiny.copyWith(color: C.live))),
-                const SizedBox(height: 10),
-              ],
-              Cta(label: 'Share the code', onTap: _code == null ? null : _share),
-              const SizedBox(height: 10),
-              if (_isHost)
-                Press(
-                  haptic: false,
-                  onTap: _members.length >= 2 && !_starting ? _start : null,
-                  child: Opacity(
-                    opacity: _members.length >= 2 && !_starting ? 1 : 0.4,
-                    child: Container(
-                      height: 56,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: C.hair2),
-                      ),
-                      child: Text(
-                        _starting ? 'Starting…' : 'Start the room  ›',
-                        style: T.body.copyWith(color: C.tx, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 18),
-              // join someone else's room instead
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      height: 52,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: C.hair2),
-                      ),
-                      child: Center(
-                        child: TextField(
-                          controller: _joinCtl,
-                          maxLength: 4,
-                          textCapitalization: TextCapitalization.characters,
-                          style: T.body.copyWith(
-                              color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: 4),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            border: InputBorder.none,
-                            counterText: '',
-                            hintText: 'got a code?',
-                            hintStyle: T.body.copyWith(color: C.tx3, letterSpacing: 0),
-                          ),
-                          onSubmitted: (_) => _join(),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Press(
-                    onTap: _join,
-                    child: Container(
-                      height: 52,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: C.glass,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: C.hair2),
-                      ),
-                      child: Text('Join', style: T.body.copyWith(color: C.tx, fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
+            ),
+          );
+        }),
       ),
     );
   }
