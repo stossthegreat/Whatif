@@ -94,6 +94,8 @@ class AppSession extends ChangeNotifier {
       if (a != null) age = a;
       myVibes = p.getStringList('vibes') ?? myVibes;
       rulesAccepted = p.getBool('rulesAccepted') ?? false;
+      appleUserId = p.getString('appleUserId');
+      blocked.addAll(p.getStringList('blocked') ?? const []);
       // persist the freshly-generated identity the first time
       if (p.getString('uid') == null) await _persist();
     } catch (_) {/* first run / no store — defaults are fine */}
@@ -129,6 +131,18 @@ class AppSession extends ChangeNotifier {
   void acceptRules() {
     rulesAccepted = true;
     _prefs?.setBool('rulesAccepted', true);
+    notifyListeners();
+  }
+
+  /// Sign in with Apple succeeded. The Apple user id becomes the stable uid —
+  /// identity (sparks, mutuals, blocks) now survives reinstalls and devices.
+  String? appleUserId;
+  void setAppleIdentity(String id) {
+    appleUserId = id;
+    myUid = 'apple:$id';
+    signedIn = true;
+    _prefs?.setString('appleUserId', id);
+    _persist();
     notifyListeners();
   }
 
@@ -193,6 +207,23 @@ class AppSession extends ChangeNotifier {
   void earnBadge(String key) {
     badges[key] = (badges[key] ?? 0) + 1;
     chaosScore += 25;
+    notifyListeners();
+  }
+
+  // ---- blocked people (uid|name entries, persisted) ----
+  final List<String> blocked = [];
+
+  void noteBlocked(String uid, String name) {
+    final entry = '$uid|$name';
+    if (blocked.any((e) => e.split('|').first == uid)) return;
+    blocked.insert(0, entry);
+    _prefs?.setStringList('blocked', blocked);
+    notifyListeners();
+  }
+
+  void removeBlocked(String uid) {
+    blocked.removeWhere((e) => e.split('|').first == uid);
+    _prefs?.setStringList('blocked', blocked);
     notifyListeners();
   }
 

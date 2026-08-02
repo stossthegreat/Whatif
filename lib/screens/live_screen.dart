@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
 import '../models/game.dart';
@@ -192,6 +193,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         if (_serverDriven && m['e'] is String && m['x'] is String) {
           Buzz.impact();
           Sfx.slam();
+          Track.event('chaos_card');
           setState(() => _chaos = [m['e'] as String, m['x'] as String]);
           Timer(const Duration(milliseconds: 3200), () {
             if (mounted) setState(() => _chaos = null);
@@ -217,6 +219,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     if (id == null || cell.people.any((p) => p.id == id)) return;
     Buzz.pop();
     Sfx.match();
+    Track.event('walk_in');
     final name = (m['name'] as String?) ?? 'someone';
     setState(() {
       cell.people.add(Person(
@@ -284,6 +287,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _result = '';
       _voteCounts = {};
     });
+    if (_beat == 1) {
+      Track.event('game_started', {
+        'game': cell.rounds[idx].game.name,
+        'mode': cell.mode ?? 'hang',
+      });
+    }
     _startGame();
   }
 
@@ -387,6 +396,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       }
     }
     if (_golden && earned) AppSession.instance.earnBadge('🏆 Golden Room');
+    Track.event('awards_shown');
     Buzz.impact();
     Sfx.fanfare();
     setState(() => _phase = _Phase.awards);
@@ -419,6 +429,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     if (!_wheelArming) return;
     _wheelTimeout?.cancel();
     _wheelRevive = m['revive'] == true;
+    Track.event('wheel_spun', {'revive': _wheelRevive ? 1 : 0});
     final rw = (m['rounds'] as List?) ?? const [];
     if (_wheelRevive && rw.isNotEmpty) {
       cell.rounds = rw
@@ -539,6 +550,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   void _requestGame([String? name]) {
     Buzz.commit();
     Sfx.pop();
+    Track.event('game_picked', {'game': name ?? 'random'});
     if (_serverDriven) {
       NetworkClient.instance.pickGame(name);
       return; // the {t:'round'} broadcast starts it for everyone
@@ -1017,6 +1029,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   // ---- save / report / block ------------------------------------------------
   void _save(Person p) {
+    Track.event('spark_saved');
     AppSession.instance.spark(p);
     // the server keys saves by the STABLE uid — never the connection id
     final target = p.uid ?? p.id;
@@ -1042,13 +1055,19 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             children: [
               _sheetRow(Icons.flag_outlined, 'Report @$name', C.tx, () {
                 Navigator.pop(ctx);
-                if (widget.live && p.id != null) NetworkClient.instance.report(p.id!);
+                // the server keys moderation by the STABLE uid, never conn-id
+                final target = p.uid ?? p.id;
+                if (widget.live && target != null) NetworkClient.instance.report(target);
                 _toast('reported — our team is on it');
               }),
               const Divider(height: 1, color: C.hair),
               _sheetRow(Icons.block_rounded, 'Block @$name', C.live, () {
                 Navigator.pop(ctx);
-                if (widget.live && p.id != null) NetworkClient.instance.block(p.id!);
+                final target = p.uid ?? p.id;
+                if (target != null) {
+                  AppSession.instance.noteBlocked(target, p.name);
+                  if (widget.live) NetworkClient.instance.block(target);
+                }
                 _toast('blocked — you won’t see them again');
                 widget.onNext();
               }),
@@ -1458,6 +1477,20 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (widget.live) ...[
+            _RailAction(
+              icon: RtcService.instance.micOn ? Icons.mic_rounded : Icons.mic_off_rounded,
+              iconColor: RtcService.instance.micOn ? Colors.white : C.live,
+              label: RtcService.instance.micOn ? 'mic' : 'muted',
+              onTap: () {
+                final on = !RtcService.instance.micOn;
+                Track.event('mic_toggled', {'on': on ? 1 : 0});
+                Buzz.tick();
+                RtcService.instance.setMic(on);
+              },
+            ),
+            const SizedBox(height: 18),
+          ],
           _RailAction(
             icon: Icons.favorite_rounded,
             iconColor: C.live,

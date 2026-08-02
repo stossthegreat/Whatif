@@ -97,6 +97,9 @@ class Store {
   block(a: string, b: string) {
     this.ensure(this.blocks, a).add(b);
   }
+  unblock(a: string, b: string) {
+    this.blocks.get(a)?.delete(b);
+  }
   isBlocked(a: string, b: string): boolean {
     return (this.blocks.get(a)?.has(b) ?? false) || (this.blocks.get(b)?.has(a) ?? false);
   }
@@ -105,6 +108,27 @@ class Store {
     const n = (this.reports.get(uid) ?? 0) + 1;
     this.reports.set(uid, n);
     return n;
+  }
+
+  /// Account deletion: drop every in-memory trace of a uid's social graph.
+  purgeSocial(uid: string) {
+    for (const t of this.saves.get(uid) ?? []) this.savedBy.get(t)?.delete(uid);
+    for (const s of this.savedBy.get(uid) ?? []) this.saves.get(s)?.delete(uid);
+    this.saves.delete(uid);
+    this.savedBy.delete(uid);
+    this.blocks.delete(uid);
+  }
+
+  /// Pour one user's persisted social graph (from Postgres) into the
+  /// in-memory maps on hello. Additive — live state always wins.
+  hydrateSocial(uid: string, d: {
+    saves: string[]; savedBy: string[]; blocks: string[]; blockedBy: string[]; reports: number;
+  }) {
+    for (const t of d.saves) { this.ensure(this.saves, uid).add(t); this.ensure(this.savedBy, t).add(uid); }
+    for (const s of d.savedBy) { this.ensure(this.saves, s).add(uid); this.ensure(this.savedBy, uid).add(s); }
+    for (const t of d.blocks) this.ensure(this.blocks, uid).add(t);
+    for (const b of d.blockedBy) this.ensure(this.blocks, b).add(uid);
+    if (d.reports > (this.reports.get(uid) ?? 0)) this.reports.set(uid, d.reports);
   }
 }
 

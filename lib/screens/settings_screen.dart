@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
+import '../net/network_client.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
@@ -74,6 +75,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _toggle('Sound', s.soundOn, (v) => setState(() => s.soundOn = v)),
                   ]),
                   const SizedBox(height: 20),
+                  _section('SAFETY'),
+                  _card([
+                    if (s.blocked.isEmpty)
+                      _info('Blocked people', 'nobody — block from any room via ⋯')
+                    else
+                      for (final e in s.blocked)
+                        _blockedRow(
+                          e.split('|').first,
+                          e.split('|').length > 1 ? e.split('|')[1] : 'someone',
+                        ),
+                  ]),
+                  const SizedBox(height: 20),
                   _section('ABOUT'),
                   _card([
                     _link('House Rules', () => LegalScreen.push(context, 'House Rules', LegalCopy.rules)),
@@ -99,7 +112,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _link('Delete account', () => _confirmDelete(context), color: C.live),
                   ]),
                   const SizedBox(height: 26),
-                  Center(child: Text('Rivlr · 1.0.0 (23)', style: T.tiny)),
+                  Center(child: Text('Rivlr · 1.0.0 (35)', style: T.tiny)),
                 ],
               ),
             ),
@@ -121,12 +134,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: T.body.copyWith(color: C.tx2))),
           TextButton(
             onPressed: () {
-              AppSession.instance.signOut(); // wipes device data + identity
+              // server first (deletes DB rows), then wipe the device
+              NetworkClient.instance.deleteAccount();
+              AppSession.instance.signOut();
               Navigator.pop(ctx);
               Navigator.pop(context);
               widget.onSignOut();
             },
             child: Text('Delete', style: T.body.copyWith(color: C.live, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _blockedRow(String uid, String name) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text('@$name',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+          ),
+          Press(
+            onTap: () {
+              Buzz.tick();
+              AppSession.instance.removeBlocked(uid);
+              NetworkClient.instance.unblock(uid);
+              setState(() {});
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(100),
+                border: Border.all(color: C.hair2),
+              ),
+              child: Text('Unblock', style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+            ),
           ),
         ],
       ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../config.dart';
+import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
 import '../net/network_client.dart';
@@ -14,8 +15,11 @@ import '../widgets/identity_orb.dart';
 /// engine throws the whole group into a session. Elite-minimal: the code IS the
 /// screen.
 class PartyScreen extends StatefulWidget {
-  const PartyScreen({super.key, required this.onBack});
+  const PartyScreen({super.key, required this.onBack, this.initialCode});
   final VoidCallback onBack;
+
+  /// A code that arrived via deep link — prefilled and auto-joined.
+  final String? initialCode;
 
   @override
   State<PartyScreen> createState() => _PartyScreenState();
@@ -46,6 +50,15 @@ class _PartyScreenState extends State<PartyScreen> {
     if (AppConfig.isLive) {
       _sub = NetworkClient.instance.events.listen(_onNet);
       NetworkClient.instance.host();
+      Track.event('party_hosted');
+      final code = widget.initialCode;
+      if (code != null && code.length >= 4) {
+        _joinCtl.text = code;
+        // small beat so the hello/host round-trip lands first
+        Timer(const Duration(milliseconds: 700), () {
+          if (mounted) _join();
+        });
+      }
     }
   }
 
@@ -59,6 +72,11 @@ class _PartyScreenState extends State<PartyScreen> {
   void _onNet(Map<String, dynamic> m) {
     if (!mounted) return;
     switch (m['t']) {
+      // the socket dropped and reconnected — the old party died with the old
+      // connection, so re-host: a fresh live code replaces the dead one on
+      // screen instead of silently showing a code nobody can join.
+      case 'welcome':
+        NetworkClient.instance.host();
       case 'party':
         setState(() {
           _error = null;
@@ -85,10 +103,11 @@ class _PartyScreenState extends State<PartyScreen> {
   void _share() {
     final code = _code;
     if (code == null) return;
+    Track.event('party_share');
     Buzz.commit();
     Sfx.pop();
     Share.share(
-      'Drop into my Rivlr room 🎥 — open Rivlr, tap "Join with a code", enter $code. You never know who you’ll get.',
+      'Drop into my Rivlr room 🎥 code $code — tap rivlr://join/$code or open Rivlr and enter it. You never know who you’ll get.',
     );
   }
 
@@ -97,11 +116,18 @@ class _PartyScreenState extends State<PartyScreen> {
     if (code.length < 4) return;
     Buzz.commit();
     FocusScope.of(context).unfocus();
+    if (code == _code) {
+      // typing your own code back in — gently point at the share button
+      setState(() => _error = 'that’s your room — send the code to a friend');
+      return;
+    }
+    Track.event('party_join_attempt');
     NetworkClient.instance.joinParty(code);
   }
 
   void _start() {
     if (!_isHost || _starting) return;
+    Track.event('party_started', {'people': _members.length});
     setState(() => _starting = true);
     Buzz.pop();
     Sfx.match();

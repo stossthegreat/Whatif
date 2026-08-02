@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
@@ -231,6 +232,7 @@ class _ShareCardScreenState extends State<ShareCardScreen> {
         [XFile(file.path, mimeType: 'image/png')],
         text: 'the room decided 😂 — Rivlr',
       );
+      Track.event('share_card');
     } catch (_) {
       _toast('couldn’t export the card — try again');
     } finally {
