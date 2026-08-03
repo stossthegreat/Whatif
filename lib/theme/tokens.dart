@@ -65,6 +65,10 @@ class T {
   /// numbers, names on cards. Single weight: w400 always (anything bolder
   /// fakes it). Write literals ALREADY UPPERCASE; `.toUpperCase()` only on
   /// dynamic strings.
+  // decoration: none on EVERY style — a Text outside a Material ancestor
+  // otherwise inherits Flutter's error style (yellow double underline).
+  static const _deco = TextDecoration.none;
+
   static TextStyle display(double size) => TextStyle(
         fontFamily: 'Anton',
         fontSize: size,
@@ -72,6 +76,7 @@ class T {
         letterSpacing: size * 0.02,
         height: 1.02,
         color: C.tx,
+        decoration: _deco,
       );
 
   static TextStyle huge(double size) => TextStyle(
@@ -81,24 +86,26 @@ class T {
         letterSpacing: -size * 0.03,
         height: 1.04,
         color: C.tx,
+        decoration: _deco,
       );
 
   static const mark = TextStyle(
-      fontFamily: _f, fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.3, color: C.tx);
+      fontFamily: _f, fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.3, color: C.tx, decoration: _deco);
   static const big = TextStyle(
-      fontFamily: _f, fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -0.9, height: 1.08, color: C.tx);
+      fontFamily: _f, fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -0.9, height: 1.08, color: C.tx, decoration: _deco);
   static const h3 = TextStyle(
-      fontFamily: _f, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.4, color: C.tx);
+      fontFamily: _f, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.4, color: C.tx, decoration: _deco);
   static const body = TextStyle(
-      fontFamily: _f, fontSize: 16, fontWeight: FontWeight.w500, letterSpacing: -0.1, height: 1.4, color: C.tx2);
+      fontFamily: _f, fontSize: 16, fontWeight: FontWeight.w500, letterSpacing: -0.1, height: 1.4, color: C.tx2, decoration: _deco);
   static const sub = TextStyle(
-      fontFamily: _f, fontSize: 15, fontWeight: FontWeight.w500, letterSpacing: -0.1, color: C.tx2);
+      fontFamily: _f, fontSize: 15, fontWeight: FontWeight.w500, letterSpacing: -0.1, color: C.tx2, decoration: _deco);
   static const eyebrow = TextStyle(
-      fontFamily: _f, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 2.4, color: C.tx3);
+      fontFamily: _f, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 2.4, color: C.tx3, decoration: _deco);
   static const tiny = TextStyle(
-      fontFamily: _f, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.3, color: C.tx3);
+      fontFamily: _f, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.3, color: C.tx3, decoration: _deco);
   static const mono = TextStyle(
-      fontFamily: _f, fontWeight: FontWeight.w800, color: C.tx, fontFeatures: [FontFeature.tabularFigures()]);
+      fontFamily: _f, fontWeight: FontWeight.w800, color: C.tx, decoration: _deco,
+      fontFeatures: [FontFeature.tabularFigures()]);
 }
 
 /// Motion — silence first. Springs for touch; exact curves for reveals.

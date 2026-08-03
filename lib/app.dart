@@ -402,6 +402,19 @@ class _RootState extends State<_Root> {
       );
     } else {
       P2PService.instance.leave();
+      if (AppConfig.isLive && url.isEmpty) {
+        // the room still works (games, chat) but nobody gets video — make an
+        // invisible env problem visible instead of "groups are broken"
+        final ctx = RivlrApp.navKey.currentContext;
+        if (ctx != null) {
+          ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: C.char2,
+            content: Text('⚠️ video server offline — cameras won’t connect in this room',
+                style: T.body.copyWith(color: Colors.white)),
+          ));
+        }
+      }
       // voice calls start camera-off; toggling upgrades to video mid-call
       RtcService.instance.join(url, token, camera: !isCall || _pendingCallVideo);
     }
@@ -598,7 +611,13 @@ class _RootState extends State<_Root> {
         ),
     };
 
-    return Stack(
+    // Material(transparency) is load-bearing: the floating overlays below
+    // (call / rating / match) render OUTSIDE any Scaffold, and Text without
+    // a Material ancestor gets Flutter's error style — the yellow double
+    // underlines that shipped in build 59. Never remove this wrapper.
+    return Material(
+      type: MaterialType.transparency,
+      child: Stack(
       children: [
         AnimatedSwitcher(
           duration: M.base,
@@ -645,6 +664,7 @@ class _RootState extends State<_Root> {
           },
         ),
       ],
+      ),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
 import '../state/social.dart';
+import 'avatar.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
@@ -53,7 +54,9 @@ class RatingOverlay extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Center(child: IdentityOrb(hue: item.hue, size: 84)),
+                          Center(
+                              child: Avatar(
+                                  hue: item.hue, photoId: item.photoId, size: 84)),
                           const SizedBox(height: 14),
                           Center(
                             child: Text('@${item.name}',

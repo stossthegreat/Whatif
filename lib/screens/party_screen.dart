@@ -7,6 +7,7 @@ import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
 import '../net/network_client.dart';
+import '../state/session.dart';
 import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
@@ -31,8 +32,9 @@ class PartyScreen extends StatefulWidget {
 }
 
 class _PartyMember {
-  _PartyMember(this.id, this.name, this.hue);
+  _PartyMember(this.id, this.uid, this.name, this.hue);
   final String id;
+  final String uid;
   final String name;
   final double hue;
 }
@@ -77,14 +79,25 @@ class _PartyScreenState extends State<PartyScreen> {
     super.dispose();
   }
 
+  /// True once we've joined SOMEONE ELSE'S room — a reconnect must put us
+  /// back in THEIR room, never silently promote us into hosting our own
+  /// (the pre-b61 bug that ejected guests on every wifi blip).
+  bool get _isGuest =>
+      _code != null && _hostId != null && _hostId != NetworkClient.instance.myId;
+  String? _guestCode; // the code we joined, survives the reconnect
+
   void _onNet(Map<String, dynamic> m) {
     if (!mounted) return;
     switch (m['t']) {
-      // the socket dropped and reconnected — the old party died with the old
-      // connection, so re-host: a fresh live code replaces the dead one on
-      // screen instead of silently showing a code nobody can join.
+      // the socket dropped and reconnected. Codes are permanent now: a guest
+      // re-joins the room they were in; a host re-opens their own (same code).
       case 'welcome':
-        NetworkClient.instance.host();
+        final back = _guestCode;
+        if (back != null) {
+          NetworkClient.instance.joinParty(back);
+        } else {
+          NetworkClient.instance.host();
+        }
       case 'party':
         // chat-invite flow: the moment we have a code, DM it to the friend
         final newCode = m['code'] as String?;
@@ -101,10 +114,12 @@ class _PartyScreenState extends State<PartyScreen> {
               .whereType<Map>()
               .map((e) => _PartyMember(
                     (e['id'] as String?) ?? '',
+                    (e['uid'] as String?) ?? '',
                     (e['name'] as String?) ?? '?',
                     ((e['hue'] as num?) ?? 205).toDouble(),
                   ))
               .toList();
+          _guestCode = _isGuest ? _code : null;
         });
         Buzz.tick();
       case 'partyError':
@@ -116,16 +131,16 @@ class _PartyScreenState extends State<PartyScreen> {
   }
 
   /// One friend in the invite rail. Tap → the room code lands in their DMs as
-  /// an invite bubble (one tap to join on their side). Capped at 3 — a room
-  /// of four is the sweet spot.
+  /// an invite bubble (one tap to join on their side). Rooms hold 8, so up
+  /// to 7 invites.
   Widget _inviteChip(FriendInfo f) {
     final sent = _invitedUids.contains(f.uid);
     return Press(
       haptic: false,
       onTap: () {
         if (sent || _code == null) return;
-        if (_invitedUids.length >= 3) {
-          setState(() => _error = 'three invites max — keep the room tight');
+        if (_invitedUids.length >= 7) {
+          setState(() => _error = 'the room holds 8 — that’s every seat invited');
           return;
         }
         Buzz.commit();
@@ -208,6 +223,16 @@ class _PartyScreenState extends State<PartyScreen> {
     Buzz.pop();
     Sfx.match();
     NetworkClient.instance.startParty();
+    // if the cell never lands (server hiccup), recover instead of a forever
+    // "Starting…" — pre-b61 this button had no way back
+    Timer(const Duration(seconds: 10), () {
+      if (mounted && _starting) {
+        setState(() {
+          _starting = false;
+          _error = 'that didn’t start — try again';
+        });
+      }
+    });
   }
 
   void _back() {
@@ -282,7 +307,7 @@ class _PartyScreenState extends State<PartyScreen> {
                                   ),
                                 ),
                           const SizedBox(height: 8),
-                          Text('tap to copy · share it anywhere', style: T.tiny),
+                          Text('yours forever · tap to copy · share it anywhere', style: T.tiny),
                         ],
                       ),
                     ),
@@ -299,7 +324,13 @@ class _PartyScreenState extends State<PartyScreen> {
                               Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  IdentityOrb(hue: m.hue, size: 46, ring: m.id == _hostId ? C.sig : null),
+                                  Avatar(
+                                      hue: m.hue,
+                                      photoId: m.id == NetworkClient.instance.myId
+                                          ? AppSession.instance.photoId
+                                          : SocialState.instance.photoOf(m.uid),
+                                      size: 46,
+                                      ring: m.id == _hostId ? C.sig : null),
                                   const SizedBox(height: 6),
                                   Text(
                                     m.id == NetworkClient.instance.myId ? 'you' : '@${m.name}',
@@ -390,7 +421,7 @@ class _PartyScreenState extends State<PartyScreen> {
                             child: Center(
                               child: TextField(
                                 controller: _joinCtl,
-                                maxLength: 4,
+                                maxLength: 5,
                                 textCapitalization: TextCapitalization.characters,
                                 style: T.body.copyWith(
                                     color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: 4),

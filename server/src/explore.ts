@@ -24,7 +24,8 @@ export function init(s: Send, meetFn: (meet: Meet, gender?: string) => boolean):
   meetOk = meetFn;
 }
 
-const MAX_ROWS = 40;
+const MAX_ROWS = 40; // online, ranked by the matching brain
+const TOTAL_ROWS = 60; // topped up with recently-seen offline people
 
 /// Everyone [viewer] is allowed to see, best matches first.
 export async function list(viewer: User): Promise<void> {
@@ -64,11 +65,43 @@ export async function list(viewer: User): Promise<void> {
       thumbId: card.thumbId ?? card.photoId,
       title: card.title,
       country: card.country,
+      age: card.age,
       shared,
+      online: true,
       // in a room or queued — the card greys out so taps don't bounce as busy
       busy: u.state !== 'idle',
     }];
   });
+
+  // ---- beyond the online roster: everyone discoverable, freshest first.
+  // The wall must never be empty just because the clock says 4am — away
+  // people can't be rung, but they CAN be added as friends.
+  if (people.length < TOTAL_ROWS) {
+    const exclude = [viewer.uid, ...people.map((p) => p.uid)];
+    const roster = await dbs.discoverRoster(exclude, (TOTAL_ROWS - people.length) * 2);
+    for (const p of roster) {
+      if (people.length >= TOTAL_ROWS) break;
+      if (store.isBlocked(viewer.uid, p.uid)) continue;
+      if (social.isNeverPair(viewer.uid, p.uid)) continue;
+      if (matching.quarantined(p.uid)) continue;
+      if (store.userByUid(p.uid)) continue; // actually online — already ranked above
+      if (!meetOk(viewer.meet, p.gender ?? undefined)) continue;
+      if (!meetOk((p.meet ?? 'Everyone') as Meet, viewer.gender)) continue;
+      const shared = p.interests.filter((i) => mine.has(i.toLowerCase())).slice(0, 2);
+      people.push({
+        uid: p.uid,
+        name: p.name,
+        hue: p.hue,
+        thumbId: p.thumbId,
+        title: p.title,
+        country: p.country,
+        age: p.age,
+        shared,
+        online: false,
+        busy: false,
+      });
+    }
+  }
 
   send(viewer, { t: 'explore', people });
 }

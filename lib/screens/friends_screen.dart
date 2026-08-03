@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
 import '../net/network_client.dart';
 import '../state/session.dart';
 import '../state/social.dart';
+import '../widgets/avatar.dart';
+import '../widgets/person_card.dart' show flagEmoji;
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
@@ -27,98 +30,14 @@ class FriendsScreen extends StatefulWidget {
 }
 
 class _FriendsScreenState extends State<FriendsScreen> {
-  /// Everyone you've recently met, one tap from a friend request. There's no
-  /// username search on purpose — you add people you've actually met.
+  /// Find anyone by @handle, or add the people you've recently met — one
+  /// sheet, one clean way in.
   void _addPeopleSheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => AnimatedBuilder(
-        animation: SocialState.instance,
-        builder: (ctx2, _) {
-          final s = SocialState.instance;
-          final friendUids = s.friends.map((f) => f.uid).toSet();
-          final candidates = s.recent.where((r) => !friendUids.contains(r.uid)).toList();
-          return Padding(
-            padding: const EdgeInsets.all(12),
-            child: Glass(
-              radius: 26,
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('ADD PEOPLE YOU MET', style: T.eyebrow),
-                  const SizedBox(height: 12),
-                  if (candidates.isEmpty)
-                    Text(
-                      'Nobody new yet — press play, meet someone, and they show up here (or add them right in the room with 👥).',
-                      style: T.body.copyWith(color: C.tx3, fontSize: 14, height: 1.45),
-                    )
-                  else
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                          maxHeight: MediaQuery.of(ctx2).size.height * 0.5),
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          for (final r in candidates)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: Row(
-                                children: [
-                                  IdentityOrb(hue: r.hue, size: 42),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text('@${r.name}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: T.body.copyWith(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 15.5)),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  if (s.requested(r.uid))
-                                    Text('requested ✓',
-                                        style: T.tiny.copyWith(
-                                            color: C.tx2,
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 12.5))
-                                  else
-                                    Press(
-                                      haptic: false,
-                                      onTap: () {
-                                        Buzz.commit();
-                                        NetworkClient.instance.friendRequest(r.uid);
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 14, vertical: 8),
-                                        decoration: BoxDecoration(
-                                          color: C.sig,
-                                          borderRadius: BorderRadius.circular(100),
-                                        ),
-                                        child: Text('Add friend',
-                                            style: T.tiny.copyWith(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w800,
-                                                fontSize: 12.5)),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+      builder: (ctx) => const _AddPeopleSheet(),
     );
   }
 
@@ -263,7 +182,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
             padding: const EdgeInsets.symmetric(vertical: 9),
             child: Row(
               children: [
-                IdentityOrb(hue: f.hue, size: 44, live: f.online),
+                Avatar(hue: f.hue, photoId: f.photoId, size: 44, live: f.online),
                 const SizedBox(width: 13),
                 Expanded(
                   child: Column(
@@ -386,7 +305,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   Buzz.tick();
                   FriendProfileScreen.push(context, uid: r.uid, name: r.name, hue: r.hue);
                 },
-                child: IdentityOrb(hue: r.hue, size: 44),
+                child: Avatar(hue: r.hue, photoId: r.photoId, size: 44),
               ),
               const SizedBox(width: 13),
               Expanded(
@@ -450,7 +369,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
             padding: const EdgeInsets.symmetric(vertical: 9),
             child: Row(
               children: [
-                IdentityOrb(hue: f.hue, size: 44),
+                Avatar(hue: f.hue, photoId: f.photoId, size: 44),
                 const SizedBox(width: 13),
                 Expanded(
                   child: Text('@${f.name}',
@@ -489,7 +408,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
             padding: const EdgeInsets.symmetric(vertical: 9),
             child: Row(
               children: [
-                IdentityOrb(hue: f.hue, size: 44),
+                Avatar(hue: f.hue, photoId: f.photoId, size: 44),
                 const SizedBox(width: 13),
                 Expanded(
                   child: Text('@${f.name}',
@@ -554,4 +473,253 @@ class _FriendsScreenState extends State<FriendsScreen> {
               style: T.body.copyWith(color: C.tx3, fontSize: 14.5, height: 1.5)),
         ),
       );
+}
+
+// ---- add people: search-first ----------------------------------------------
+
+class _FoundPerson {
+  _FoundPerson(this.uid, this.name, this.hue, this.thumbId, this.title, this.country, this.age);
+  final String uid;
+  final String name;
+  final double hue;
+  final int? thumbId;
+  final String? title;
+  final String? country;
+  final int? age;
+}
+
+/// One place to add people: type a @handle and real cards come back — photo,
+/// name, flag, one gradient Add key. The recently-met list rides below, so
+/// "the person from last night" is still two taps away.
+class _AddPeopleSheet extends StatefulWidget {
+  const _AddPeopleSheet();
+
+  @override
+  State<_AddPeopleSheet> createState() => _AddPeopleSheetState();
+}
+
+class _AddPeopleSheetState extends State<_AddPeopleSheet> {
+  final _q = TextEditingController();
+  Timer? _debounce;
+  StreamSubscription<Map<String, dynamic>>? _sub;
+  List<_FoundPerson> _results = const [];
+  bool _searching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _sub = NetworkClient.instance.events.listen((m) {
+      if (!mounted || m['t'] != 'searchResults') return;
+      if ((m['q'] as String?) != _q.text.trim().replaceFirst('@', '')) return;
+      setState(() {
+        _searching = false;
+        _results = ((m['people'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((p) => _FoundPerson(
+                  (p['uid'] as String?) ?? '',
+                  (p['name'] as String?) ?? 'someone',
+                  ((p['hue'] as num?) ?? 210).toDouble(),
+                  (p['thumbId'] as num?)?.toInt(),
+                  p['title'] as String?,
+                  p['country'] as String?,
+                  (p['age'] as num?)?.toInt(),
+                ))
+            .toList();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _debounce?.cancel();
+    _q.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String v) {
+    _debounce?.cancel();
+    final q = v.trim().replaceFirst('@', '');
+    if (q.length < 2) {
+      setState(() { _results = const []; _searching = false; });
+      return;
+    }
+    setState(() => _searching = true);
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      NetworkClient.instance.searchUsers(q);
+    });
+  }
+
+  Widget _personCardRow(BuildContext context, {
+    required String uid,
+    required String name,
+    required double hue,
+    int? photoId,
+    String? title,
+    String? country,
+    int? age,
+  }) {
+    final s = SocialState.instance;
+    final isFriend = s.friends.any((f) => f.uid == uid);
+    final flag = flagEmoji(country);
+    final subtitle = [
+      if (flag.isNotEmpty) flag,
+      if (age != null) '$age',
+      if (title != null && title.isNotEmpty) title,
+    ].join(' · ');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: C.glass,
+        borderRadius: BorderRadius.circular(R.btn),
+        border: Border.all(color: C.hair2),
+      ),
+      child: Row(
+        children: [
+          Avatar(hue: hue, photoId: photoId, size: 48),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('@$name',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: T.body.copyWith(
+                        color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15.5)),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: T.tiny.copyWith(fontSize: 12)),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          if (isFriend)
+            Text('friends ✓',
+                style: T.tiny.copyWith(
+                    color: C.acid, fontWeight: FontWeight.w800, fontSize: 12.5))
+          else if (s.requested(uid))
+            Text('requested ✓',
+                style: T.tiny.copyWith(
+                    color: C.tx2, fontWeight: FontWeight.w800, fontSize: 12.5))
+          else
+            Press(
+              haptic: false,
+              onTap: () {
+                Buzz.commit();
+                NetworkClient.instance.friendRequest(uid);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  gradient: C.gradSig,
+                  borderRadius: BorderRadius.circular(R.chip),
+                  boxShadow: C.glowSig(blur: 12, spread: -4),
+                ),
+                child: Text('Add',
+                    style: T.tiny.copyWith(
+                        color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12.5)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: SocialState.instance,
+      builder: (context, _) {
+        final s = SocialState.instance;
+        final friendUids = s.friends.map((f) => f.uid).toSet();
+        final met = s.recent.where((r) => !friendUids.contains(r.uid)).toList();
+        return Padding(
+          padding: EdgeInsets.only(
+              left: 12, right: 12,
+              bottom: 12 + MediaQuery.of(context).viewInsets.bottom),
+          child: Glass(
+            radius: R.sheet,
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('FIND PEOPLE', style: T.eyebrow),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: C.glass2,
+                    borderRadius: BorderRadius.circular(R.btn),
+                    border: Border.all(color: C.hair2),
+                  ),
+                  child: TextField(
+                    controller: _q,
+                    onChanged: _onChanged,
+                    autofocus: false,
+                    style: T.body.copyWith(color: Colors.white, fontSize: 15.5),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      hintText: 'type a @handle…',
+                      hintStyle: T.body.copyWith(color: C.tx3, fontSize: 15),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 19, color: C.tx3),
+                      prefixIconConstraints: const BoxConstraints(minWidth: 30),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.45),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      if (_searching)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text('looking…', style: T.tiny),
+                        )
+                      else if (_q.text.trim().length >= 2 && _results.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text('nobody by that handle', style: T.tiny),
+                        )
+                      else
+                        for (final p in _results)
+                          _personCardRow(context,
+                              uid: p.uid, name: p.name, hue: p.hue,
+                              photoId: p.thumbId, title: p.title,
+                              country: p.country, age: p.age),
+                      if (met.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text('PEOPLE YOU MET', style: T.eyebrow),
+                        const SizedBox(height: 8),
+                        for (final r in met)
+                          _personCardRow(context,
+                              uid: r.uid, name: r.name, hue: r.hue,
+                              photoId: r.photoId),
+                      ] else if (_q.text.trim().length < 2)
+                        Text(
+                          'Search a handle, or meet someone in a room and add them right there with 👥.',
+                          style: T.body.copyWith(color: C.tx3, fontSize: 14, height: 1.45),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

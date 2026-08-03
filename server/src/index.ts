@@ -180,7 +180,7 @@ function tryMatch() {
 // The liquidity unlock: start a room with your mates via a 4-char code, then
 // the same cell engine runs it. Fun with 3 users instead of 3,000.
 
-interface Party { code: string; hostId: string; members: string[]; }
+interface Party { code: string; hostId: string; ownerUid?: string; members: string[]; }
 const parties = new Map<string, Party>();
 const partyByUser = new Map<string, string>(); // conn-id -> code
 
@@ -198,7 +198,8 @@ function partyState(p: Party) {
     t: 'party', code: p.code, hostId: p.hostId,
     members: p.members.map((id) => {
       const u = store.users.get(id);
-      return { id, name: u?.name ?? '?', hue: u?.hue ?? 205 };
+      // uid rides along so clients can resolve the member's photo locally
+      return { id, uid: u?.uid ?? '', name: u?.name ?? '?', hue: u?.hue ?? 205 };
     }),
   };
 }
@@ -849,12 +850,16 @@ wss.on('connection', (ws, req) => {
         if (typeof m.gender === 'string') user.gender = m.gender;
         if (m.meet === 'Women' || m.meet === 'Men' || m.meet === 'Everyone') user.meet = m.meet;
         if (typeof m.tz === 'number' && Number.isFinite(m.tz)) user.tz = Math.trunc(m.tz);
+        // your own photo ids ride in welcome so the client can heal a stale
+        // local id (the pre-b61 thumb bug left phones pointing at deleted blobs)
+        const myMedia = await dbs.userPhotoIds(user.uid);
         send(user, {
           t: 'welcome', id, uid: user.uid, name: user.name, hue: user.hue,
           live: LIVE_BASELINE + store.onlineCount,
           http: { token: mintAuthToken(user.uid), base: process.env.PUBLIC_URL || '' },
           features: { social: db.dbEnabled, media: db.dbEnabled, gifs: gifsEnabled },
           account: { signedIn: user.appleVerified === true },
+          photo: { id: myMedia?.photoId ?? null, thumbId: myMedia?.thumbId ?? null },
         });
         notifyLive(user);
         void social.hydrate(user);
@@ -890,18 +895,33 @@ wss.on('connection', (ws, req) => {
       case 'leave': dequeue(id); leaveCell(user); user.state = 'idle'; break;
       case 'host': {
         if (!canGoLive(user)) break;
-        // IDEMPOTENT: reopening the screen must NOT rotate the code — a code
-        // the host already shared has to stay joinable while they're online.
-        const heldCode = partyByUser.get(id);
-        const held = heldCode ? parties.get(heldCode) : undefined;
-        if (held && held.hostId === id) { send(user, partyState(held)); break; }
-        leaveParty(id); dequeue(id); leaveCell(user);
-        const p: Party = { code: newPartyCode(), hostId: id, members: [id] };
-        parties.set(p.code, p);
-        partyByUser.set(id, p.code);
-        send(user, partyState(p));
-        social.feedToFriends(user,
-            { t: 'feedEvent', kind: 'party', uid: user.uid, name: user.name, x: p.code });
+        // Your code is PERMANENT: minted once in the DB, identical across
+        // reopens, reconnects and server restarts. An invite shared last week
+        // still points at your room the moment you press Groups again.
+        void (async () => {
+          const heldCode = partyByUser.get(id);
+          const held = heldCode ? parties.get(heldCode) : undefined;
+          if (held && held.hostId === id) { send(user, partyState(held)); return; }
+          const code = (await db.roomCodeFor(user.uid)) ?? newPartyCode();
+          if (store.users.get(id) !== user) return; // socket died mid-mint
+          leaveParty(id); dequeue(id); leaveCell(user);
+          let p = parties.get(code);
+          if (p) {
+            // the room already exists (guests arrived first, or my old socket
+            // left ghosts) — reclaim it: prune the dead, take the chair
+            p.members = p.members.filter((mid) => store.users.has(mid));
+            if (!p.members.includes(id)) p.members.push(id);
+            p.hostId = id;
+            p.ownerUid = user.uid;
+          } else {
+            p = { code, hostId: id, ownerUid: user.uid, members: [id] };
+            parties.set(code, p);
+          }
+          partyByUser.set(id, code);
+          broadcastParty(p);
+          social.feedToFriends(user,
+              { t: 'feedEvent', kind: 'party', uid: user.uid, name: user.name, x: p.code });
+        })();
         break;
       }
       case 'joinParty': {
@@ -916,8 +936,19 @@ wss.on('connection', (ws, req) => {
           if (own) { send(user, partyState(own)); break; }
         }
         const p = parties.get(code);
-        if (!p || p.members.length >= 8) {
-          send(user, { t: 'partyError', reason: !p ? 'That code doesn’t exist' : 'That room is full' });
+        if (!p) {
+          // codes are permanent now — a miss means the room isn't OPEN, not
+          // that the code is wrong. Say which, it changes what the user does.
+          void (async () => {
+            const owner = await db.ownerOfCode(code);
+            send(user, { t: 'partyError', reason: owner
+                ? 'Their room isn’t open right now — tell them to hit Groups'
+                : 'That code doesn’t exist' });
+          })();
+          break;
+        }
+        if (p.members.length >= 8) {
+          send(user, { t: 'partyError', reason: 'That room is full' });
           break;
         }
         leaveParty(id); dequeue(id); leaveCell(user);
@@ -1017,6 +1048,18 @@ wss.on('connection', (ws, req) => {
         // browsing is open to everyone; INVITING needs an account (canGoLive)
         void explore.list(user);
         break;
+      case 'searchUsers': {
+        // find people by @handle — prefix match, discoverable only
+        if (!db.dbEnabled) { send(user, { t: 'err', code: 'noDb' }); break; }
+        const q = String(m.q ?? '').trim().replace(/^@/, '').slice(0, 24);
+        void (async () => {
+          const rows = await dbs.searchUsers(q, user.uid);
+          const people = rows.filter((p) =>
+              !store.isBlocked(user.uid, p.uid) && !social.isNeverPair(user.uid, p.uid));
+          send(user, { t: 'searchResults', q, people });
+        })();
+        break;
+      }
       case 'friends': void social.snapshot(user); break;
       case 'traitVote': void social.traitVote(user, m); break;
       case 'setProfile': social.setProfile(user, m); break;

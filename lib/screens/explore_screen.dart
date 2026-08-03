@@ -163,6 +163,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                     title: p.title,
                                     shared: p.shared,
                                     busy: p.busy,
+                                    online: p.online,
                                     country: p.country,
                                     age: p.age,
                                     onHi: () => _open(p),
@@ -190,6 +191,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                   title: top.title,
                                   shared: top.shared,
                                   busy: top.busy,
+                                  online: top.online,
                                   country: top.country,
                                   age: top.age,
                                   hero: true,
@@ -282,6 +284,7 @@ class _Person {
     this.age,
     this.shared = const [],
     this.busy = false,
+    this.online = true,
   });
 
   factory _Person.fromMap(Map<String, dynamic> m) => _Person(
@@ -296,6 +299,9 @@ class _Person {
         age: (m['age'] as num?)?.toInt(),
         shared: ((m['shared'] as List?) ?? const []).whereType<String>().toList(),
         busy: m['busy'] == true,
+        // absent-tolerant: an older server that only sends online people
+        // simply never marks anyone away
+        online: m['online'] != false,
       );
 
   final String uid;
@@ -307,6 +313,7 @@ class _Person {
   final int? age;
   final List<String> shared;
   final bool busy;
+  final bool online;
 }
 
 /// The tap-through: a light preview and one button. Deliberately not the full
@@ -384,7 +391,21 @@ class _MeetSheetState extends State<_MeetSheet> {
               ),
             ],
             const SizedBox(height: 22),
-            if (p.busy)
+            if (!p.online)
+              // away people can't be rung — but they CAN become friends, and
+              // then you catch them live later. Never a dead end.
+              Cta(
+                label: _sent ? 'Request sent ✓' : 'Add friend',
+                onTap: _sent
+                    ? null
+                    : () {
+                        Track.event('explore_add');
+                        Buzz.commit();
+                        NetworkClient.instance.friendRequest(p.uid);
+                        setState(() => _sent = true);
+                      },
+              )
+            else if (p.busy)
               Text('They’re in a room right now — try again in a minute.',
                   textAlign: TextAlign.center, style: T.sub.copyWith(fontSize: 13.5))
             else
@@ -400,9 +421,13 @@ class _MeetSheetState extends State<_MeetSheet> {
               ),
             const SizedBox(height: 12),
             Text(
-              _sent
-                  ? 'We’ll drop you both into a room the moment they say yes.'
-                  : 'They get a ring and choose whether to accept.',
+              !p.online
+                  ? (_sent
+                      ? 'When they accept, they’ll be in your people.'
+                      : 'They’re away — add them and catch them live later.')
+                  : _sent
+                      ? 'We’ll drop you both into a room the moment they say yes.'
+                      : 'They get a ring and choose whether to accept.',
               textAlign: TextAlign.center,
               style: T.tiny.copyWith(fontSize: 12, height: 1.4),
             ),

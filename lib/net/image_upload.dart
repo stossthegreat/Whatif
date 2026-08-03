@@ -58,7 +58,10 @@ Future<void> _uploadThumb(XFile x) async {
       format: CompressFormat.jpeg,
     );
     if (thumb == null) return;
-    final tid = await Api.uploadMedia(thumb, kind: 'avatar');
-    if (tid != null) NetworkClient.instance.setProfile({'thumbId': tid});
+    // kind MUST be 'thumb', never 'avatar' — the avatar kind repoints
+    // photo_media_id and deletes the previous blob, so uploading the
+    // derivative as a second avatar destroyed the full photo (pre-b61 bug).
+    // The server sets users.photo_thumb_id itself; no profile round-trip.
+    await Api.uploadMedia(thumb, kind: 'thumb');
   } catch (_) {/* the full avatar still works — thumbs are an optimisation */}
 }

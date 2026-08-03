@@ -106,6 +106,21 @@ class ChatStore extends ChangeNotifier {
         }
       case 'dmHistory':
         _onHistory(m);
+      case 'err':
+        // a send the server rejected — the optimistic bubble would otherwise
+        // sit "pending" forever with no clue (the pre-b61 experience)
+        final code = m['code'] as String?;
+        if (code == 'badMedia' || code == 'notFriends' || code == 'blocked') {
+          for (final t in threads.values) {
+            for (var i = t.length - 1; i >= 0; i--) {
+              if (t[i].pending) {
+                t.removeAt(i);
+                notifyListeners();
+                return;
+              }
+            }
+          }
+        }
       case 'dmRead':
         final w = m['with'] as String?;
         if (w != null) {

@@ -320,6 +320,20 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Server-driven correction from welcome: the server knows which media row
+  /// actually exists. Null clears a stale pointer (deleted blob) so the UI
+  /// falls back to the orb instead of a 404 forever.
+  void healPhotoId(int? id) {
+    if (id == photoId) return;
+    photoId = id;
+    if (id == null) {
+      _prefs?.remove('photoId');
+    } else {
+      _prefs?.setInt('photoId', id);
+    }
+    notifyListeners();
+  }
+
   // ---- settings ----
   bool soundOn = true;
   bool hapticsOn = true;

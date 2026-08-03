@@ -142,6 +142,40 @@ export async function initDb(): Promise<void> {
   console.log('[db] connected, schema ready');
 }
 
+// ---- permanent room codes ---------------------------------------------------
+// One code per user, minted ONCE, never rotated: it's printed on invites,
+// shared in DMs, remembered by friends. 5 chars of a 30-char alphabet = 24M
+// codes, comfortably past a million users. The unique index is the referee:
+// a losing racer's UPDATE hits the constraint (run() logs + returns null)
+// and the loop re-reads the winner's code.
+const ROOM_CODE_CHARS = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
+
+export async function roomCodeFor(uid: string): Promise<string | null> {
+  if (!dbEnabled) return null;
+  const cur = await run('SELECT room_code FROM users WHERE uid=$1', [uid]);
+  const have = cur?.rows?.[0]?.room_code as string | undefined;
+  if (have) return have;
+  for (let i = 0; i < 8; i++) {
+    const code = Array.from({ length: 5 },
+        () => ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)]).join('');
+    const r = await run(
+      'UPDATE users SET room_code=$2 WHERE uid=$1 AND room_code IS NULL RETURNING room_code',
+      [uid, code]);
+    if (r?.rows?.length) return code;
+    const again = await run('SELECT room_code FROM users WHERE uid=$1', [uid]);
+    const got = again?.rows?.[0]?.room_code as string | undefined;
+    if (got) return got;
+  }
+  return null;
+}
+
+/// Who owns a code — lets joinParty tell "room not open" from "no such code".
+export async function ownerOfCode(code: string): Promise<string | null> {
+  if (!dbEnabled) return null;
+  const r = await run('SELECT uid FROM users WHERE room_code=$1', [code]);
+  return (r?.rows?.[0]?.uid as string | undefined) ?? null;
+}
+
 export function upsertUser(u: {
   uid: string; name: string; hue: number; gender?: string; meet?: string; vibes?: string[];
 }): void {

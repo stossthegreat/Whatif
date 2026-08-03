@@ -44,6 +44,9 @@ export async function hydrate(user: User): Promise<void> {
   neverAgain.set(user.uid, new Set(never));
   user.friendUids = new Set(edges.filter((e) => e.state === 'friends').map((e) => e.uid));
   broadcastPresence(user, true);
+  // the full friends graph lands on EVERY connect — requests that arrived
+  // while offline surface without any screen having to ask for them
+  void snapshot(user);
   void import('./chat.js').then((c) => c.sendUnread(user)); // Home badge, pre-ask
   void checkBadges(user.uid); // returning users pick up retroactive badges
 }
@@ -94,10 +97,15 @@ export function onCellLeave(cell: Cell, u: User): void {
   cell.prompted.add(u.id);
   // only prompt about people who aren't already friends
   void (async () => {
-    const people = [] as { uid: string; name: string; hue: number; secs: number }[];
+    const people = [] as { uid: string; name: string; hue: number; secs: number;
+      photoId: number | null }[];
     for (const p of partners) {
       const st = await dbs.friendState(u.uid, p.uid);
-      if (st !== 'friends') people.push(p);
+      if (st !== 'friends') {
+        // a face on the rating card converts far better than an orb
+        const card = await dbs.userCard(p.uid);
+        people.push({ ...p, photoId: card?.photoId ?? null });
+      }
     }
     if (!people.length) return;
     if (store.users.get(u.id) !== u && store.userByUid(u.uid) !== u) return; // gone
@@ -156,10 +164,17 @@ async function announceBond(u1: string, u2: string, kind: 'matched' | 'friendAcc
   dbs.bumpRep(u2, 3);
   for (const [me, other] of [[u1, u2], [u2, u1]] as const) {
     const conn = store.userByUid(me);
-    const card = store.userByUid(other);
-    const info = card
-      ? { uid: other, name: card.name, hue: card.hue, photoId: null as number | null, title: null as string | null }
-      : { uid: other, ...((await dbs.userCard(other)) ?? { name: 'someone', hue: 210, photoId: null, title: null }) };
+    const live = store.userByUid(other);
+    // always hit the DB for the face — the online branch used to hardcode
+    // photoId:null, which is why the match celebration showed blank orbs
+    const dbCard = await dbs.userCard(other);
+    const info = {
+      uid: other,
+      name: live?.name ?? dbCard?.name ?? 'someone',
+      hue: live?.hue ?? dbCard?.hue ?? 210,
+      photoId: dbCard?.photoId ?? null,
+      title: dbCard?.title ?? null,
+    };
     if (conn) {
       conn.friendUids ??= new Set();
       conn.friendUids.add(other);

@@ -118,9 +118,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // the living stage — you, mirrored, full bleed (elegant placeholder
-          // when the camera is off or denied)
-          const SelfView(grade: true),
+          // the living stage — you, mirrored, width-fit for the full field of
+          // view (elegant placeholder when the camera is off or denied)
+          const SelfView(grade: true, fit: BoxFit.fitWidth),
           // the whole stage is the start button
           Positioned.fill(
             child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _start),
