@@ -8,12 +8,19 @@ import '../theme/tokens.dart';
 /// to an elegant cool-light placeholder if the camera isn't available/allowed —
 /// so every screen looks intentional either way.
 class SelfView extends StatelessWidget {
-  const SelfView({super.key, this.label, this.grade = false});
+  const SelfView({super.key, this.label, this.grade = false, this.fit = BoxFit.cover});
 
   final String? label;
 
   /// If true, lay a soft dark grade over the preview (used on Home so type reads).
   final bool grade;
+
+  /// How the feed fills the space. Cover suits tiles; the full-screen Home
+  /// stage uses [BoxFit.fitWidth] — covering a 19.5:9 screen with a 16:9
+  /// feed blows everything up ~22% and reads as "zoomed in". Width-fit keeps
+  /// the full horizontal field of view; the letterbox bands hide under the
+  /// header and bottom scrim.
+  final BoxFit fit;
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +42,7 @@ class SelfView extends StatelessWidget {
               maxWidth: double.infinity,
               maxHeight: double.infinity,
               child: FittedBox(
-                fit: BoxFit.cover,
+                fit: fit,
                 child: SizedBox(width: w, height: h, child: CameraPreview(cam)),
               ),
             ),
