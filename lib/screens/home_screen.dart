@@ -147,7 +147,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   padding: EdgeInsets.symmetric(horizontal: r.gutter),
                   child: Row(
                     children: [
-                      const Wordmark(size: 26),
+                      const Wordmark(size: 32),
                       const Spacer(),
                       const _LivePill(),
                       const SizedBox(width: 8),
@@ -164,7 +164,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 // the Portal — Rivlr's living mark; taps fall through to the stage
                 IgnorePointer(
                   child: PortalRing(
-                    title: 'TAP TO\nSTART',
+                    title: 'Tap to\nstart',
                     line: _modeLine,
                     size: 258 * r.scale,
                   ),
@@ -181,21 +181,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     children: [
                       _ModeChip(
                         emoji: '🎥',
-                        label: '1 ON 1',
+                        label: '1 on 1',
                         selected: _mode == 'hang',
                         onTap: () => _select('hang'),
                       ),
                       const SizedBox(width: 10),
                       _ModeChip(
                         emoji: '🎰',
-                        label: 'ROULETTE',
+                        label: 'Roulette',
                         selected: _mode == 'roulette',
                         onTap: () => _select('roulette'),
                       ),
                       const SizedBox(width: 10),
                       _ModeChip(
                         emoji: '👥',
-                        label: 'GROUPS',
+                        label: 'Groups',
                         selected: false,
                         onTap: () { Buzz.pop(); widget.onPlay('groups'); },
                       ),
@@ -502,8 +502,8 @@ class _GameTickerState extends State<_GameTicker> with SingleTickerProviderState
     final strip = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _cell('⚡', 'TONIGHT', color: C.acid),
-        for (final d in SeqDef.ten) _cell(d.icon, d.name.toUpperCase()),
+        _cell('⚡', 'tonight', color: C.acid),
+        for (final d in SeqDef.ten) _cell(d.icon, d.name.toLowerCase()),
       ],
     );
     return GestureDetector(

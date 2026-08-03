@@ -52,11 +52,16 @@ class _PortalRingState extends State<PortalRing> with TickerProviderStateMixin {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    widget.title,
-                    textAlign: TextAlign.center,
-                    style: T.display(33).copyWith(
-                      shadows: const [Shadow(color: Color(0xB3000000), blurRadius: 16)],
+                  // gradient type — the hero is never flat white (that's them)
+                  ShaderMask(
+                    shaderCallback: (r) => C.gradSigHot.createShader(r),
+                    blendMode: BlendMode.srcIn,
+                    child: Text(
+                      widget.title,
+                      textAlign: TextAlign.center,
+                      style: T.display(31).copyWith(
+                        shadows: const [Shadow(color: Color(0xB3000000), blurRadius: 16)],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 7),

@@ -388,54 +388,59 @@ export interface SeqDef {
   icon: string;     // the picker's animated emoji
   hint: string;
   vibe: 'warm' | 'wild' | 'spark';
+  /// Works with exactly two people in the room. Point beats resolve through
+  /// the client's me/them vote, so freeze/poll/thumbs/point all qualify —
+  /// what doesn't is group-shaped copy (roasting "the person on your left",
+  /// crowning winners of a circle, spinning a bottle at two faces).
+  duo: boolean;
   beats: SeqBeat[];
 }
 
 export const SEQ_PACK: SeqDef[] = [
-  { name: 'Face Off', icon: '😜', hint: 'pull it · hold it · crown it', vibe: 'warm', beats: [
+  { name: 'Face Off', icon: '😜', hint: 'pull it · hold it · crown it', vibe: 'warm', duo: true, beats: [
     { kind: 'freeze', secs: 11, pool: [['UGLIEST face contest. 3…2…1 GO'], ['Best fish face 🐟 HOLD IT'], ['Double chin championship. Commit.']] },
     { kind: 'freeze', secs: 11, pool: [['Now your best villain smirk. Freeze.'], ['The face you make reading old texts'], ['Your “I just saw my ex” face']] },
     { kind: 'point', secs: 13, pool: [['Crown the funniest face 👑']] },
   ]},
-  { name: 'Eye Contact', icon: '👀', hint: 'hold it · smile · don’t crack', vibe: 'spark', beats: [
+  { name: 'Eye Contact', icon: '👀', hint: 'hold it · smile · don’t crack', vibe: 'spark', duo: true, beats: [
     { kind: 'freeze', secs: 11, pool: [['Dead-eye contact with the camera. No laughing.']] },
     { kind: 'freeze', secs: 11, pool: [['Now a SLOW smile. Do not crack.'], ['Now wink like a movie star. Hold it.']] },
-    { kind: 'point', secs: 13, pool: [['Who broke first? Point.']] },
+    { kind: 'point', secs: 13, pool: [['Who broke first?']] },
   ]},
-  { name: 'Hot Takes', icon: '🔥', hint: 'three takes · pick sides · argue', vibe: 'warm', beats: [
+  { name: 'Hot Takes', icon: '🔥', hint: 'three takes · pick sides · argue', vibe: 'warm', duo: true, beats: [
     { kind: 'poll', pool: [['Pineapple on pizza?', 'crime', 'genius'], ['Is a hotdog a sandwich?', 'yes', 'how dare you'], ['Cereal then milk?', 'right', 'chaos']] },
     { kind: 'poll', pool: [['Texting “lol” means nothing?', 'facts', 'lies'], ['Gym at 6am?', 'built different', 'lying'], ['Voice notes?', 'elite', 'jail']] },
     { kind: 'poll', pool: [['They clap when the plane lands', 'green flag', 'red flag'], ['They still follow all their exes', 'green flag', 'red flag'], ['All their exes are “crazy”', 'green flag', 'red flag']] },
   ]},
-  { name: 'Storytime', icon: '🎤', hint: 'real stories · best one wins', vibe: 'wild', beats: [
+  { name: 'Storytime', icon: '🎤', hint: 'real stories · best one wins', vibe: 'wild', duo: false, beats: [
     { kind: 'point', pool: [['Most embarrassing moment. Full story. GO'], ['Your most unhinged 3am decision'], ['Your biggest public L']] },
     { kind: 'point', pool: [['Worst date you’ve ever been on'], ['A time you got caught lying'], ['The dumbest thing you believed as a kid']] },
   ]},
-  { name: 'Rizz Off', icon: '😏', hint: 'best line · worst line · shoot your shot', vibe: 'spark', beats: [
+  { name: 'Rizz Off', icon: '😏', hint: 'best line · worst line · shoot your shot', vibe: 'spark', duo: false, beats: [
     { kind: 'point', secs: 18, pool: [['Best pickup line. GO']] },
     { kind: 'point', secs: 18, pool: [['Now the WORST pickup line on purpose']] },
     { kind: 'point', secs: 18, pool: [['Shoot your shot at the camera — smoothest wins']] },
   ]},
-  { name: 'Spin the Bottle', icon: '🍾', hint: 'the bottle picks · no escape', vibe: 'spark', beats: [
+  { name: 'Spin the Bottle', icon: '🍾', hint: 'the bottle picks · no escape', vibe: 'spark', duo: false, beats: [
     { kind: 'spin', pool: [['{target} — what’s your actual type? Be honest'], ['{target} — rate your own rizz out of 10'], ['{target} — who in this room would you take on a date? 👀']] },
     { kind: 'spin', pool: [['{target} — blow the room a kiss. Commit.'], ['{target} — describe your dream date in 10 seconds'], ['{target} — your most romantic move ever. Spill.']] },
   ]},
-  { name: 'Confessions', icon: '🙊', hint: 'never have I ever · thumbs up = guilty', vibe: 'wild', beats: [
+  { name: 'Confessions', icon: '🙊', hint: 'never have I ever · thumbs up = guilty', vibe: 'wild', duo: true, beats: [
     { kind: 'thumbs', pool: [['Never have I ever ghosted someone mid-conversation'], ['…sent a text to the completely wrong person'], ['…stalked an ex online this week']] },
     { kind: 'thumbs', pool: [['…pretended not to see someone I know in public'], ['…flirted my way out of trouble'], ['…lied to get out of a date']] },
     { kind: 'thumbs', pool: [['…checked a partner’s phone'], ['…cried to get out of trouble'], ['…had a crush on a friend’s partner']] },
   ]},
-  { name: 'Would You Rather', icon: '🤔', hint: 'three impossible choices', vibe: 'warm', beats: [
+  { name: 'Would You Rather', icon: '🤔', hint: 'three impossible choices', vibe: 'warm', duo: true, beats: [
     { kind: 'wouldRather', pool: [['Fight 100 duck-sized horses, or…', '100 tiny horses', '1 giant duck'], ['Read minds, or…', 'read minds', 'be invisible']] },
     { kind: 'wouldRather', pool: [['Know how you die, or…', 'know when', 'know how'], ['Be famous, or…', 'famous', 'filthy rich']] },
     { kind: 'wouldRather', pool: [['Always say what you think, or…', 'brutal honesty', 'never speak again'], ['Teleport, or…', 'teleport', 'fly']] },
   ]},
-  { name: 'Impressions', icon: '🎭', hint: 'do it badly · funniest wins', vibe: 'wild', beats: [
+  { name: 'Impressions', icon: '🎭', hint: 'do it badly · funniest wins', vibe: 'wild', duo: false, beats: [
     { kind: 'point', pool: [['Your worst BATMAN'], ['Your worst British accent'], ['Your worst influencer apology']] },
     { kind: 'point', pool: [['Talk like a movie VILLAIN 😈 — best one wins'], ['Talk like your GRANDMA 👵'], ['Talk like a CEO on a podcast 💼']] },
     { kind: 'point', secs: 18, pool: [['Do your best EVIL LAUGH — crown the winner']] },
   ]},
-  { name: 'Roast Circle', icon: '💀', hint: 'roast · get roasted · make up', vibe: 'wild', beats: [
+  { name: 'Roast Circle', icon: '💀', hint: 'roast · get roasted · make up', vibe: 'wild', duo: false, beats: [
     { kind: 'point', pool: [['Roast the person on your left (with love)'], ['Roast this app. Go.']] },
     { kind: 'point', pool: [['Roast your OWN haircut before someone else does'], ['Confess your pettiest move ever — pettiest wins']] },
     { kind: 'point', secs: 18, pool: [['Now the best COMPLIMENT — make someone blush to make up']] },

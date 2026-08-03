@@ -671,58 +671,64 @@ class SeqBeat {
 /// One of THE TEN — a blended sequence of beats, never a single throwaway
 /// prompt. Mirrors the server pack (names must match for pickGame).
 class SeqDef {
-  const SeqDef({required this.name, required this.icon, required this.hint, required this.vibe, required this.beats});
+  const SeqDef({required this.name, required this.icon, required this.hint, required this.vibe, required this.duo, required this.beats});
   final String name;
   final String icon;
   final String hint;
   final String vibe;
+
+  /// Works with exactly two people. Mirrors the server flag — duo rooms
+  /// only ever roll/pick duo games, so group-phrased prompts never land
+  /// in a 1:1.
+  final bool duo;
+
   final List<SeqBeat> beats;
 
   static const ten = <SeqDef>[
-    SeqDef(name: 'Face Off', icon: '😜', hint: 'pull it · hold it · crown it', vibe: 'warm', beats: [
+    SeqDef(name: 'Face Off', icon: '😜', hint: 'pull it · hold it · crown it', vibe: 'warm', duo: true, beats: [
       SeqBeat(kind: GameKind.freeze, secs: 11, pool: [['UGLIEST face contest. 3…2…1 GO'], ['Best fish face 🐟 HOLD IT'], ['Double chin championship. Commit.']]),
       SeqBeat(kind: GameKind.freeze, secs: 11, pool: [['Now your best villain smirk. Freeze.'], ['The face you make reading old texts'], ['Your “I just saw my ex” face']]),
       SeqBeat(kind: GameKind.point, secs: 13, pool: [['Crown the funniest face 👑']]),
     ]),
-    SeqDef(name: 'Eye Contact', icon: '👀', hint: 'hold it · smile · don’t crack', vibe: 'spark', beats: [
+    SeqDef(name: 'Eye Contact', icon: '👀', hint: 'hold it · smile · don’t crack', vibe: 'spark', duo: true, beats: [
       SeqBeat(kind: GameKind.freeze, secs: 11, pool: [['Dead-eye contact with the camera. No laughing.']]),
       SeqBeat(kind: GameKind.freeze, secs: 11, pool: [['Now a SLOW smile. Do not crack.'], ['Now wink like a movie star. Hold it.']]),
-      SeqBeat(kind: GameKind.point, secs: 13, pool: [['Who broke first? Point.']]),
+      SeqBeat(kind: GameKind.point, secs: 13, pool: [['Who broke first?']]),
     ]),
-    SeqDef(name: 'Hot Takes', icon: '🔥', hint: 'three takes · pick sides · argue', vibe: 'warm', beats: [
+    SeqDef(name: 'Hot Takes', icon: '🔥', hint: 'three takes · pick sides · argue', vibe: 'warm', duo: true, beats: [
       SeqBeat(kind: GameKind.poll, pool: [['Pineapple on pizza?', 'crime', 'genius'], ['Is a hotdog a sandwich?', 'yes', 'how dare you'], ['Cereal then milk?', 'right', 'chaos']]),
       SeqBeat(kind: GameKind.poll, pool: [['Texting “lol” means nothing?', 'facts', 'lies'], ['Gym at 6am?', 'built different', 'lying'], ['Voice notes?', 'elite', 'jail']]),
       SeqBeat(kind: GameKind.poll, pool: [['They clap when the plane lands', 'green flag', 'red flag'], ['They still follow all their exes', 'green flag', 'red flag'], ['All their exes are “crazy”', 'green flag', 'red flag']]),
     ]),
-    SeqDef(name: 'Storytime', icon: '🎤', hint: 'real stories · best one wins', vibe: 'wild', beats: [
+    SeqDef(name: 'Storytime', icon: '🎤', hint: 'real stories · best one wins', vibe: 'wild', duo: false, beats: [
       SeqBeat(kind: GameKind.point, pool: [['Most embarrassing moment. Full story. GO'], ['Your most unhinged 3am decision'], ['Your biggest public L']]),
       SeqBeat(kind: GameKind.point, pool: [['Worst date you’ve ever been on'], ['A time you got caught lying'], ['The dumbest thing you believed as a kid']]),
     ]),
-    SeqDef(name: 'Rizz Off', icon: '😏', hint: 'best line · worst line · shoot your shot', vibe: 'spark', beats: [
+    SeqDef(name: 'Rizz Off', icon: '😏', hint: 'best line · worst line · shoot your shot', vibe: 'spark', duo: false, beats: [
       SeqBeat(kind: GameKind.point, secs: 18, pool: [['Best pickup line. GO']]),
       SeqBeat(kind: GameKind.point, secs: 18, pool: [['Now the WORST pickup line on purpose']]),
       SeqBeat(kind: GameKind.point, secs: 18, pool: [['Shoot your shot at the camera — smoothest wins']]),
     ]),
-    SeqDef(name: 'Spin the Bottle', icon: '🍾', hint: 'the bottle picks · no escape', vibe: 'spark', beats: [
+    SeqDef(name: 'Spin the Bottle', icon: '🍾', hint: 'the bottle picks · no escape', vibe: 'spark', duo: false, beats: [
       SeqBeat(kind: GameKind.spin, pool: [['{target} — what’s your actual type? Be honest'], ['{target} — rate your own rizz out of 10'], ['{target} — who in this room would you take on a date? 👀']]),
       SeqBeat(kind: GameKind.spin, pool: [['{target} — blow the room a kiss. Commit.'], ['{target} — describe your dream date in 10 seconds'], ['{target} — your most romantic move ever. Spill.']]),
     ]),
-    SeqDef(name: 'Confessions', icon: '🙊', hint: 'never have I ever · thumbs up = guilty', vibe: 'wild', beats: [
+    SeqDef(name: 'Confessions', icon: '🙊', hint: 'never have I ever · thumbs up = guilty', vibe: 'wild', duo: true, beats: [
       SeqBeat(kind: GameKind.thumbs, pool: [['Never have I ever ghosted someone mid-conversation'], ['…sent a text to the completely wrong person'], ['…stalked an ex online this week']]),
       SeqBeat(kind: GameKind.thumbs, pool: [['…pretended not to see someone I know in public'], ['…flirted my way out of trouble'], ['…lied to get out of a date']]),
       SeqBeat(kind: GameKind.thumbs, pool: [['…checked a partner’s phone'], ['…cried to get out of trouble'], ['…had a crush on a friend’s partner']]),
     ]),
-    SeqDef(name: 'Would You Rather', icon: '🤔', hint: 'three impossible choices', vibe: 'warm', beats: [
+    SeqDef(name: 'Would You Rather', icon: '🤔', hint: 'three impossible choices', vibe: 'warm', duo: true, beats: [
       SeqBeat(kind: GameKind.wouldRather, pool: [['Fight 100 duck-sized horses, or…', '100 tiny horses', '1 giant duck'], ['Read minds, or…', 'read minds', 'be invisible']]),
       SeqBeat(kind: GameKind.wouldRather, pool: [['Know how you die, or…', 'know when', 'know how'], ['Be famous, or…', 'famous', 'filthy rich']]),
       SeqBeat(kind: GameKind.wouldRather, pool: [['Always say what you think, or…', 'brutal honesty', 'never speak again'], ['Teleport, or…', 'teleport', 'fly']]),
     ]),
-    SeqDef(name: 'Impressions', icon: '🎭', hint: 'do it badly · funniest wins', vibe: 'wild', beats: [
+    SeqDef(name: 'Impressions', icon: '🎭', hint: 'do it badly · funniest wins', vibe: 'wild', duo: false, beats: [
       SeqBeat(kind: GameKind.point, pool: [['Your worst BATMAN'], ['Your worst British accent'], ['Your worst influencer apology']]),
       SeqBeat(kind: GameKind.point, pool: [['Talk like a movie VILLAIN 😈 — best one wins'], ['Talk like your GRANDMA 👵'], ['Talk like a CEO on a podcast 💼']]),
       SeqBeat(kind: GameKind.point, secs: 18, pool: [['Do your best EVIL LAUGH — crown the winner']]),
     ]),
-    SeqDef(name: 'Roast Circle', icon: '💀', hint: 'roast · get roasted · make up', vibe: 'wild', beats: [
+    SeqDef(name: 'Roast Circle', icon: '💀', hint: 'roast · get roasted · make up', vibe: 'wild', duo: false, beats: [
       SeqBeat(kind: GameKind.point, pool: [['Roast the person on your left (with love)'], ['Roast this app. Go.']]),
       SeqBeat(kind: GameKind.point, pool: [['Roast your OWN haircut before someone else does'], ['Confess your pettiest move ever — pettiest wins']]),
       SeqBeat(kind: GameKind.point, secs: 18, pool: [['Now the best COMPLIMENT — make someone blush to make up']]),

@@ -167,7 +167,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                       const SizedBox(width: 14),
                     ],
                     _SegTab(
-                      label: 'MESSAGE',
+                      label: 'Messages',
                       active: _seg == 0,
                       onTap: () { Buzz.tick(); setState(() => _seg = 0); },
                     ),
@@ -175,7 +175,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                     AnimatedBuilder(
                       animation: SocialState.instance,
                       builder: (context, _) => _SegTab(
-                        label: 'FRIENDS',
+                        label: 'Friends',
                         active: _seg == 1,
                         badge: SocialState.instance.reqCount,
                         onTap: () { Buzz.tick(); setState(() => _seg = 1); },

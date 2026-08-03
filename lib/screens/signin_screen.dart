@@ -69,7 +69,7 @@ class _SignInScreenState extends State<SignInScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 18),
-                  const Wordmark(size: 30),
+                  const Wordmark(size: 34),
                   const Spacer(),
                   RichText(
                     text: TextSpan(

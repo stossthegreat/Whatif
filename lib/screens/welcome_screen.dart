@@ -27,15 +27,15 @@ class WelcomeScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 18),
-                  const Wordmark(size: 30),
+                  const Wordmark(size: 34),
                   const Spacer(),
                   RichText(
                     text: TextSpan(
-                      style: T.display(46 * r.scale),
+                      style: T.display(42 * r.scale),
                       children: const [
-                        TextSpan(text: 'MEET SOMEONE\n'),
-                        TextSpan(text: 'NEW', style: TextStyle(color: C.sig)),
-                        TextSpan(text: '. EVERY\nSINGLE NIGHT.'),
+                        TextSpan(text: 'Meet someone\n'),
+                        TextSpan(text: 'new', style: TextStyle(color: C.sig)),
+                        TextSpan(text: '. Every\nsingle night.'),
                       ],
                     ),
                   ),

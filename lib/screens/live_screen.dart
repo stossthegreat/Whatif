@@ -166,6 +166,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         .replaceAll(RegExp(r'^Point at\s*', caseSensitive: false), 'Vote — ')
         .replaceAll(RegExp(r'\s*[—-]\s*point at (the|who(?:’s)?)?\s*', caseSensitive: false), ' — vote for ')
         .replaceAll(RegExp(r'point at', caseSensitive: false), 'vote for')
+        .replaceAll(RegExp(r'crown the', caseSensitive: false), 'vote for the')
+        .replaceAll(RegExp(r'crown the winner', caseSensitive: false), 'vote for the winner')
         .replaceAll(RegExp(r'tap (a|the) (face|screen|person)( of the person)?', caseSensitive: false), 'vote below');
     if (out.isNotEmpty) out = out[0].toUpperCase() + out.substring(1);
     return out;
@@ -632,8 +634,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   void _openPicker() {
     Buzz.tick();
     const order = ['warm', 'wild', 'spark'];
-    final games = [...SeqDef.ten]
-      ..sort((a, b) => order.indexOf(a.vibe).compareTo(order.indexOf(b.vibe)));
+    // duo rooms only see duo-suited games — group-phrased prompts ("point
+    // at the person who…") are meaningless with one other face on screen
+    final duoRoom = cell.people.length == 1;
+    final games = [
+      for (final s in SeqDef.ten)
+        if (!duoRoom || s.duo) s,
+    ]..sort((a, b) => order.indexOf(a.vibe).compareTo(order.indexOf(b.vibe)));
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -653,7 +660,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               const SizedBox(height: 18),
               Text('PICK A GAME', style: T.eyebrow.copyWith(letterSpacing: 3, fontSize: 11)),
               const SizedBox(height: 4),
-              Text('every one is a few rounds back to back', style: T.tiny),
+              Text(
+                  cell.people.length == 1
+                      ? 'every one is a few rounds back to back · more games with 3+ people'
+                      : 'every one is a few rounds back to back',
+                  style: T.tiny),
               const SizedBox(height: 8),
               Flexible(
                 child: ListView.builder(
@@ -1376,10 +1387,6 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                 _topBar(),
                 if (_phase != _Phase.awards) _rail(),
                 if (_phase != _Phase.awards) _caption(),
-                // NEXT — the one-tap skip. Calls don't skip; empty rooms are
-                // already waiting for the next person.
-                if (_phase != _Phase.awards && !_isCall && cell.people.isNotEmpty)
-                  _nextBtn(),
                 if (_combo >= 3)
                   Positioned(
                     right: 12,
@@ -1667,55 +1674,17 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             ]),
           ),
           const Spacer(),
-          const SizedBox(width: 40),
+          // the brand rides in every room — screenshots and screen-records
+          // all carry the name
+          const Wordmark(size: 15),
         ],
       ),
     );
   }
 
-  /// The skip pill — bottom-right, beside the game area. Same gradient as
-  /// the Play orb so "this moves you forward" reads instantly.
-  Widget _nextBtn() {
-    return Positioned(
-      right: 12,
-      bottom: 70,
-      child: Press(
-        onTap: () {
-          Buzz.pop();
-          Sfx.pop();
-          widget.onNext();
-        },
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(20, 12, 14, 12),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [C.sig, C.purpleDeep],
-            ),
-            borderRadius: BorderRadius.circular(100),
-            border: Border.all(color: Colors.white.withOpacity(0.22), width: 1.5),
-            boxShadow: [
-              BoxShadow(color: C.sig.withOpacity(0.35), blurRadius: 18, spreadRadius: -4),
-              const BoxShadow(color: Color(0x99000000), blurRadius: 14, offset: Offset(0, 6)),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('skip',
-                  style: T.body.copyWith(
-                      color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
-              const SizedBox(width: 4),
-              const Icon(Icons.skip_next_rounded, size: 24, color: Colors.white),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   // ---- right action rail ----------------------------------------------------
+  // Skip lives at the TOP of the rail now — one column of controls, not a
+  // floating pill fighting the game panel for the corner.
   Widget _rail() {
     return Positioned(
       right: 10,
@@ -1723,6 +1692,22 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // calls don't skip; empty rooms are already waiting for the next one
+          if (!_isCall && cell.people.isNotEmpty) ...[
+            _RailAction(
+              icon: Icons.skip_next_rounded,
+              iconColor: Colors.white,
+              label: 'skip',
+              size: 48,
+              bg: C.sig,
+              onTap: () {
+                Buzz.pop();
+                Sfx.pop();
+                widget.onNext();
+              },
+            ),
+            const SizedBox(height: 14),
+          ],
           if (widget.live) ...[
             _RailAction(
               icon: RtcService.instance.micOn ? Icons.mic_rounded : Icons.mic_off_rounded,
@@ -1735,7 +1720,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                 RtcService.instance.setMic(on);
               },
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
           ],
           if (widget.live && _isCall) ...[
             _RailAction(
@@ -1749,7 +1734,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                 RtcService.instance.setCam(!RtcService.instance.camOn);
               },
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
           ],
           if (!_isCall) ...[
             // WhatsApp-style people button — add whoever you're with as a
@@ -1760,7 +1745,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               label: 'add',
               onTap: _openAddPeople,
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
             _RailAction(
               icon: Icons.star_rounded,
               iconColor: const Color(0xFFFFD54A),
@@ -1773,7 +1758,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                 }
               },
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
           ],
           // block is deliberately the LOUDEST thing on the rail — safety is
           // never buried in a menu
@@ -1781,7 +1766,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             icon: Icons.block_rounded,
             iconColor: Colors.white,
             label: 'block',
-            size: 62,
+            size: 48,
             bg: C.live,
             onTap: () {
               if (cell.people.length == 1) {
@@ -1825,10 +1810,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('just talk — or play something',
-                style: T.sub.copyWith(color: Colors.white70, fontWeight: FontWeight.w600)),
+                style: T.sub.copyWith(
+                    color: Colors.white54, fontWeight: FontWeight.w600, fontSize: 12.5)),
             const SizedBox(height: 10),
             Padding(
-              padding: const EdgeInsets.only(right: 52),
+              padding: EdgeInsets.zero,
               child: Row(
                 children: [
                   Expanded(
@@ -1836,14 +1822,14 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                       haptic: false,
                       onTap: () => _requestGame(),
                       child: Container(
-                        height: 52,
+                        height: 40,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                         child: Text('🎲  Random game',
-                            style: T.body.copyWith(color: Colors.black, fontWeight: FontWeight.w800, fontSize: 15)),
+                            style: T.body.copyWith(color: Colors.black, fontWeight: FontWeight.w800, fontSize: 13)),
                       ),
                     ),
                   ),
@@ -1853,15 +1839,15 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                       haptic: false,
                       onTap: _openPicker,
                       child: Container(
-                        height: 52,
+                        height: 40,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: const Color(0x59000000),
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(14),
                           border: Border.all(color: const Color(0x40FFFFFF)),
                         ),
                         child: Text('Pick a game',
-                            style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                            style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
                       ),
                     ),
                   ),
@@ -1919,7 +1905,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 14),
             Padding(
-              padding: const EdgeInsets.only(right: 52),
+              padding: EdgeInsets.zero,
               child: _answered && _serverDriven
                   ? Row(mainAxisSize: MainAxisSize.min, children: [
                       const Icon(Icons.lock_rounded, size: 15, color: C.sig),
@@ -2585,7 +2571,7 @@ class _RailAction extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.iconColor = Colors.white,
-    this.size = 48,
+    this.size = 42,
     this.bg = const Color(0x40000000),
   });
   final IconData icon;

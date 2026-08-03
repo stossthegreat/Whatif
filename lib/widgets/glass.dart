@@ -4,7 +4,8 @@ import 'package:flutter/physics.dart';
 import '../core/haptics.dart';
 import '../theme/tokens.dart';
 
-/// The Rivlr wordmark — condensed caps in the display face, purple R.
+/// The Rivlr wordmark — spaced-out display face, purple bookends: the first
+/// R and the last r both carry the accent, everything between stays clean.
 class Wordmark extends StatelessWidget {
   const Wordmark({super.key, this.size = 28, this.color = C.tx});
   final double size;
@@ -14,11 +15,11 @@ class Wordmark extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text.rich(
       TextSpan(
-        style: T.display(size).copyWith(color: color),
+        style: T.display(size).copyWith(color: color, letterSpacing: size * 0.12),
         children: const [
-          // the purple R is the brand's one accent
           TextSpan(text: 'R', style: TextStyle(color: C.sig)),
-          TextSpan(text: 'IVLR'),
+          TextSpan(text: 'ivl'),
+          TextSpan(text: 'r', style: TextStyle(color: C.sig)),
         ],
       ),
     );

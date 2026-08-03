@@ -127,7 +127,7 @@ class AgeBlockedScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 18),
-                  const Wordmark(size: 30),
+                  const Wordmark(size: 34),
                   const Spacer(),
                   Text('Come back\nwhen you’re 18.', style: T.huge(38 * r.scale)),
                   const SizedBox(height: 16),
