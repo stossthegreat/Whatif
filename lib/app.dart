@@ -370,6 +370,13 @@ class _RootState extends State<_Root> {
 
   // ---- verbs ----------------------------------------------------------------
   void _play(String mode) {
+    // the third card isn't a queue — it's your own room with your people
+    if (mode == 'groups') {
+      _partyCode = null;
+      _partyInviteUid = null;
+      _to(_Step.party);
+      return;
+    }
     _mode = mode;
     Track.event('play_pressed', {'mode': mode});
     if (AppConfig.isLive) NetworkClient.instance.play(mode);

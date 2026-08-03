@@ -6,12 +6,13 @@ import '../core/sound.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 
-/// Press play → choose your poison. Two cards, nothing else:
+/// Press play → choose your poison. Three cards, all on one screen:
 ///
 ///   ROULETTE — no choices. Games hit you back to back. Want out? Go home.
-///   HANG     — person to person. Just talk. Start a game when you want one.
+///   1 ON 1   — person to person. Games are a choice, not a demand.
+///   GROUPS   — your own room. Invite up to 3 friends, code or direct.
 ///
-/// Full-height obsidian cards, one living animation each, a purple play key.
+/// Obsidian cards splitting the height, one living animation each.
 class ModeScreen extends StatelessWidget {
   const ModeScreen({super.key, required this.onPick, required this.onBack});
   final ValueChanged<String> onPick;
@@ -48,7 +49,7 @@ class ModeScreen extends StatelessWidget {
               Expanded(
                 child: _ModeCard(
                   title: 'Roulette',
-                  line: 'No choices. Games hit you, back to back.\nSurvive the wheel.',
+                  line: 'No choices. Games hit you, back to back.',
                   art: const _RouletteArt(),
                   onTap: () {
                     Buzz.pop();
@@ -57,11 +58,11 @@ class ModeScreen extends StatelessWidget {
                   },
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Expanded(
                 child: _ModeCard(
-                  title: 'Hang',
-                  line: 'Person to person. Just talk.\nStart a game whenever you feel it.',
+                  title: '1 on 1',
+                  line: 'Person to person. Games are a choice —\nplay one or just talk.',
                   art: const _HangArt(),
                   onTap: () {
                     Buzz.pop();
@@ -70,7 +71,20 @@ class ModeScreen extends StatelessWidget {
                   },
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
+              Expanded(
+                child: _ModeCard(
+                  title: 'Groups',
+                  line: 'Your room, your people — invite up to 3 friends.',
+                  art: const _GroupsArt(),
+                  onTap: () {
+                    Buzz.pop();
+                    Sfx.pop();
+                    onPick('groups');
+                  },
+                ),
+              ),
+              const SizedBox(height: 14),
             ],
           ),
         ),
@@ -122,25 +136,25 @@ class _ModeCard extends StatelessWidget {
               ),
               // copy + the key
               Positioned(
-                left: 22,
-                right: 22,
-                bottom: 20,
+                left: 20,
+                right: 20,
+                bottom: 14,
                 child: Row(
                   children: [
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(title, style: T.huge(34)),
+                          Text(title, style: T.huge(27)),
                           const SizedBox(height: 6),
-                          Text(line, style: T.sub.copyWith(color: C.tx2, height: 1.35, fontSize: 14)),
+                          Text(line, style: T.sub.copyWith(color: C.tx2, height: 1.3, fontSize: 12.5)),
                         ],
                       ),
                     ),
                     const SizedBox(width: 14),
                     Container(
-                      width: 56,
-                      height: 56,
+                      width: 48,
+                      height: 48,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: const LinearGradient(
@@ -151,7 +165,7 @@ class _ModeCard extends StatelessWidget {
                         border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
                         boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 22, spreadRadius: -6)],
                       ),
-                      child: const Icon(Icons.play_arrow_rounded, size: 30, color: Colors.white),
+                      child: const Icon(Icons.play_arrow_rounded, size: 26, color: Colors.white),
                     ),
                   ],
                 ),
@@ -207,7 +221,7 @@ class _RouletteArtState extends State<_RouletteArt> {
           ),
         ),
         Align(
-          alignment: const Alignment(0, -0.45),
+          alignment: const Alignment(0, -0.6),
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 260),
             transitionBuilder: (child, anim) => FadeTransition(
@@ -215,10 +229,66 @@ class _RouletteArtState extends State<_RouletteArt> {
               child: ScaleTransition(
                   scale: Tween(begin: 1.3, end: 1.0).animate(anim), child: child),
             ),
-            child: Text(_faces[_i], key: ValueKey(_i), style: const TextStyle(fontSize: 74)),
+            child: Text(_faces[_i], key: ValueKey(_i), style: const TextStyle(fontSize: 52)),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Groups' living layer — a tight cluster of orbs, your circle in one room.
+class _GroupsArt extends StatefulWidget {
+  const _GroupsArt();
+  @override
+  State<_GroupsArt> createState() => _GroupsArtState();
+}
+
+class _GroupsArtState extends State<_GroupsArt> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(seconds: 6))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        final t = Curves.easeInOut.transform(_c.value);
+        Widget orb(Color a, double size) => Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  center: const Alignment(-0.4, -0.5),
+                  colors: [a.withOpacity(0.9), const Color(0xFF0B0C10)],
+                ),
+                border: Border.all(color: Colors.white.withOpacity(0.1)),
+              ),
+            );
+        return Align(
+          alignment: const Alignment(0, -0.6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Transform.translate(
+                  offset: Offset(6 - 5 * t, 4 * t), child: orb(const Color(0xFF3A4A66), 38)),
+              const SizedBox(width: 8),
+              Transform.translate(
+                  offset: Offset(0, -5 * t), child: orb(const Color(0xFF66573A), 46 + 5 * t)),
+              const SizedBox(width: 8),
+              Transform.translate(
+                  offset: Offset(-6 + 5 * t, 4 * t), child: orb(const Color(0xFF4A3A66), 38)),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -247,8 +317,8 @@ class _HangArtState extends State<_HangArt> with SingleTickerProviderStateMixin 
       builder: (context, _) {
         final t = Curves.easeInOut.transform(_c.value);
         Widget orb(Color a) => Container(
-              width: 64 + 8 * t,
-              height: 64 + 8 * t,
+              width: 46 + 7 * t,
+              height: 46 + 7 * t,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
@@ -259,7 +329,7 @@ class _HangArtState extends State<_HangArt> with SingleTickerProviderStateMixin 
               ),
             );
         return Align(
-          alignment: const Alignment(0, -0.45),
+          alignment: const Alignment(0, -0.6),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

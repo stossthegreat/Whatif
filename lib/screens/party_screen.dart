@@ -7,7 +7,9 @@ import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
 import '../net/network_client.dart';
+import '../state/social.dart';
 import '../theme/tokens.dart';
+import '../widgets/avatar.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
 
@@ -42,6 +44,7 @@ class _PartyScreenState extends State<PartyScreen> {
   String? _code;
   String? _hostId;
   bool _invited = false;
+  final Set<String> _invitedUids = {}; // friends already sent this room's code
   List<_PartyMember> _members = const [];
   String? _error;
   bool _starting = false;
@@ -54,6 +57,7 @@ class _PartyScreenState extends State<PartyScreen> {
     if (AppConfig.isLive) {
       _sub = NetworkClient.instance.events.listen(_onNet);
       NetworkClient.instance.host();
+      NetworkClient.instance.friendsSnapshot(); // fresh rail for invites
       Track.event('party_hosted');
       final code = widget.initialCode;
       if (code != null && code.length >= 4) {
@@ -111,6 +115,67 @@ class _PartyScreenState extends State<PartyScreen> {
     }
   }
 
+  /// One friend in the invite rail. Tap → the room code lands in their DMs as
+  /// an invite bubble (one tap to join on their side). Capped at 3 — a room
+  /// of four is the sweet spot.
+  Widget _inviteChip(FriendInfo f) {
+    final sent = _invitedUids.contains(f.uid);
+    return Press(
+      haptic: false,
+      onTap: () {
+        if (sent || _code == null) return;
+        if (_invitedUids.length >= 3) {
+          setState(() => _error = 'three invites max — keep the room tight');
+          return;
+        }
+        Buzz.commit();
+        NetworkClient.instance.dm(f.uid, 'invite', _code!);
+        setState(() {
+          _error = null;
+          _invitedUids.add(f.uid);
+        });
+      },
+      child: Padding(
+        padding: const EdgeInsets.only(right: 14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Avatar(hue: f.hue, photoId: f.photoId, size: 48, live: f.online),
+                if (sent)
+                  Positioned(
+                    right: -2, bottom: -2,
+                    child: Container(
+                      width: 18, height: 18,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: C.sig,
+                        border: Border.all(color: C.black, width: 2),
+                      ),
+                      child: const Icon(Icons.check_rounded, size: 11, color: Colors.white),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            Text(
+              sent ? 'sent ✓' : '@${f.name}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: T.tiny.copyWith(
+                color: sent ? C.sig : C.tx2,
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _share() {
     final code = _code;
     if (code == null) return;
@@ -146,7 +211,11 @@ class _PartyScreenState extends State<PartyScreen> {
   }
 
   void _back() {
-    NetworkClient.instance.leaveParty();
+    // Hosts keep their room alive on back — the code they shared stays
+    // joinable (the server hands the same party back on reopen). Joining a
+    // stranger queue kills it server-side anyway. Guests DO leave, so the
+    // host isn't holding ghosts.
+    if (!_isHost) NetworkClient.instance.leaveParty();
     widget.onBack();
   }
 
@@ -252,6 +321,33 @@ class _PartyScreenState extends State<PartyScreen> {
                         style: T.body.copyWith(color: C.tx2, fontSize: 14),
                       ),
                     ),
+                    // your people, one tap — no code-typing needed on their end
+                    if (AppConfig.isLive && _code != null && _isHost)
+                      AnimatedBuilder(
+                        animation: SocialState.instance,
+                        builder: (context, _) {
+                          final friends = SocialState.instance.friends;
+                          if (friends.isEmpty) return const SizedBox.shrink();
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 22),
+                              Text('TAP A FRIEND TO INVITE · UP TO 3',
+                                  style: T.eyebrow.copyWith(color: C.tx3, fontSize: 10.5)),
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                height: 76,
+                                child: ListView(
+                                  scrollDirection: Axis.horizontal,
+                                  children: [
+                                    for (final f in friends) _inviteChip(f),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     const Spacer(),
                     if (_error != null) ...[
                       Center(child: Text(_error!, style: T.tiny.copyWith(color: C.live))),
