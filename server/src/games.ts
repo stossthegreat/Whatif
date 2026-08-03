@@ -393,14 +393,14 @@ export interface SeqDef {
 
 export const SEQ_PACK: SeqDef[] = [
   { name: 'Face Off', icon: '😜', hint: 'pull it · hold it · crown it', vibe: 'warm', beats: [
-    { kind: 'freeze', secs: 15, pool: [['UGLIEST face contest. 3…2…1 GO'], ['Best fish face 🐟 HOLD IT'], ['Double chin championship. Commit.']] },
-    { kind: 'freeze', secs: 15, pool: [['Now your best villain smirk. Freeze.'], ['The face you make reading old texts'], ['Your “I just saw my ex” face']] },
-    { kind: 'point', secs: 25, pool: [['Crown the funniest face 👑']] },
+    { kind: 'freeze', secs: 8, pool: [['UGLIEST face contest. 3…2…1 GO'], ['Best fish face 🐟 HOLD IT'], ['Double chin championship. Commit.']] },
+    { kind: 'freeze', secs: 8, pool: [['Now your best villain smirk. Freeze.'], ['The face you make reading old texts'], ['Your “I just saw my ex” face']] },
+    { kind: 'point', secs: 10, pool: [['Crown the funniest face 👑']] },
   ]},
   { name: 'Eye Contact', icon: '👀', hint: 'hold it · smile · don’t crack', vibe: 'spark', beats: [
-    { kind: 'freeze', secs: 15, pool: [['Dead-eye contact with the camera. No laughing.']] },
-    { kind: 'freeze', secs: 15, pool: [['Now a SLOW smile. Do not crack.'], ['Now wink like a movie star. Hold it.']] },
-    { kind: 'point', secs: 25, pool: [['Who broke first? Point.']] },
+    { kind: 'freeze', secs: 8, pool: [['Dead-eye contact with the camera. No laughing.']] },
+    { kind: 'freeze', secs: 8, pool: [['Now a SLOW smile. Do not crack.'], ['Now wink like a movie star. Hold it.']] },
+    { kind: 'point', secs: 10, pool: [['Who broke first? Point.']] },
   ]},
   { name: 'Hot Takes', icon: '🔥', hint: 'three takes · pick sides · argue', vibe: 'warm', beats: [
     { kind: 'poll', pool: [['Pineapple on pizza?', 'crime', 'genius'], ['Is a hotdog a sandwich?', 'yes', 'how dare you'], ['Cereal then milk?', 'right', 'chaos']] },
@@ -412,9 +412,9 @@ export const SEQ_PACK: SeqDef[] = [
     { kind: 'point', pool: [['Worst date you’ve ever been on'], ['A time you got caught lying'], ['The dumbest thing you believed as a kid']] },
   ]},
   { name: 'Rizz Off', icon: '😏', hint: 'best line · worst line · shoot your shot', vibe: 'spark', beats: [
-    { kind: 'point', secs: 40, pool: [['Best pickup line. GO']] },
-    { kind: 'point', secs: 40, pool: [['Now the WORST pickup line on purpose']] },
-    { kind: 'point', secs: 40, pool: [['Shoot your shot at the camera — smoothest wins']] },
+    { kind: 'point', secs: 15, pool: [['Best pickup line. GO']] },
+    { kind: 'point', secs: 15, pool: [['Now the WORST pickup line on purpose']] },
+    { kind: 'point', secs: 15, pool: [['Shoot your shot at the camera — smoothest wins']] },
   ]},
   { name: 'Spin the Bottle', icon: '🍾', hint: 'the bottle picks · no escape', vibe: 'spark', beats: [
     { kind: 'spin', pool: [['{target} — what’s your actual type? Be honest'], ['{target} — rate your own rizz out of 10'], ['{target} — who in this room would you take on a date? 👀']] },
@@ -433,12 +433,12 @@ export const SEQ_PACK: SeqDef[] = [
   { name: 'Impressions', icon: '🎭', hint: 'do it badly · funniest wins', vibe: 'wild', beats: [
     { kind: 'point', pool: [['Your worst BATMAN'], ['Your worst British accent'], ['Your worst influencer apology']] },
     { kind: 'point', pool: [['Talk like a movie VILLAIN 😈 — best one wins'], ['Talk like your GRANDMA 👵'], ['Talk like a CEO on a podcast 💼']] },
-    { kind: 'point', secs: 40, pool: [['Do your best EVIL LAUGH — crown the winner']] },
+    { kind: 'point', secs: 15, pool: [['Do your best EVIL LAUGH — crown the winner']] },
   ]},
   { name: 'Roast Circle', icon: '💀', hint: 'roast · get roasted · make up', vibe: 'wild', beats: [
     { kind: 'point', pool: [['Roast the person on your left (with love)'], ['Roast this app. Go.']] },
     { kind: 'point', pool: [['Roast your OWN haircut before someone else does'], ['Confess your pettiest move ever — pettiest wins']] },
-    { kind: 'point', secs: 40, pool: [['Now the best COMPLIMENT — make someone blush to make up']] },
+    { kind: 'point', secs: 15, pool: [['Now the best COMPLIMENT — make someone blush to make up']] },
   ]},
 ];
 
