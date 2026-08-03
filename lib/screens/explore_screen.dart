@@ -86,10 +86,34 @@ class _ExploreScreenState extends State<ExploreScreen> {
               padding: EdgeInsets.fromLTRB(r.gutter, 8, r.gutter, 2),
               child: Row(
                 children: [
-                  Text('Explore', style: T.big.copyWith(fontSize: 28)),
+                  Text('EXPLORE', style: T.display(30)),
                   const Spacer(),
                   if (_people.isNotEmpty)
-                    Text('${_people.length} on now', style: T.tiny),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: C.glass,
+                        borderRadius: BorderRadius.circular(R.chip),
+                        border: Border.all(color: C.hair),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6, height: 6,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: C.acid,
+                              boxShadow: [BoxShadow(color: C.acidGlow, blurRadius: 6)],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text('${_people.length} ON NOW',
+                              style: T.tiny.copyWith(
+                                  color: Colors.white, fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -116,7 +140,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                           crossAxisCount: 2,
                           mainAxisSpacing: 12,
                           crossAxisSpacing: 12,
-                          childAspectRatio: 0.82,
+                          childAspectRatio: 0.62,
                         ),
                         itemCount: _people.length,
                         itemBuilder: (context, i) {
@@ -128,6 +152,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
                             title: p.title,
                             shared: p.shared,
                             busy: p.busy,
+                            country: p.country,
+                            age: p.age,
+                            onHi: () => _open(p),
                             onTap: () => _open(p),
                           );
                         },
@@ -188,6 +215,7 @@ class _Person {
     this.thumbId,
     this.title,
     this.country,
+    this.age,
     this.shared = const [],
     this.busy = false,
   });
@@ -199,6 +227,9 @@ class _Person {
         thumbId: (m['thumbId'] as num?)?.toInt(),
         title: m['title'] as String?,
         country: m['country'] as String?,
+        // absent-tolerant: today's server doesn't send age; the card simply
+        // omits it until one does
+        age: (m['age'] as num?)?.toInt(),
         shared: ((m['shared'] as List?) ?? const []).whereType<String>().toList(),
         busy: m['busy'] == true,
       );
@@ -209,6 +240,7 @@ class _Person {
   final int? thumbId;
   final String? title;
   final String? country;
+  final int? age;
   final List<String> shared;
   final bool busy;
 }

@@ -163,10 +163,10 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
                         curve: Curves.easeOutBack,
                         builder: (context, v, _) => Transform.scale(
                           scale: v,
-                          child: Text('MATCHED', style: T.huge(30).copyWith(letterSpacing: 2, color: C.sig)),
+                          child: Text('MATCHED', style: T.display(34).copyWith(letterSpacing: 2, color: C.sig)),
                         ),
                       )
-                    : Text('FINDING…', style: T.eyebrow.copyWith(letterSpacing: 4, color: C.tx2)),
+                    : Text('FINDING…', style: T.display(16).copyWith(letterSpacing: 4, color: C.tx2)),
               ),
             ],
           );

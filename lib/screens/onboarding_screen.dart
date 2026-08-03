@@ -67,9 +67,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 children: [
                   const Spacer(flex: 2),
                   Text(
-                    'Turn on your camera & mic to get started',
+                    'CAMERA & MIC ON.\nTHAT’S THE WHOLE APP.',
                     textAlign: TextAlign.center,
-                    style: T.huge(36 * r.scale),
+                    style: T.display(32 * r.scale),
                   ),
                   const SizedBox(height: 18),
                   Text(

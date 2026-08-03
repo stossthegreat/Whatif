@@ -4,7 +4,7 @@ import 'package:flutter/physics.dart';
 import '../core/haptics.dart';
 import '../theme/tokens.dart';
 
-/// The Rivlr wordmark — white type, purple R. The brand's one accent.
+/// The Rivlr wordmark — condensed caps in the display face, purple R.
 class Wordmark extends StatelessWidget {
   const Wordmark({super.key, this.size = 28, this.color = C.tx});
   final double size;
@@ -14,17 +14,11 @@ class Wordmark extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text.rich(
       TextSpan(
-        style: TextStyle(
-          fontSize: size,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -size * 0.04,
-          color: color,
-          height: 1.0,
-        ),
+        style: T.display(size).copyWith(color: color),
         children: const [
           // the purple R is the brand's one accent
           TextSpan(text: 'R', style: TextStyle(color: C.sig)),
-          TextSpan(text: 'ivlr'),
+          TextSpan(text: 'IVLR'),
         ],
       ),
     );
@@ -138,14 +132,15 @@ class _PressState extends State<Press> with SingleTickerProviderStateMixin {
   }
 }
 
-/// The call-to-action. Elite means restraint: a clean white key, black type,
-/// no gradients, no glow. The button earns attention through contrast and
-/// space — never decoration.
+/// The call-to-action. The primary key wears the signature gradient with a
+/// soft glow — one unmistakable button per screen. `quiet: true` keeps the
+/// old white key for the rare spot where the gradient would shout twice.
 class Cta extends StatelessWidget {
-  const Cta({super.key, required this.label, this.onTap, this.height = 60});
+  const Cta({super.key, required this.label, this.onTap, this.height = 60, this.quiet = false});
   final String label;
   final VoidCallback? onTap;
   final double height;
+  final bool quiet;
 
   @override
   Widget build(BuildContext context) {
@@ -158,11 +153,17 @@ class Cta extends StatelessWidget {
           height: height,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
+            color: quiet ? Colors.white : null,
+            gradient: quiet ? null : C.gradSig,
+            borderRadius: BorderRadius.circular(R.btn),
+            border: quiet ? null : Border.all(color: const Color(0x38FFFFFF), width: 1),
+            boxShadow: quiet || onTap == null ? null : C.glowSig(),
           ),
           child: Text(label,
-              style: T.h3.copyWith(color: Colors.black, fontSize: 17, letterSpacing: -0.2)),
+              style: T.h3.copyWith(
+                  color: quiet ? Colors.black : Colors.white,
+                  fontSize: 17,
+                  letterSpacing: -0.2)),
         ),
       ),
     );

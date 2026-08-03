@@ -31,11 +31,11 @@ class WelcomeScreen extends StatelessWidget {
                   const Spacer(),
                   RichText(
                     text: TextSpan(
-                      style: T.huge(46 * r.scale),
+                      style: T.display(46 * r.scale),
                       children: const [
-                        TextSpan(text: 'Meet someone\n'),
-                        TextSpan(text: 'new', style: TextStyle(color: C.sig)),
-                        TextSpan(text: '. Every\nsingle night.'),
+                        TextSpan(text: 'MEET SOMEONE\n'),
+                        TextSpan(text: 'NEW', style: TextStyle(color: C.sig)),
+                        TextSpan(text: '. EVERY\nSINGLE NIGHT.'),
                       ],
                     ),
                   ),

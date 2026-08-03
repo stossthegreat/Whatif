@@ -33,7 +33,7 @@ class IdentityOrb extends StatelessWidget {
                 margin: const EdgeInsets.all(3),
                 width: size * 0.22, height: size * 0.22,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle, color: const Color(0xFF3BE07A),
+                  shape: BoxShape.circle, color: C.acid,
                   border: Border.all(color: C.black, width: 2),
                 ),
               ),

@@ -14,6 +14,7 @@ import 'moments_screen.dart';
 import 'settings_screen.dart';
 import 'friends_screen.dart';
 import '../widgets/avatar.dart';
+import '../widgets/person_card.dart' show flagEmoji;
 
 /// YOU — one page, everything. Your glow, your rank, the badges rooms voted
 /// you, the stats, your people (sparks), your moments. Not six screens; one
@@ -113,8 +114,18 @@ class MeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
 
-                // identity
-                Center(
+                // identity — the billboard, drowned in brand purple
+                Container(
+                  padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [C.purpleDeep.withOpacity(0.38), C.char2.withOpacity(0.45)],
+                    ),
+                    borderRadius: BorderRadius.circular(R.card),
+                    border: Border.all(color: C.hair2),
+                  ),
                   child: Column(
                     children: [
                       Press(
@@ -139,30 +150,99 @@ class MeScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Text('@${s.myHandle}', style: T.big.copyWith(fontSize: 27)),
+                      const SizedBox(height: 14),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text('@${s.myHandle}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: T.display(26)),
+                          ),
+                          if (s.age != null) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: C.glass2,
+                                borderRadius: BorderRadius.circular(R.chip),
+                                border: Border.all(color: C.hair2),
+                              ),
+                              child: Text('${s.age}',
+                                  style: T.body.copyWith(
+                                      fontSize: 13,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800)),
+                            ),
+                          ],
+                        ],
+                      ),
                       if (s.bio.isNotEmpty) ...[
                         const SizedBox(height: 6),
                         Text(s.bio,
                             textAlign: TextAlign.center,
                             style: T.tiny.copyWith(color: C.tx2, fontSize: 13)),
                       ],
-                      const SizedBox(height: 9),
+                      const SizedBox(height: 10),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                         decoration: BoxDecoration(
-                          color: C.glass,
-                          borderRadius: BorderRadius.circular(100),
+                          color: const Color(0x40000000),
+                          borderRadius: BorderRadius.circular(R.chip),
                           border: Border.all(color: C.hair2),
                         ),
                         child: Text(s.rankTitle,
                             style: T.body.copyWith(
                                 fontSize: 14, color: Colors.white, fontWeight: FontWeight.w800)),
                       ),
+                      // who you are — country, languages, interests as chips
+                      if (s.country.isNotEmpty ||
+                          s.languages.isNotEmpty ||
+                          s.interests.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 7,
+                          runSpacing: 7,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            if (s.country.isNotEmpty)
+                              _IdChip('${flagEmoji(s.country)} ${s.country}'.trim()),
+                            for (final l in s.languages.take(3)) _IdChip(l),
+                            for (final i in s.interests.take(4)) _IdChip(i),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
+
+                // the two blocks — your rep, your moments
+                SizedBox(
+                  height: 112,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _RepBlock(
+                            rank: s.rankTitle,
+                            streak: s.streak,
+                            rooms: s.matchesPlayed),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _MomentsBlock(
+                          count: s.moments.length,
+                          onTap: s.moments.isEmpty
+                              ? null
+                              : () { Buzz.tick(); MomentsScreen.push(context); },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
 
                 // people you just met — the accidental-Next recovery
                 const _RecentlyMetRailM(),
@@ -286,7 +366,7 @@ class _SectionHead extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(title, style: T.h3.copyWith(fontSize: 17)),
+        Text(title.toUpperCase(), style: T.display(15).copyWith(letterSpacing: 0.8)),
         const Spacer(),
         if (trailing != null)
           Press(
@@ -652,7 +732,7 @@ class _FriendRowM extends StatelessWidget {
                   Text(
                     friend.online ? 'online now' : 'away',
                     style: T.tiny.copyWith(
-                      color: friend.online ? const Color(0xFF3BE07A) : C.tx3,
+                      color: friend.online ? C.acid : C.tx3,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -663,5 +743,100 @@ class _FriendRowM extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// ---- identity chips + blocks ----------------------------------------------
+
+/// One fact about you — country, a language, an interest.
+class _IdChip extends StatelessWidget {
+  const _IdChip(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0x33000000),
+        borderRadius: BorderRadius.circular(R.chip),
+        border: Border.all(color: C.hair2),
+      ),
+      child: Text(label,
+          style: T.tiny.copyWith(
+              color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+/// REP — the loud block: your rank in display caps on the signature gradient.
+class _RepBlock extends StatelessWidget {
+  const _RepBlock({required this.rank, required this.streak, required this.rooms});
+  final String rank;
+  final int streak;
+  final int rooms;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: C.gradSig,
+        borderRadius: BorderRadius.circular(R.card),
+        boxShadow: C.glowSig(blur: 18, spread: -8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('REP', style: T.eyebrow.copyWith(color: Colors.white70)),
+          const SizedBox(height: 5),
+          Text(rank.toUpperCase(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: T.display(17)),
+          const Spacer(),
+          Text('🔥 $streak · 🎪 $rooms',
+              style: T.tiny.copyWith(
+                  color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+}
+
+/// MOMENTS — the quiet block beside it; taps into the gallery when there is one.
+class _MomentsBlock extends StatelessWidget {
+  const _MomentsBlock({required this.count, this.onTap});
+  final int count;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final body = Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: C.char3,
+        borderRadius: BorderRadius.circular(R.card),
+        border: Border.all(color: C.hair2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('MOMENTS', style: T.eyebrow),
+          const SizedBox(height: 5),
+          Text(count == 0 ? '—' : '$count', style: T.display(24)),
+          const Spacer(),
+          Text(
+            count == 0 ? 'big reveals land here' : 'tap to relive them ›',
+            style: T.tiny.copyWith(
+                color: count == 0 ? C.tx3 : C.sig,
+                fontWeight: FontWeight.w700,
+                fontSize: 11.5),
+          ),
+        ],
+      ),
+    );
+    if (onTap == null) return body;
+    return Press(haptic: false, onTap: onTap, child: body);
   }
 }
