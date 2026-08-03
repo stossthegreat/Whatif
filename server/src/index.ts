@@ -233,16 +233,23 @@ const ROUND_SECS: Record<string, number> = {
 };
 const secsFor = (kind: string) => ROUND_SECS[kind] ?? 13; // tap-answer kinds
 
-const CHAOS_CARDS: [string, string][] = [
-  ['🤫', 'Everyone WHISPER until the next game'],
-  ['🤥', 'Next answer must be a LIE'],
-  ['🙃', 'Flip your phone upside down. Now.'],
-  ['😐', 'Last to smile wins the room'],
-  ['👉', 'Everybody point at someone. NOW.'],
-  ['😂', '10 seconds to make the room laugh'],
-  ['🎭', 'Swap accents with the person on your left'],
-  ['🌀', 'CHAOS — the rules just changed'],
+// third element: works in a 2-person room? ("point at someone" / "person on
+// your left" are group sports — never show them to a duo)
+const CHAOS_CARDS: [string, string, boolean][] = [
+  ['🤫', 'Everyone WHISPER until the next game', true],
+  ['🤥', 'Next answer must be a LIE', true],
+  ['🙃', 'Flip your phone upside down. Now.', true],
+  ['😐', 'Last to smile wins the room', true],
+  ['👉', 'Everybody point at someone. NOW.', false],
+  ['😂', '10 seconds to make the room laugh', true],
+  ['🎭', 'Swap accents with the person on your left', false],
+  ['🌀', 'CHAOS — the rules just changed', true],
 ];
+function pickChaos(memberCount: number): [string, string] {
+  const fits = memberCount <= 2 ? CHAOS_CARDS.filter((c) => c[2]) : CHAOS_CARDS;
+  const [e, x] = pick(fits);
+  return [e, x];
+}
 
 const AWARD_POOL: [string, string][] = [
   ['😂', 'Funniest'], ['😈', 'Chaos Agent'], ['🧠', 'Smartest'],
@@ -296,7 +303,12 @@ function assignTargets(rounds: RoundWire[], members: string[]) {
 /// name, or the dice (or roulette mode) picked it. Beats auto-chain.
 function startPickedGame(cell: Cell, name?: string) {
   if (cell.inRound) return; // one game at a time
-  const seq: SeqDef = (name ? seqByName(name) : undefined) ?? pick(SEQ_PACK);
+  // Duo rooms (the most common shape) only ever get duo-suited games —
+  // "point at the person who…" copy is a group sport. A group-only name
+  // picked in a duo falls back into the duo pool instead of erroring.
+  const pool = cell.members.length <= 2 ? SEQ_PACK.filter((s) => s.duo) : SEQ_PACK;
+  const named = name ? seqByName(name) : undefined;
+  const seq: SeqDef = (named && pool.includes(named) ? named : undefined) ?? pick(pool);
 
   // roll one prompt per beat now, so the whole chain is decided up front
   cell.seqBeats = seq.beats.map((b) => {
@@ -506,9 +518,10 @@ async function formCell(memberIds: string[], modeOverride?: 'call') {
   if (mode !== 'call') {
     const chaosCount = 1 + Math.floor(Math.random() * 2);
     for (let i = 0; i < chaosCount; i++) {
-      const [e, x] = pick(CHAOS_CARDS);
-      later(cellId, 15000 + Math.floor(Math.random() * 90000), (c) =>
-        broadcastCell(c.id, { t: 'chaos', e, x }));
+      later(cellId, 15000 + Math.floor(Math.random() * 90000), (c) => {
+        const [e, x] = pickChaos(c.members.length);
+        broadcastCell(c.id, { t: 'chaos', e, x });
+      });
     }
   }
   console.log(`[cell] ${cellId} · ${live.length} people · ${mode}${cell.golden ? ' · GOLDEN' : ''}`);
@@ -1026,9 +1039,10 @@ wss.on('connection', (ws, req) => {
                 later(c.id, 6000, (c2) => { if (!c2.inRound) startPickedGame(c2); });
               }
             });
-            const [e, x] = pick(CHAOS_CARDS);
-            later(cell.id, 12000 + Math.floor(Math.random() * 20000), (c) =>
-              broadcastCell(c.id, { t: 'chaos', e, x }));
+            later(cell.id, 12000 + Math.floor(Math.random() * 20000), (c) => {
+              const [e, x] = pickChaos(c.members.length);
+              broadcastCell(c.id, { t: 'chaos', e, x });
+            });
           }
           send(user, { t: 'wheel', revive: true, rounds: cell.reviveRounds });
         } else {

@@ -211,10 +211,12 @@ class PersonCard extends StatelessWidget {
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Flexible(
-                          child: Text(name.toUpperCase(),
+                          // mixed case on purpose — the caps-name wall is
+                          // the competition's look
+                          child: Text(name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: T.display(hero ? 26 : 19)),
+                              style: T.display(hero ? 25 : 18)),
                         ),
                         if (age != null) ...[
                           const SizedBox(width: 6),

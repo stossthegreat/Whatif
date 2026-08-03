@@ -86,7 +86,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               padding: EdgeInsets.fromLTRB(r.gutter, 8, r.gutter, 2),
               child: Row(
                 children: [
-                  Text('EXPLORE', style: T.display(30)),
+                  Text('Explore', style: T.display(32)),
                   const Spacer(),
                   if (_people.isNotEmpty)
                     Container(

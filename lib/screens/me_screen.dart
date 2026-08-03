@@ -376,7 +376,7 @@ class _SectionHead extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(title.toUpperCase(), style: T.display(15).copyWith(letterSpacing: 0.8)),
+        Text(title, style: T.display(15).copyWith(letterSpacing: 0.5)),
         const Spacer(),
         if (trailing != null)
           Press(

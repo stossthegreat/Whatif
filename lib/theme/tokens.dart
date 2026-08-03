@@ -61,20 +61,20 @@ class T {
   T._();
   static const _f = null; // body voice: platform default (SF Pro / Roboto)
 
-  /// The brand voice — Anton, tall condensed caps. Headers, wordmark, big
-  /// numbers, names on cards. Single weight: w400 always (anything bolder
-  /// fakes it). Write literals ALREADY UPPERCASE; `.toUpperCase()` only on
-  /// dynamic strings.
+  /// The brand voice — Righteous: rounded techno display, MIXED CASE.
+  /// Headers, wordmark, big numbers, names. Single weight: w400 always
+  /// (anything bolder fakes it). Deliberately not condensed caps — that
+  /// silhouette belongs to the competition.
   // decoration: none on EVERY style — a Text outside a Material ancestor
   // otherwise inherits Flutter's error style (yellow double underline).
   static const _deco = TextDecoration.none;
 
   static TextStyle display(double size) => TextStyle(
-        fontFamily: 'Anton',
+        fontFamily: 'Righteous',
         fontSize: size,
         fontWeight: FontWeight.w400,
-        letterSpacing: size * 0.02,
-        height: 1.02,
+        letterSpacing: size * 0.01,
+        height: 1.06,
         color: C.tx,
         decoration: _deco,
       );
