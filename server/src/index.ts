@@ -768,6 +768,11 @@ wss.on('connection', (ws) => {
       case 'next': leaveCell(user); enqueue(user); break;
       case 'leave': dequeue(id); leaveCell(user); user.state = 'idle'; break;
       case 'host': {
+        // IDEMPOTENT: reopening the screen must NOT rotate the code — a code
+        // the host already shared has to stay joinable while they're online.
+        const heldCode = partyByUser.get(id);
+        const held = heldCode ? parties.get(heldCode) : undefined;
+        if (held && held.hostId === id) { send(user, partyState(held)); break; }
         leaveParty(id); dequeue(id); leaveCell(user);
         const p: Party = { code: newPartyCode(), hostId: id, members: [id] };
         parties.set(p.code, p);
