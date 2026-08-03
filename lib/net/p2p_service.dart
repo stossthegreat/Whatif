@@ -80,6 +80,7 @@ class P2PService {
       }
       _local = local;
       localRenderer.srcObject = local;
+      _bump(); // renderers are live now — swap the black placeholder for video
       try {
         await rtc.Helper.setSpeakerphoneOn(true);
       } catch (_) {}
