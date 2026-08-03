@@ -80,7 +80,7 @@ export function mountMedia(app: Express): void {
     if (!uid) return res.status(401).json({ err: 'auth' });
     if (!dbEnabled) return res.status(503).json({ err: 'noDb' });
     const kind = String(req.query.kind ?? '');
-    if (!['photo', 'voice', 'avatar'].includes(kind)) return res.status(400).json({ err: 'kind' });
+    if (!['photo', 'voice', 'avatar', 'thumb'].includes(kind)) return res.status(400).json({ err: 'kind' });
     const mime = String(req.headers['content-type'] ?? '');
     if (!MIMES.has(mime)) return res.status(415).json({ err: 'mime' });
     const bytes = req.body as Buffer;
@@ -95,10 +95,22 @@ export function mountMedia(app: Express): void {
     if (id == null) return res.status(500).json({ err: 'db' });
 
     if (kind === 'avatar') {
-      // swap the avatar pointer and delete the old blob
+      // swap the avatar pointer and delete the old blob. NEVER upload the
+      // small derivative with this kind — that's what silently destroyed
+      // every full-size avatar before build 61 (the thumb re-entered here,
+      // repointed photo_media_id and deleted the photo it belonged to).
       const prev = await run('SELECT photo_media_id FROM users WHERE uid=$1', [uid]);
       await run('UPDATE users SET photo_media_id=$2 WHERE uid=$1', [uid, id]);
       const old = prev?.rows?.[0]?.photo_media_id;
+      if (old != null) {
+        dropAvatarCache(Number(old));
+        void run('DELETE FROM media WHERE id=$1 AND owner=$2', [old, uid]);
+      }
+    } else if (kind === 'thumb') {
+      // the grid derivative: swaps ONLY the thumb pointer, full photo untouched
+      const prev = await run('SELECT photo_thumb_id FROM users WHERE uid=$1', [uid]);
+      await run('UPDATE users SET photo_thumb_id=$2 WHERE uid=$1', [uid, id]);
+      const old = prev?.rows?.[0]?.photo_thumb_id;
       if (old != null) {
         dropAvatarCache(Number(old));
         void run('DELETE FROM media WHERE id=$1 AND owner=$2', [old, uid]);
@@ -123,18 +135,22 @@ export function mountMedia(app: Express): void {
     const r = await run('SELECT owner, kind, mime, bytes, pair_key FROM media WHERE id=$1', [id]);
     const row = r?.rows?.[0];
     if (!row) return res.status(404).json({ err: 'gone' });
-    const allowed = row.kind === 'avatar'
+    const allowed = row.kind === 'avatar' || row.kind === 'thumb'
         || row.owner === uid
         || (typeof row.pair_key === 'string' && row.pair_key.split('|').includes(uid));
     if (!allowed) return res.status(403).json({ err: 'forbidden' });
     res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
     res.setHeader('ETag', String(id));
-    // only avatars are cached: they're small, immutable and readable by any
-    // signed-in user, so there is no per-viewer authorization to preserve
-    if (row.kind === 'avatar') {
+    // face derivatives are cached: small, immutable, readable by any signed-in
+    // user, so there is no per-viewer authorization to preserve
+    if (row.kind === 'avatar' || row.kind === 'thumb') {
       avatarCacheSet(id, row.mime as string, row.bytes as Buffer);
     }
-    res.type(row.mime as string).send(row.bytes as Buffer);
+    // 'audio/m4a' is not a registered type and iOS AVPlayer often refuses to
+    // sniff the container from an extensionless URL — serve the real one
+    const mime = row.mime === 'audio/m4a' || row.mime === 'audio/x-m4a'
+        ? 'audio/mp4' : (row.mime as string);
+    res.type(mime).send(row.bytes as Buffer);
   });
 
   app.get('/api/gifs', async (req: Request, res: Response) => {
@@ -170,16 +186,20 @@ export function mountMedia(app: Express): void {
 export function startRetentionSweep(): void {
   const sweep = () => {
     if (!dbEnabled) return;
-    void run("DELETE FROM media WHERE kind <> 'avatar' AND created_at < now() - interval '90 days'");
+    void run("DELETE FROM media WHERE kind NOT IN ('avatar','thumb') AND created_at < now() - interval '90 days'");
   };
   sweep();
   setInterval(sweep, 24 * 3600_000);
 }
 
 /// Stamp a media row into a DM pair (ownership verified) — returns ok.
+/// IDEMPOTENT: a resend of the same dm (reconnect retries do this) must not
+/// fail just because the first attempt already claimed the row.
 export async function claimForPair(mediaId: number, owner: string, pairKey: string): Promise<boolean> {
   const r = await run(
-    'UPDATE media SET pair_key=$3 WHERE id=$1 AND owner=$2 AND pair_key IS NULL RETURNING id',
+    `UPDATE media SET pair_key=$3
+      WHERE id=$1 AND owner=$2 AND (pair_key IS NULL OR pair_key=$3)
+      RETURNING id`,
     [mediaId, owner, pairKey]);
   return !!r?.rows?.length;
 }

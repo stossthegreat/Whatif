@@ -34,10 +34,18 @@ export async function initSocial(): Promise<void> {
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS discoverable BOOLEAN NOT NULL DEFAULT true',
     // small avatar derivative — grid cards must never pull the 1MB original
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_thumb_id BIGINT',
+    // your room code — minted once, yours forever (b61)
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS room_code TEXT',
   ];
   for (const q of alters) await run(q);
   await run(`CREATE UNIQUE INDEX IF NOT EXISTS users_apple_idx
              ON users(apple_id) WHERE apple_id IS NOT NULL`);
+  await run(`CREATE UNIQUE INDEX IF NOT EXISTS users_room_code
+             ON users(room_code) WHERE room_code IS NOT NULL`);
+  // handle search (prefix) + explore's freshest-first roster
+  await run(`CREATE INDEX IF NOT EXISTS users_name_lower
+             ON users (lower(name) text_pattern_ops)`);
+  await run('CREATE INDEX IF NOT EXISTS users_last_seen ON users (last_seen DESC)');
 
   await run(`CREATE TABLE IF NOT EXISTS media (
     id BIGSERIAL PRIMARY KEY,
@@ -50,6 +58,10 @@ export async function initSocial(): Promise<void> {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`);
   await run('CREATE INDEX IF NOT EXISTS media_owner ON media(owner)');
+  // b61: 'thumb' joined the kind set — the pre-existing CHECK must widen
+  await run('ALTER TABLE media DROP CONSTRAINT IF EXISTS media_kind_check');
+  await run(`ALTER TABLE media ADD CONSTRAINT media_kind_check
+             CHECK (kind IN ('photo','voice','avatar','thumb'))`);
 
   await run(`CREATE TABLE IF NOT EXISTS friendships (
     a TEXT NOT NULL, b TEXT NOT NULL,
@@ -571,15 +583,15 @@ export function linkApple(uid: string, appleId: string): void {
 /// grid. Thumb id is preferred over the full photo by every caller.
 export async function cardsFor(uids: string[]): Promise<Map<string, {
   name: string; hue: number; thumbId: number | null; photoId: number | null;
-  title: string | null; country: string | null; interests: string[];
+  title: string | null; country: string | null; interests: string[]; age: number | null;
 }>> {
   const out = new Map<string, {
     name: string; hue: number; thumbId: number | null; photoId: number | null;
-    title: string | null; country: string | null; interests: string[];
+    title: string | null; country: string | null; interests: string[]; age: number | null;
   }>();
   if (!dbEnabled || !uids.length) return out;
   const r = await run(
-    `SELECT uid, name, hue, photo_media_id, photo_thumb_id, active_title, country, interests
+    `SELECT uid, name, hue, photo_media_id, photo_thumb_id, active_title, country, interests, age
        FROM users WHERE uid = ANY($1) AND discoverable`,
     [uids]);
   for (const x of r?.rows ?? []) {
@@ -591,9 +603,79 @@ export async function cardsFor(uids: string[]): Promise<Map<string, {
       title: (x.active_title as string | null) ?? null,
       country: (x.country as string | null) ?? null,
       interests: ((x.interests as string[] | null) ?? []),
+      age: x.age == null ? null : Number(x.age),
     });
   }
   return out;
+}
+
+/// Handle search — prefix match riding the users_name_lower index.
+/// Discoverable users only; blocked filtering happens at the verb layer.
+export async function searchUsers(q: string, viewerUid: string): Promise<{
+  uid: string; name: string; hue: number; thumbId: number | null;
+  title: string | null; country: string | null; age: number | null;
+}[]> {
+  if (!dbEnabled) return [];
+  const safe = q.toLowerCase().replace(/[%_\\]/g, '');
+  if (safe.length < 2) return [];
+  const r = await run(
+    `SELECT uid, name, hue, photo_media_id, photo_thumb_id, active_title, country, age
+       FROM users
+      WHERE discoverable AND uid <> $2 AND lower(name) LIKE $1 || '%'
+      ORDER BY last_seen DESC LIMIT 8`,
+    [safe, viewerUid]);
+  return (r?.rows ?? []).map((x) => ({
+    uid: x.uid as string,
+    name: (x.name as string) ?? 'someone',
+    hue: Number(x.hue ?? 210),
+    thumbId: x.photo_thumb_id != null ? Number(x.photo_thumb_id)
+        : x.photo_media_id != null ? Number(x.photo_media_id) : null,
+    title: (x.active_title as string | null) ?? null,
+    country: (x.country as string | null) ?? null,
+    age: x.age == null ? null : Number(x.age),
+  }));
+}
+
+/// Everyone discoverable, freshest first — Explore's beyond-online roster.
+export async function discoverRoster(exclude: string[], limit: number): Promise<{
+  uid: string; name: string; hue: number; thumbId: number | null;
+  title: string | null; country: string | null; interests: string[];
+  age: number | null; gender: string | null; meet: string | null;
+}[]> {
+  if (!dbEnabled || limit <= 0) return [];
+  const r = await run(
+    `SELECT uid, name, hue, photo_media_id, photo_thumb_id, active_title,
+            country, interests, age, gender, meet
+       FROM users
+      WHERE discoverable AND NOT (uid = ANY($1))
+      ORDER BY last_seen DESC LIMIT $2`,
+    [exclude, limit]);
+  return (r?.rows ?? []).map((x) => ({
+    uid: x.uid as string,
+    name: (x.name as string) ?? 'someone',
+    hue: Number(x.hue ?? 210),
+    thumbId: x.photo_thumb_id != null ? Number(x.photo_thumb_id)
+        : x.photo_media_id != null ? Number(x.photo_media_id) : null,
+    title: (x.active_title as string | null) ?? null,
+    country: (x.country as string | null) ?? null,
+    interests: ((x.interests as string[] | null) ?? []),
+    age: x.age == null ? null : Number(x.age),
+    gender: (x.gender as string | null) ?? null,
+    meet: (x.meet as string | null) ?? null,
+  }));
+}
+
+/// The caller's own photo pointers — welcome uses this to heal stale clients.
+export async function userPhotoIds(uid: string):
+    Promise<{ photoId: number | null; thumbId: number | null } | null> {
+  if (!dbEnabled) return null;
+  const r = await run('SELECT photo_media_id, photo_thumb_id FROM users WHERE uid=$1', [uid]);
+  const x = r?.rows?.[0];
+  if (!x) return null;
+  return {
+    photoId: x.photo_media_id == null ? null : Number(x.photo_media_id),
+    thumbId: x.photo_thumb_id == null ? null : Number(x.photo_thumb_id),
+  };
 }
 
 export async function userCard(uid: string):

@@ -11,6 +11,7 @@ import '../net/p2p_service.dart';
 import '../net/rtc_service.dart';
 import '../state/session.dart';
 import '../state/social.dart';
+import '../widgets/avatar.dart';
 import '../theme/tokens.dart';
 import '../widgets/identity_orb.dart';
 import '../widgets/countdown_ring.dart';
@@ -1112,7 +1113,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Row(
                         children: [
-                          IdentityOrb(hue: p.hue, size: 42),
+                          Avatar(
+                              hue: p.hue,
+                              photoId: p.uid == null
+                                  ? null
+                                  : SocialState.instance.photoOf(p.uid!),
+                              size: 42),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text('@${p.name}',
@@ -2653,7 +2659,13 @@ class _FloatingEmojiState extends State<_FloatingEmoji> with SingleTickerProvide
             opacity: opacity.clamp(0, 1),
             child: Transform.scale(
                 scale: 0.7 + 0.5 * (t * 3).clamp(0, 1),
-                child: Text(widget.emoji, style: const TextStyle(fontSize: 34))),
+                // Overlay entries float above every Material — without this
+                // wrapper the emoji renders in the yellow-underline error style
+                child: Material(
+                    type: MaterialType.transparency,
+                    child: Text(widget.emoji,
+                        style: const TextStyle(
+                            fontSize: 34, decoration: TextDecoration.none)))),
           ),
         );
       },

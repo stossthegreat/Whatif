@@ -469,7 +469,7 @@ class _PersonRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            IdentityOrb(hue: friend.hue, size: 38, live: friend.online),
+            Avatar(hue: friend.hue, photoId: friend.photoId, size: 38, live: friend.online),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -570,7 +570,7 @@ class _RecentlyMetRailM extends StatelessWidget {
                     onTap: () { Buzz.tick(); FriendsScreen.push(context, tab: 3); },
                     child: Column(
                       children: [
-                        IdentityOrb(hue: m.hue, size: 52),
+                        Avatar(hue: m.hue, photoId: m.photoId, size: 52),
                         const SizedBox(height: 7),
                         Text('@${m.name}',
                             style: T.tiny.copyWith(
@@ -730,7 +730,7 @@ class _FriendRowM extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(
           children: [
-            IdentityOrb(hue: friend.hue, size: 36, live: friend.online),
+            Avatar(hue: friend.hue, photoId: friend.photoId, size: 36, live: friend.online),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

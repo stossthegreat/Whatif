@@ -31,6 +31,7 @@ class PersonCard extends StatelessWidget {
     this.age,
     this.onHi,
     this.hero = false,
+    this.online = true,
     required this.onTap,
   });
 
@@ -46,6 +47,10 @@ class PersonCard extends StatelessWidget {
 
   /// The full-width billboard treatment for the #1 ranked person.
   final bool hero;
+
+  /// Away people (not connected right now) can't be rung — grey dot, no
+  /// say-hi key; the tap-through offers Add friend instead.
+  final bool online;
 
   final VoidCallback onTap;
 
@@ -131,14 +136,14 @@ class PersonCard extends StatelessWidget {
                             height: 6,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: busy ? C.tx3 : C.acid,
-                              boxShadow: busy
-                                  ? null
-                                  : const [BoxShadow(color: C.acidGlow, blurRadius: 6)],
+                              color: online && !busy ? C.acid : C.tx3,
+                              boxShadow: online && !busy
+                                  ? const [BoxShadow(color: C.acidGlow, blurRadius: 6)]
+                                  : null,
                             ),
                           ),
                           const SizedBox(width: 6),
-                          Text(busy ? 'in a room' : 'free now',
+                          Text(!online ? 'away' : (busy ? 'in a room' : 'free now'),
                               style: T.tiny.copyWith(
                                   color: Colors.white,
                                   fontSize: 10.5,
@@ -168,8 +173,8 @@ class PersonCard extends StatelessWidget {
                   ],
                 ),
               ),
-              // say hi — the one loud key on the card
-              if (!busy && onHi != null)
+              // say hi — the one loud key on the card (only when they can ring)
+              if (online && !busy && onHi != null)
                 Positioned(
                   right: 10,
                   top: 10,

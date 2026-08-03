@@ -1,10 +1,20 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 
 /// Stateless HMAC auth tokens for the HTTP surface (media uploads etc.).
-/// Minted into every `welcome`; verified by express middleware. If
-/// AUTH_SECRET isn't set we use a random per-boot secret — tokens then die on
-/// redeploy, which is harmless because the client refreshes on every welcome.
+/// Minted into every `welcome`; verified by express middleware.
+///
+/// AUTH_SECRET MUST be set in production. A random per-boot secret is NOT
+/// harmless: every already-rendered image URL 401s the moment the process
+/// restarts (and multiple replicas can never agree) — the exact
+/// "text works but photos don't" symptom. The client does re-mint on
+/// welcome, but everything in flight or cached dies.
 const SECRET = process.env.AUTH_SECRET || randomBytes(32).toString('hex');
+if (!process.env.AUTH_SECRET) {
+  console.warn(
+    '⚠️  AUTH_SECRET is not set — media tokens die on every restart/redeploy ' +
+    '(photos & voice will intermittently 401 while text keeps working). ' +
+    'Set a long random AUTH_SECRET in the environment.');
+}
 
 export function mintAuthToken(uid: string, ttlMs = 24 * 3600_000): string {
   const payload = Buffer.from(`${uid}|${Date.now() + ttlMs}`).toString('base64url');

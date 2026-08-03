@@ -11,7 +11,9 @@ import '../net/image_upload.dart';
 import '../net/network_client.dart';
 import '../state/chat.dart';
 import '../state/session.dart';
+import '../state/social.dart';
 import '../theme/tokens.dart';
+import '../widgets/avatar.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
 import 'friend_profile_screen.dart';
@@ -65,10 +67,22 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     Track.screen('chat');
     ChatStore.instance.openThread(widget.uid);
+    // rejected sends must SAY so — silence here hid every media bug pre-b61
+    _errSub = NetworkClient.instance.events.listen((m) {
+      if (!mounted || m['t'] != 'err') return;
+      switch (m['code']) {
+        case 'badMedia': _toast('that didn’t send — try again');
+        case 'notFriends': _toast('you can only message friends');
+        case 'blocked': _toast('you can’t message this person');
+      }
+    });
   }
+
+  StreamSubscription<Map<String, dynamic>>? _errSub;
 
   @override
   void dispose() {
+    _errSub?.cancel();
     if (_sentTyping) NetworkClient.instance.typing(widget.uid, false);
     _typingOff?.cancel();
     ChatStore.instance.closeThread();
@@ -94,42 +108,80 @@ class _ChatScreenState extends State<ChatScreen> {
       if (id != null) {
         ChatStore.instance.sendMedia(widget.uid, 'photo', id);
       } else {
-        _toast('photo didn’t send — try again');
+        // the real reason, not a shrug — 413/415/401 all mean different fixes
+        final why = Api.lastUploadError;
+        _toast(why == null || why.isEmpty
+            ? 'photo didn’t send — try again'
+            : 'photo didn’t send — $why');
       }
     } catch (_) {
       if (mounted) setState(() => _uploading = false);
     }
   }
 
-  Future<void> _startRecording() async {
+  /// The whole record flow is one serialized state machine. The pre-b61 bug:
+  /// releasing the button before the async start resolved left the recorder
+  /// running forever (stop early-returned on !_recording), and every later
+  /// start() threw into a silent catch — the mic was dead until re-open.
+  Future<void>? _startFuture;
+
+  Future<void> _startRecording() {
+    final f = _startRecordingInner();
+    _startFuture = f;
+    return f;
+  }
+
+  Future<void> _startRecordingInner() async {
     if (_recording || _uploading) return;
     try {
-      if (!await _rec.hasPermission()) return;
+      if (!await _rec.hasPermission()) {
+        _toast('mic is off — enable it in Settings to send voice notes');
+        return;
+      }
       final dir = await getTemporaryDirectory();
       await _rec.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000),
           path: '${dir.path}/vn_${DateTime.now().millisecondsSinceEpoch}.m4a');
+      if (!mounted) { await _rec.stop(); return; }
       Buzz.impact();
       setState(() { _recording = true; _recStart = DateTime.now(); });
-    } catch (_) {/* mic denied — nothing to do */}
+      // hard cap well under the server's 1MB ceiling (64kbps ≈ 128s max)
+      Future<void>.delayed(const Duration(seconds: 90), () {
+        if (mounted && _recording) _stopRecording();
+      });
+    } catch (_) {
+      _toast('couldn’t start recording — try again');
+    }
   }
 
   Future<void> _stopRecording({bool cancel = false}) async {
+    // the gesture can end before start() resolves — wait it out, never race it
+    try { await _startFuture; } catch (_) {}
     if (!_recording) return;
     final path = await _rec.stop();
     final dur = DateTime.now().difference(_recStart ?? DateTime.now());
+    if (!mounted) return;
     setState(() => _recording = false);
-    if (cancel || path == null || dur.inMilliseconds < 600) return;
+    if (cancel || path == null) return;
+    if (dur.inMilliseconds < 600) {
+      _toast('hold the mic to record');
+      return;
+    }
     setState(() => _uploading = true);
     try {
       final bytes = await XFile(path).readAsBytes();
-      final id = await Api.uploadMedia(bytes, kind: 'voice', mime: 'audio/m4a');
+      // audio/mp4 is the registered type for an m4a container — iOS refuses
+      // to play the made-up 'audio/m4a' from an extensionless URL
+      final id = await Api.uploadMedia(bytes, kind: 'voice', mime: 'audio/mp4');
       if (!mounted) return;
       setState(() => _uploading = false);
       if (id != null) {
         ChatStore.instance
             .sendMedia(widget.uid, 'voice', id, meta: {'durMs': dur.inMilliseconds});
       } else {
-        _toast('voice note didn’t send');
+        final why = Api.lastUploadError;
+        _toast(why == null || why.isEmpty
+            ? 'voice note didn’t send'
+            : 'voice note didn’t send — $why');
       }
     } catch (_) {
       if (mounted) setState(() => _uploading = false);
@@ -145,12 +197,25 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() => _playingMediaId = null);
       return;
     }
-    setState(() => _playingMediaId = id);
     await _player.stop();
-    await _player.play(UrlSource(Api.mediaUrl(id)));
-    _player.onPlayerComplete.first.then((_) {
-      if (mounted && _playingMediaId == id) setState(() => _playingMediaId = null);
-    });
+    try {
+      // recording leaves the session in playAndRecord (earpiece, whisper
+      // volume) — force real playback routing before every play
+      await _player.setAudioContext(AudioContext(
+        iOS: AudioContextIOS(category: AVAudioSessionCategory.playback),
+      ));
+    } catch (_) {/* non-iOS or old plugin — default context is fine */}
+    try {
+      await _player.play(UrlSource(Api.mediaUrl(id)));
+      if (!mounted) return;
+      setState(() => _playingMediaId = id); // only once play actually started
+      _player.onPlayerComplete.first.then((_) {
+        if (mounted && _playingMediaId == id) setState(() => _playingMediaId = null);
+      });
+    } catch (_) {
+      if (mounted) setState(() => _playingMediaId = null);
+      _toast('couldn’t play that — try again');
+    }
   }
 
   void _gifPanel() {
@@ -349,7 +414,10 @@ class _ChatScreenState extends State<ChatScreen> {
                           FriendProfileScreen.push(context,
                               uid: widget.uid, name: widget.name, hue: widget.hue);
                         },
-                        child: IdentityOrb(hue: widget.hue, size: 36),
+                        child: Avatar(
+                            hue: widget.hue,
+                            photoId: SocialState.instance.photoOf(widget.uid),
+                            size: 36),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -453,6 +521,9 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                         const SizedBox(width: 6),
                         GestureDetector(
+                          // opaque: the WHOLE 40px circle is pressable, not
+                          // just the icon glyph (deferToChild ignored the ring)
+                          behavior: HitTestBehavior.opaque,
                           onLongPressStart: (_) => _startRecording(),
                           onLongPressEnd: (_) => _stopRecording(),
                           onLongPressCancel: () => _stopRecording(cancel: true),

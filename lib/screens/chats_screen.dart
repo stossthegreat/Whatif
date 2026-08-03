@@ -357,7 +357,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                         ],
                       ),
                     ),
-                  IdentityOrb(hue: c.hue, size: 46, live: c.online),
+                  Avatar(hue: c.hue, photoId: c.photoId, size: 46, live: c.online),
                   const SizedBox(width: 13),
                   Expanded(
                     child: Column(

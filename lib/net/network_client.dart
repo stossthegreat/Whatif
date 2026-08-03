@@ -26,8 +26,32 @@ class NetworkClient {
   bool mediaEnabled = false;
   bool gifsEnabled = false;
   bool _closing = false;
+  bool _welcomed = false;
 
   bool get connected => _ch != null;
+
+  /// Intents that must SURVIVE a reconnect gap. Live-room verbs are
+  /// deliberately absent — replaying a stale answer/vote/play after a 2s
+  /// blackout would be wrong; losing a friend request or a message is worse.
+  static const _queueable = {
+    'dm', 'dmRead', 'friendRequest', 'friendAccept', 'friendDecline',
+    'friendsSnapshot', 'chats', 'chatHistory', 'setProfile', 'pinChat',
+    'rate', 'setTier',
+  };
+  final List<Map<String, dynamic>> _outbox = [];
+
+  void _flushOutbox() {
+    if (_ch == null || _outbox.isEmpty) return;
+    final pending = List<Map<String, dynamic>>.from(_outbox);
+    _outbox.clear();
+    for (final m in pending) {
+      try {
+        _ch?.sink.add(jsonEncode(m));
+      } catch (_) {
+        _outbox.add(m);
+      }
+    }
+  }
 
   void connect() {
     if (_ch != null || !AppConfig.isLive) return;
@@ -61,6 +85,16 @@ class NetworkClient {
             final feats = (m['features'] as Map?)?.cast<String, dynamic>();
             mediaEnabled = feats?['media'] == true;
             gifsEnabled = feats?['gifs'] == true;
+            // heal a stale local photo id — the server's word is the truth
+            // (pre-b61 phones can hold the id of a deleted blob)
+            final photo = (m['photo'] as Map?)?.cast<String, dynamic>();
+            if (photo != null) {
+              AppSession.instance.healPhotoId((photo['id'] as num?)?.toInt());
+            }
+            // the socket is fully open for business — release anything the
+            // reconnect gap held back
+            _welcomed = true;
+            _flushOutbox();
           }
           _events.add(m);
         } catch (_) {/* ignore malformed */}
@@ -94,15 +128,31 @@ class NetworkClient {
 
   void _retry() {
     _ch = null;
+    _welcomed = false;
     if (!_closing && AppConfig.isLive) {
       Future<void>.delayed(const Duration(seconds: 2), connect);
     }
   }
 
+  /// Fire-and-forget for live verbs; store-and-forward for social intents.
+  /// The pre-b61 version dropped EVERYTHING silently while the 2s reconnect
+  /// window was open — the root of "friend requests sometimes don't work".
   void send(Map<String, dynamic> m) {
+    final canQueue = _queueable.contains(m['t']);
+    if (_ch == null || (!_welcomed && canQueue && m['t'] != 'hello')) {
+      if (canQueue) {
+        _outbox.add(m);
+        while (_outbox.length > 50) {
+          _outbox.removeAt(0);
+        }
+      }
+      return;
+    }
     try {
       _ch?.sink.add(jsonEncode(m));
-    } catch (_) {}
+    } catch (_) {
+      if (canQueue) _outbox.add(m);
+    }
   }
 
   void play([String mode = 'hang']) => send({'t': 'play', 'mode': mode});
@@ -167,6 +217,7 @@ class NetworkClient {
 
   // ---- explore --------------------------------------------------------------
   void explore() => send({'t': 'explore'});
+  void searchUsers(String q) => send({'t': 'searchUsers', 'q': q});
 
   /// Ring someone from the Explore grid. Same machinery as a friend call, but
   /// origin 'explore' lets it reach strangers and forms a NORMAL room (games,

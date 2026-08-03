@@ -5,6 +5,7 @@ import '../core/haptics.dart';
 import '../core/sound.dart';
 import '../state/session.dart';
 import '../state/social.dart';
+import 'avatar.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
@@ -69,11 +70,16 @@ class _MatchOverlayState extends State<MatchOverlay> with SingleTickerProviderSt
                             children: [
                               Transform.translate(
                                 offset: Offset(-70 + 34 * t, 0),
-                                child: IdentityOrb(hue: AppSession.instance.myHue, size: 84, ring: C.sig),
+                                child: Avatar(
+                                    hue: AppSession.instance.myHue,
+                                    photoId: AppSession.instance.photoId,
+                                    size: 84,
+                                    ring: C.sig),
                               ),
                               Transform.translate(
                                 offset: Offset(70 - 34 * t, 0),
-                                child: IdentityOrb(hue: f.hue, size: 84, ring: C.sig),
+                                child: Avatar(
+                                    hue: f.hue, photoId: f.photoId, size: 84, ring: C.sig),
                               ),
                             ],
                           ),

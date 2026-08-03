@@ -71,12 +71,13 @@ class RecentMeet {
 
 /// One pending "Would you meet them again?" question.
 class RatePromptItem {
-  RatePromptItem({required this.cellId, required this.uid, required this.name, required this.hue, required this.secs});
+  RatePromptItem({required this.cellId, required this.uid, required this.name, required this.hue, required this.secs, this.photoId});
   final String cellId;
   final String uid;
   final String name;
   final double hue;
   final int secs;
+  final int? photoId;
 }
 
 /// An incoming call, ringing right now.
@@ -127,6 +128,19 @@ class SocialState extends ChangeNotifier {
   bool _attached = false;
 
   int get reqCount => reqsIn.length;
+
+  /// Resolve a face for any uid we know socially — friends first, then
+  /// recently met. Party members and room people-sheets use this to show
+  /// photos their payloads don't carry.
+  int? photoOf(String uid) {
+    for (final f in friends) {
+      if (f.uid == uid) return f.photoId;
+    }
+    for (final r in recent) {
+      if (r.uid == uid) return r.photoId;
+    }
+    return null;
+  }
   List<FriendInfo> get onlineFriends => friends.where((f) => f.online).toList();
 
   void attach() {
@@ -178,6 +192,7 @@ class SocialState extends ChangeNotifier {
             name: (p['name'] as String?) ?? 'someone',
             hue: ((p['hue'] as num?) ?? 210).toDouble(),
             secs: ((p['secs'] as num?) ?? 0).toInt(),
+            photoId: (p['photoId'] as num?)?.toInt(),
           ));
         }
         notifyListeners();
