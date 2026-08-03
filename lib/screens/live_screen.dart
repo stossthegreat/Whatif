@@ -1133,7 +1133,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       return Text('friends ✓',
           style: T.tiny.copyWith(color: C.sig, fontWeight: FontWeight.w800, fontSize: 12.5));
     }
-    if (_friendReqSent.contains(uid)) {
+    // persistent outgoing requests (server truth) OR sent-this-room
+    if (SocialState.instance.requested(uid) || _friendReqSent.contains(uid)) {
       return Text('requested ✓',
           style: T.tiny.copyWith(color: C.tx2, fontWeight: FontWeight.w800, fontSize: 12.5));
     }
