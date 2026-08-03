@@ -6,10 +6,12 @@ import '../core/analytics.dart';
 import '../core/camera_service.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
+import '../models/game.dart';
 import '../state/session.dart';
 import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
+import '../widgets/portal_ring.dart';
 import '../widgets/self_view.dart';
 import 'settings_screen.dart';
 
@@ -41,12 +43,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  late final AnimationController _glow = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1600))
-    ..repeat(reverse: true);
-
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// 'hang' | 'roulette' — what TAP TO START launches. Groups is a door, not
   /// a lane: its chip navigates immediately and never becomes the selection.
   String _mode = 'hang';
@@ -85,7 +82,6 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _glow.dispose();
     // Leaving Home always releases the lens — finding, party and live rooms
     // (LiveKit / WebRTC) open their own capture session.
     CameraService.instance.dispose();
@@ -165,66 +161,18 @@ class _HomeScreenState extends State<HomeScreen>
                 const _StorageBanner(),
                 _ChaosPill(onTap: () => widget.onPlay('roulette')),
                 const Spacer(),
-                // hero — taps fall through to the stage
+                // the Portal — Rivlr's living mark; taps fall through to the stage
                 IgnorePointer(
-                  child: AnimatedBuilder(
-                    animation: _glow,
-                    builder: (context, _) {
-                      final v = _glow.value;
-                      return SizedBox(
-                        height: 200,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          alignment: Alignment.center,
-                          children: [
-                            Container(
-                              width: 250 + 26 * v,
-                              height: 250 + 26 * v,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: RadialGradient(colors: [
-                                  C.sig.withOpacity(0.26 + 0.14 * v),
-                                  C.sig.withOpacity(0),
-                                ]),
-                              ),
-                            ),
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'TAP TO START',
-                                  textAlign: TextAlign.center,
-                                  style: T.display(42 * r.scale).copyWith(
-                                    shadows: const [
-                                      Shadow(color: Color(0xB3000000), blurRadius: 18),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                AnimatedSwitcher(
-                                  duration: M.quick,
-                                  child: Text(
-                                    _modeLine,
-                                    key: ValueKey(_mode),
-                                    style: T.body.copyWith(
-                                      color: Colors.white,
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.w700,
-                                      shadows: const [
-                                        Shadow(color: Color(0xCC000000), blurRadius: 10),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                  child: PortalRing(
+                    title: 'TAP TO\nSTART',
+                    line: _modeLine,
+                    size: 258 * r.scale,
                   ),
                 ),
                 const Spacer(),
+                // tonight's games — the billboard for what they don't have
+                _GameTicker(onTap: _start),
+                const SizedBox(height: 12),
                 // the three ways in — chips, not slabs
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: r.gutter),
@@ -352,9 +300,9 @@ class _StorageBanner extends StatelessWidget {
   }
 }
 
-/// The live headcount — acid dot + the real number when it's big enough to
-/// impress; just "LIVE" while the world is small; nothing at all until the
-/// server has actually spoken.
+/// The live headcount — acid dot + the actual number of people, owner's
+/// call. Nothing at all until the server has actually spoken (an invented
+/// number must never leak into a live build).
 class _LivePill extends StatelessWidget {
   const _LivePill();
 
@@ -368,7 +316,6 @@ class _LivePill extends StatelessWidget {
       builder: (context, _) {
         final s = AppSession.instance;
         if (AppConfig.isLive && !s.serverDriven) return const SizedBox.shrink();
-        final showCount = !AppConfig.isLive || s.liveCount >= 100;
         return Container(
           height: 34,
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -391,7 +338,7 @@ class _LivePill extends StatelessWidget {
               ),
               const SizedBox(width: 7),
               Text(
-                showCount ? '${_fmt(s.liveCount)} ONLINE' : 'LIVE',
+                '${_fmt(s.liveCount)} ONLINE',
                 style: T.tiny.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -501,6 +448,82 @@ class _ChaosPillState extends State<_ChaosPill> {
               Text(clock,
                   style: T.mono.copyWith(color: Colors.black, fontSize: 13)),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---- game ticker -----------------------------------------------------------
+
+/// A slim, endless marquee of tonight's games above the mode chips — the
+/// one-line billboard for the thing the camera-only apps don't have.
+/// Tapping it starts the selected mode.
+class _GameTicker extends StatefulWidget {
+  const _GameTicker({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_GameTicker> createState() => _GameTickerState();
+}
+
+class _GameTickerState extends State<_GameTicker> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(seconds: 22))..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  Widget _cell(String emoji, String name, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 11.5)),
+          const SizedBox(width: 5),
+          Text(name,
+              style: T.display(11.5).copyWith(
+                  color: color ?? Colors.white.withOpacity(0.55), letterSpacing: 1.4)),
+          const SizedBox(width: 8),
+          Text('·', style: TextStyle(color: Colors.white.withOpacity(0.22), fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // one strip, drawn twice — translating by exactly half loops seamlessly
+    final strip = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _cell('⚡', 'TONIGHT', color: C.acid),
+        for (final d in SeqDef.ten) _cell(d.icon, d.name.toUpperCase()),
+      ],
+    );
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onTap,
+      child: SizedBox(
+        height: 24,
+        width: double.infinity,
+        child: ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.centerLeft,
+            maxWidth: double.infinity,
+            child: AnimatedBuilder(
+              animation: _c,
+              builder: (context, child) => FractionalTranslation(
+                translation: Offset(-_c.value * 0.5, 0),
+                child: child,
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [strip, strip]),
+            ),
           ),
         ),
       ),

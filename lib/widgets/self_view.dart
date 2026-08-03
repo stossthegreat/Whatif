@@ -26,22 +26,17 @@ class SelfView extends StatelessWidget {
           final size = cam.value.previewSize;
           final w = size?.height ?? 720.0;
           final h = size?.width ?? 1280.0;
-          // MIRROR — non-negotiable. The Flutter camera plugin's iOS preview is
-          // NOT mirrored (it shows what others see — the "ugly" photo view).
-          // A selfie view must behave like a bathroom mirror: lean left and
-          // your image leans toward the same edge of the screen you leaned to.
-          // That's FaceTime / Instagram behavior, and it's this flip.
-          inner = Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()..scale(-1.0, 1.0, 1.0),
-            child: ClipRect(
-              child: OverflowBox(
-                maxWidth: double.infinity,
-                maxHeight: double.infinity,
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(width: w, height: h, child: CameraPreview(cam)),
-                ),
+          // NO manual flip. The iOS front-camera preview is ALREADY mirrored
+          // by the platform (bathroom-mirror behavior, like FaceTime). Adding
+          // a Matrix flip here double-mirrors it, so leaning right made the
+          // image go left — the exact bug shipped in build 57. Render as-is.
+          inner = ClipRect(
+            child: OverflowBox(
+              maxWidth: double.infinity,
+              maxHeight: double.infinity,
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(width: w, height: h, child: CameraPreview(cam)),
               ),
             ),
           );

@@ -45,6 +45,11 @@ class CameraService {
             enableAudio: false,
           );
           await c.initialize();
+          // Widest field of view the lens allows — the stage should feel like
+          // a mirror on the wall, not a crop-in.
+          try {
+            await c.setZoomLevel(await c.getMinZoomLevel());
+          } catch (_) {/* zoom is a nicety, never a blocker */}
           controller = c;
           _initTried = true;
           ready.value = true;
