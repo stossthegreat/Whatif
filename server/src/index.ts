@@ -202,12 +202,12 @@ function leaveParty(userId: string) {
 // Conversation-first pacing: talk games get real time; a round ends early when
 // everyone has answered. This is a place to meet people, not a quiz show.
 const ROUND_SECS: Record<string, number> = {
-  point: 20,     // perform/talk games — quick fire, not a monologue
-  spin: 15,      // bottle + the target performs
-  freeze: 8,
-  rapidFire: 10,
+  point: 23,     // perform/talk games — quick fire, not a monologue
+  spin: 18,      // bottle + the target performs
+  freeze: 11,
+  rapidFire: 13,
 };
-const secsFor = (kind: string) => ROUND_SECS[kind] ?? 10; // tap-answer kinds
+const secsFor = (kind: string) => ROUND_SECS[kind] ?? 13; // tap-answer kinds
 
 const CHAOS_CARDS: [string, string][] = [
   ['🤫', 'Everyone WHISPER until the next game'],

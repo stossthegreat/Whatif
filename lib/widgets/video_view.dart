@@ -55,6 +55,10 @@ class P2PVideoView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The renderer initializes ASYNC after `attempting` flips true — building
+    // the platform view before its texture exists can throw (release paints
+    // that as the full-screen GREY box). Black until the texture is real.
+    if (renderer.textureId == null) return const ColoredBox(color: Color(0xFF060709));
     return rtc.RTCVideoView(
       renderer,
       mirror: mirror,

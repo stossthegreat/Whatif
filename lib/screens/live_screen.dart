@@ -674,11 +674,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     });
     // mirrors the server's conversation-first table exactly
     var secs = switch (game.kind) {
-      GameKind.point => 20, // perform games — quick fire, not a monologue
-      GameKind.spin => 15,
-      GameKind.freeze => 8,
-      GameKind.rapidFire => 10,
-      _ => 10, // tap-answer kinds — answer, then chat
+      GameKind.point => 23, // perform games — quick fire, not a monologue
+      GameKind.spin => 18,
+      GameKind.freeze => 11,
+      GameKind.rapidFire => 13,
+      _ => 13, // tap-answer kinds — answer, then chat
     };
     final beatSecs = cell.rounds[_round].secs;
     if (beatSecs != null) secs = beatSecs;
@@ -1469,7 +1469,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               : RtcService.instance.trackFor(p.id) == null),
       onTap: canPoint ? () => _resolvePoint(i) : null,
       onReport: () => _openReport(p),
-      onSave: () => _save(p),
+      // save lives on the rail now — two save buttons confused everyone
     );
     final votes = _voteCounts[i] ?? 0;
     if (_lucky != i && votes == 0) return tile;
@@ -1588,8 +1588,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                 _isCall
                     ? '🔒 private call'
                     : _golden
-                        ? 'GOLDEN · ${cell.roomName}'
-                        : '${cell.roomName} · ${cell.people.length + 1}',
+                        ? 'GOLDEN ROOM'
+                        : '${cell.people.length + 1} live',
                 style: T.tiny.copyWith(
                   color: _golden ? gold : Colors.white,
                   letterSpacing: 0.4,
@@ -1605,12 +1605,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     );
   }
 
-  /// The skip pill — bottom-left, opposite the rail. Same gradient as the
-  /// Play orb so "this moves you forward" reads instantly.
+  /// The skip pill — bottom-right, beside the game area. Same gradient as
+  /// the Play orb so "this moves you forward" reads instantly.
   Widget _nextBtn() {
     return Positioned(
-      left: 12,
-      bottom: 224,
+      right: 12,
+      bottom: 70,
       child: Press(
         onTap: () {
           Buzz.pop();
@@ -1635,7 +1635,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('next',
+              Text('skip',
                   style: T.body.copyWith(
                       color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
               const SizedBox(width: 4),
@@ -2174,6 +2174,30 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                           boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 34, spreadRadius: -8)],
                         ),
                         child: Text('SPIN THE WHEEL  ›', style: T.h3.copyWith(color: Colors.black, fontSize: 18)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // vibing? nobody is forced out — the room carries on
+                    Press(
+                      haptic: false,
+                      onTap: () {
+                        Buzz.tick();
+                        _idle?.cancel();
+                        setState(() {
+                          _awards = const [];
+                          _phase = _Phase.talk;
+                        });
+                      },
+                      child: Container(
+                        height: 48,
+                        width: double.infinity,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: C.hair2),
+                        ),
+                        child: Text('keep this room going',
+                            style: T.body.copyWith(color: C.tx, fontWeight: FontWeight.w700)),
                       ),
                     ),
                     const SizedBox(height: 14),
