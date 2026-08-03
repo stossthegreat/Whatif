@@ -6,15 +6,29 @@ import pg from 'pg';
 /// ledger, never a gatekeeper: matchmaking must never block on it.
 const URL = process.env.DATABASE_URL || '';
 
+const sslFor = (url: string) =>
+  url.includes('sslmode=require') ? { rejectUnauthorized: false } : undefined;
+
 const pool = URL
   ? new pg.Pool({
       connectionString: URL,
-      max: 5,
+      // hello runs ~6 queries in parallel and media GETs hold a connection
+      // while buffering — 5 was a queueing choke point at any real load.
+      max: 10,
+      connectionTimeoutMillis: 5000, // fail fast into run()'s null path, never hang a verb
+      idleTimeoutMillis: 30_000,
+      keepAlive: true,
+      // no verb query may camp on a connection — the pool is shared
+      options: '-c statement_timeout=10000',
       // Railway Postgres requires TLS from outside the private network but
       // not within it; 'prefer' behavior via ssl config when the url asks.
-      ssl: URL.includes('sslmode=require') ? { rejectUnauthorized: false } : undefined,
+      ssl: sslFor(URL),
     })
   : null;
+
+// an idle client dying (backend restart, conn reset) emits 'error' on the
+// pool — unhandled, that event would take the whole process down
+pool?.on('error', (e) => console.error('[db] pool idle-client error:', e.message));
 
 export const dbEnabled = !!pool;
 
@@ -25,6 +39,28 @@ export async function run(q: string, params: unknown[] = []): Promise<pg.QueryRe
   } catch (e) {
     console.error('[db]', (e as Error).message);
     return null;
+  }
+}
+
+/// DDL runner: index creation over a large table can exceed the pool's 10s
+/// statement timeout, so schema init gets its own untimed client, closed
+/// when done. Init failures log-and-continue (fail-soft like everything).
+export async function runInit(statements: string[]): Promise<boolean> {
+  if (!URL) return false;
+  const c = new pg.Client({
+    connectionString: URL,
+    options: '-c statement_timeout=0',
+    ssl: sslFor(URL),
+  });
+  try {
+    await c.connect();
+    for (const s of statements) await c.query(s);
+    return true;
+  } catch (e) {
+    console.error('[db] init:', (e as Error).message);
+    return false;
+  } finally {
+    void c.end().catch(() => {});
   }
 }
 
@@ -67,6 +103,14 @@ export async function initDb(): Promise<void> {
     day DATE PRIMARY KEY,
     matches BIGINT NOT NULL DEFAULT 0
   )`);
+  // reverse lookups that run on EVERY hello (savedBy / blockedBy / report
+  // count) — without these they seq-scan whole tables. Untimed init client:
+  // building an index over a big table can take longer than the pool allows.
+  await runInit([
+    'CREATE INDEX IF NOT EXISTS saves_target ON saves(target)',
+    'CREATE INDEX IF NOT EXISTS blocks_target ON blocks(target)',
+    'CREATE INDEX IF NOT EXISTS reports_target ON reports(target)',
+  ]);
   console.log('[db] connected, schema ready');
 }
 

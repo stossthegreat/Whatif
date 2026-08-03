@@ -16,6 +16,8 @@ export interface User {
   cellId: string | null;
   queuedAt: number;
   lastPong: number;
+  connectedAt?: number;  // handshake time — the no-hello reaper's clock
+  helloed?: boolean;     // real client spoke — reaper stands down
   tz?: number;                 // client tz offset minutes (Night Owl badge etc.)
   friendUids?: Set<string>;    // hydrated on hello — for presence broadcasts
 }

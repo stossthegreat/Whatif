@@ -8,7 +8,7 @@ import { verifyAuthToken } from './auth.js';
 /// token minted into welcome — accepted as a Bearer header OR ?tk= query
 /// param (audio/image loaders can't always set headers).
 
-const MAX_BYTES = 420 * 1024;
+const MAX_BYTES = 1024 * 1024; // clients compress to ~900KB; this is the hard ceiling
 const TENOR_KEY = process.env.TENOR_API_KEY || '';
 export const gifsEnabled = !!TENOR_KEY;
 
@@ -32,8 +32,22 @@ function magicOk(mime: string, b: Buffer): boolean {
   return true;
 }
 
-// gif search cache — 5 minutes per query
+// gif search cache — 5 minutes per query, LRU-bounded (Map insertion order):
+// keyed by user-typed text, so without a cap it grows forever.
+const GIF_CACHE_MAX = 400;
 const gifCache = new Map<string, { at: number; data: unknown }>();
+function gifCacheGet(q: string): unknown | undefined {
+  const hit = gifCache.get(q);
+  if (!hit) return undefined;
+  if (Date.now() - hit.at > 300_000) { gifCache.delete(q); return undefined; }
+  gifCache.delete(q); gifCache.set(q, hit); // refresh recency
+  return hit.data;
+}
+function gifCacheSet(q: string, data: unknown): void {
+  gifCache.delete(q);
+  gifCache.set(q, { at: Date.now(), data });
+  while (gifCache.size > GIF_CACHE_MAX) gifCache.delete(gifCache.keys().next().value!);
+}
 
 export function mountMedia(app: Express): void {
   app.post('/api/media', express.raw({ type: () => true, limit: `${MAX_BYTES}b` }),
@@ -89,8 +103,8 @@ export function mountMedia(app: Express): void {
     if (!uid) return res.status(401).json({ err: 'auth' });
     if (!TENOR_KEY) return res.status(503).json({ err: 'noKey' });
     const q = String(req.query.q ?? '').slice(0, 64) || 'trending';
-    const hit = gifCache.get(q);
-    if (hit && Date.now() - hit.at < 300_000) return res.json(hit.data);
+    const hit = gifCacheGet(q);
+    if (hit !== undefined) return res.json(hit);
     try {
       const url = q === 'trending'
         ? `https://tenor.googleapis.com/v2/featured?key=${TENOR_KEY}&limit=24&media_filter=tinygif,gif`
@@ -105,7 +119,7 @@ export function mountMedia(app: Express): void {
           w: full.dims?.[0] ?? 200, h: full.dims?.[1] ?? 200,
         } : null;
       }).filter(Boolean);
-      gifCache.set(q, { at: Date.now(), data });
+      gifCacheSet(q, data);
       res.json(data);
     } catch {
       res.status(502).json({ err: 'tenor' });

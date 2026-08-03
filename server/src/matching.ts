@@ -18,6 +18,12 @@ interface Hints {
 
 const hints = new Map<string, Hints>();
 
+/// Hints rehydrate on every hello, so entries for offline users are dead
+/// weight — the 10-min sweep keeps this map proportional to online count.
+export function pruneHints(online: (uid: string) => boolean): void {
+  for (const uid of hints.keys()) if (!online(uid)) hints.delete(uid);
+}
+
 export async function hydrateHints(user: User): Promise<void> {
   if (!dbEnabled) return;
   const [u, st, enc] = await Promise.all([

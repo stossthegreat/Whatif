@@ -1,4 +1,4 @@
-import { run, dbEnabled } from './db.js';
+import { run, runInit, dbEnabled } from './db.js';
 
 /// Social-layer persistence: friendships, encounters, ratings, trait votes,
 /// messages, stats, badges, media, events. Same fail-soft contract as db.ts —
@@ -104,6 +104,14 @@ export async function initSocial(): Promise<void> {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`);
   await run('CREATE INDEX IF NOT EXISTS messages_pairx ON messages(a, b, id DESC)');
+  // scale indexes: b-side arm of any a-or-b query, deleteSocial's sender
+  // purge, and the nightly retention sweep — via the untimed init client
+  // because building these over millions of rows can exceed the pool timeout
+  await runInit([
+    'CREATE INDEX IF NOT EXISTS messages_bx ON messages(b, id DESC)',
+    'CREATE INDEX IF NOT EXISTS messages_sender ON messages(sender)',
+    'CREATE INDEX IF NOT EXISTS media_kind_created ON media(kind, created_at)',
+  ]);
 
   await run(`CREATE TABLE IF NOT EXISTS message_reactions (
     message_id BIGINT NOT NULL, uid TEXT NOT NULL, emoji TEXT NOT NULL,
@@ -430,12 +438,30 @@ export function setRead(uid: string, peer: string, upTo: number): void {
     [uid, peer, upTo]);
 }
 
+/// Friendship-driven on purpose: chat partners are ALWAYS friends (dm is
+/// gated on state='friends' and pairs share the a<b convention), so instead
+/// of walking the user's whole message history (the old OR seq-scanned the
+/// b arm), this does one short index range-scan per friend from their read
+/// cursor — ~zero rows for caught-up threads. Ex-friends drop out of the
+/// count, matching chatList below (the two MUST agree or the badge ghosts).
 export async function unreadTotal(uid: string): Promise<number> {
   const r = await run(
-    `SELECT COUNT(*)::int AS n FROM messages m
-     LEFT JOIN chat_state cs ON cs.uid=$1 AND cs.peer=m.sender
-     WHERE (m.a=$1 OR m.b=$1) AND m.sender<>$1
-       AND m.id > COALESCE(cs.last_read_id, 0)`,
+    `SELECT COALESCE(SUM(un.n), 0)::int AS n
+     FROM (
+       SELECT x.a, x.b, x.peer FROM (
+         SELECT f.a, f.b, f.b AS peer FROM friendships f
+          WHERE f.a=$1 AND f.state='friends'
+         UNION ALL
+         SELECT f.a, f.b, f.a FROM friendships f
+          WHERE f.b=$1 AND f.state='friends'
+       ) x LIMIT 200
+     ) fr
+     LEFT JOIN chat_state cs ON cs.uid=$1 AND cs.peer=fr.peer
+     CROSS JOIN LATERAL (
+       SELECT COUNT(*) AS n FROM messages m
+        WHERE m.a=fr.a AND m.b=fr.b AND m.sender=fr.peer
+          AND m.id > COALESCE(cs.last_read_id, 0)
+     ) un`,
     [uid]);
   return r?.rows?.[0]?.n ?? 0;
 }
@@ -445,24 +471,42 @@ export async function chatList(uid: string): Promise<{
   pinned: boolean; unread: number;
   last: { id: number; sender: string; kind: string; body: string; at: string };
 }[]> {
+  // Friendships-driven + LATERAL: newest message and unread count are each
+  // a single index descent per friend on messages_pairx(a,b,id DESC) —
+  // the old CTE materialized the user's ENTIRE history (bodies included).
+  // Capped at the 200 most recent friendships; zero-message friends drop
+  // out via the inner JOIN (same as before). Ex-friends disappear from the
+  // list — unfriend/block delete the edge, and sending errored anyway.
   const r = await run(
-    `WITH mine AS (
-       SELECT m.*, CASE WHEN m.a=$1 THEN m.b ELSE m.a END AS peer
-       FROM messages m WHERE m.a=$1 OR m.b=$1
-     ), lasts AS (
-       SELECT DISTINCT ON (peer) * FROM mine ORDER BY peer, id DESC
+    `WITH fr AS (
+       SELECT x.a, x.b, x.peer, x.pinned FROM (
+         SELECT f.a, f.b, f.b AS peer, f.a_pinned AS pinned, f.matched_at
+           FROM friendships f WHERE f.a=$1 AND f.state='friends'
+         UNION ALL
+         SELECT f.a, f.b, f.a, f.b_pinned, f.matched_at
+           FROM friendships f WHERE f.b=$1 AND f.state='friends'
+       ) x
+       ORDER BY x.matched_at DESC NULLS LAST
+       LIMIT 200
      )
-     SELECT l.peer, l.id, l.sender, l.kind, l.body, l.created_at,
+     SELECT fr.peer, l.id, l.sender, l.kind, l.body, l.created_at,
        u.name, u.hue, u.photo_media_id, u.active_title,
-       COALESCE(CASE WHEN f.a=$1 THEN f.a_pinned ELSE f.b_pinned END, false) AS pinned,
-       (SELECT COUNT(*)::int FROM mine mm
-          WHERE mm.peer = l.peer AND mm.sender = l.peer
-            AND mm.id > COALESCE(cs.last_read_id, 0)) AS unread
-     FROM lasts l
-     JOIN users u ON u.uid = l.peer
-     LEFT JOIN friendships f ON f.a = LEAST($1, l.peer) AND f.b = GREATEST($1, l.peer)
-     LEFT JOIN chat_state cs ON cs.uid = $1 AND cs.peer = l.peer
-     ORDER BY pinned DESC, l.id DESC`,
+       fr.pinned,
+       un.n AS unread
+     FROM fr
+     JOIN LATERAL (
+       SELECT m.id, m.sender, m.kind, m.body, m.created_at
+         FROM messages m WHERE m.a=fr.a AND m.b=fr.b
+        ORDER BY m.id DESC LIMIT 1
+     ) l ON true
+     JOIN users u ON u.uid = fr.peer
+     LEFT JOIN chat_state cs ON cs.uid=$1 AND cs.peer=fr.peer
+     CROSS JOIN LATERAL (
+       SELECT COUNT(*)::int AS n FROM messages m
+        WHERE m.a=fr.a AND m.b=fr.b AND m.sender=fr.peer
+          AND m.id > COALESCE(cs.last_read_id, 0)
+     ) un
+     ORDER BY fr.pinned DESC, l.id DESC`,
     [uid]);
   return (r?.rows ?? []).map((x) => ({
     peer: x.peer as string,

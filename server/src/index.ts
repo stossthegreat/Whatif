@@ -120,18 +120,28 @@ function dequeue(id: string) {
   if (i >= 0) store.queue.splice(i, 1);
 }
 
+// Fairness cursor over the queue — advancing an index is free; the old
+// shift()+push() rotation was O(N) per unmatched seed and O(N²) per pulse.
+let matchRot = 0;
+
 function tryMatch() {
   // Strangers match STRICTLY 1:1 (groups exist only via friend codes) — the
   // proven format, and the seed picks the BEST-scoring partner, not the first.
-  let guard = store.queue.length * 2 + 2;
-  while (store.queue.length >= 2 && guard-- > 0) {
-    const seed = store.users.get(store.queue[0]);
-    if (!seed) { store.queue.shift(); continue; }
+  // Work per invocation is CAPPED (16 seeds × 64 candidates) so a huge queue
+  // costs the same as a small one; the cursor + 1s pulse guarantee everyone
+  // gets looked at within a few ticks. Identical behavior for queues ≤ 65.
+  const SCAN = 64, SEEDS = 16;
+  for (let attempt = 0; attempt < SEEDS && store.queue.length >= 2; attempt++) {
+    const len = store.queue.length;
+    if (matchRot >= len) matchRot = 0;
+    const seed = store.users.get(store.queue[matchRot]);
+    if (!seed) { store.queue.splice(matchRot, 1); continue; }
 
     let best: User | null = null;
     let bestScore = -Infinity;
-    for (let i = 1; i < store.queue.length; i++) {
-      const cand = store.users.get(store.queue[i]);
+    const scan = Math.min(SCAN, len - 1);
+    for (let j = 1; j <= scan; j++) {
+      const cand = store.users.get(store.queue[(matchRot + j) % len]);
       if (!cand || !compatible(seed, cand)) continue;
       const s = matching.score(seed, cand);
       if (s > bestScore) { bestScore = s; best = cand; }
@@ -144,11 +154,9 @@ function tryMatch() {
       dequeue(best.id);
       matching.noteMetNow(seed.uid, best.uid);
       void formCell([seed.id, best.id]);
+      // cursor stays put — the array shrank underneath it
     } else {
-      // no partner (or holding out for a better one) — rotate so the next
-      // seed gets a look; the guard bounds the churn, and the 1s pulse below
-      // retries once patience windows expire
-      store.queue.push(store.queue.shift()!);
+      matchRot++; // next seed gets a look on the next iteration / pulse
     }
   }
 }
@@ -630,30 +638,56 @@ setInterval(() => {
   if (store.queue.length >= 2) tryMatch();
   if (ALLOW_SOLO) {
     const now = Date.now();
-    for (const id of [...store.queue]) {
-      const u = store.users.get(id);
-      if (u && now - u.queuedAt > SOLO_WAIT_MS) { dequeue(id); void formCell([id]); }
+    for (let i = store.queue.length - 1; i >= 0; i--) {
+      const u = store.users.get(store.queue[i]);
+      if (u && now - u.queuedAt > SOLO_WAIT_MS) {
+        store.queue.splice(i, 1);
+        void formCell([u.id]);
+      }
     }
   }
 }, 1000);
 
 setInterval(() => {
-  const live = LIVE_BASELINE + store.onlineCount;
   // rooms + matches are real counts — the client hides anything too small to
-  // impress, so low numbers never reach the screen.
+  // impress, so low numbers never reach the screen. The payload is identical
+  // for everyone: stringify ONCE, not once per connection.
+  const payload = JSON.stringify({
+    t: 'presence', live: LIVE_BASELINE + store.onlineCount,
+    rooms: store.cells.size, matches: matchesToday,
+  });
   for (const u of store.users.values()) {
-    send(u, { t: 'presence', live, rooms: store.cells.size, matches: matchesToday });
+    if (u.ws.readyState === WebSocket.OPEN) {
+      try { u.ws.send(payload); } catch { /* ignore */ }
+    }
   }
 }, 4000);
 
-// heartbeat — drop dead sockets
+// heartbeat — drop dead sockets, and sockets that connected but never sent
+// a hello (bots, port scanners, wedged clients holding a User slot)
 setInterval(() => {
   const now = Date.now();
   for (const u of store.users.values()) {
+    if (!u.helloed && now - (u.connectedAt ?? 0) > 15000) {
+      try { u.ws.terminate(); } catch { /* ignore */ }
+      continue;
+    }
     if (now - u.lastPong > 35000) { try { u.ws.terminate(); } catch { /* ignore */ } continue; }
     try { u.ws.ping(); } catch { /* ignore */ }
   }
 }, 15000);
+
+// bound the long-lived maps: hints/neverAgain rehydrate on hello so entries
+// for offline users are pure dead weight; the push cooldown maps prune by
+// AGE (their entire job is rate-limiting pushes to people who are offline).
+setInterval(() => {
+  const online = (uid: string) => store.byUid.has(uid);
+  matching.pruneHints(online);
+  social.pruneNeverAgain(online);
+  chat.pruneMsgPush();
+  const cutoff = Date.now() - PUSH_COOLDOWN_MS;
+  for (const [uid, t] of lastPushAt) if (t < cutoff) lastPushAt.delete(uid);
+}, 10 * 60_000);
 
 // ---- http + ws -------------------------------------------------------------
 const app = express();
@@ -678,11 +712,36 @@ const server = createServer(app);
 // bigger is hostile or broken and the socket closes itself.
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024 });
 
-wss.on('connection', (ws) => {
+// Per-IP connection cap. Railway's edge proxy APPENDS the true peer address
+// to x-forwarded-for, so the RIGHTMOST entry is the trustworthy one — the
+// leftmost is client-supplied and would let an attacker dodge the cap.
+const ipConns = new Map<string, number>();
+const MAX_CONNS_PER_IP = Number(process.env.MAX_CONNS_PER_IP || 8);
+function clientIp(req: import('http').IncomingMessage): string {
+  const xff = String(req.headers['x-forwarded-for'] ?? '');
+  if (xff) return xff.split(',').pop()!.trim();
+  return req.socket.remoteAddress ?? 'unknown';
+}
+
+wss.on('connection', (ws, req) => {
+  const ip = clientIp(req);
+  const ipCount = ipConns.get(ip) ?? 0;
+  if (ipCount >= MAX_CONNS_PER_IP) {
+    // reject BEFORE allocating anything — 1013 = try again later
+    try { ws.close(1013, 'too many connections'); } catch { /* ignore */ }
+    return;
+  }
+  ipConns.set(ip, ipCount + 1);
+  ws.once('close', () => {
+    const c = (ipConns.get(ip) ?? 1) - 1;
+    if (c <= 0) ipConns.delete(ip); else ipConns.set(ip, c);
+  });
+
   const id = randomUUID();
   const user: User = {
     id, ws, uid: id, name: pick(NAMES), hue: pick(HUES),
     meet: 'Everyone', state: 'idle', cellId: null, queuedAt: 0, lastPong: Date.now(),
+    connectedAt: Date.now(),
   };
   store.users.set(id, user);
   store.byUid.set(user.uid, id);
@@ -711,6 +770,7 @@ wss.on('connection', (ws) => {
     try { m = JSON.parse(raw.toString()); } catch { return; }
     switch (m.t) {
       case 'hello': {
+        user.helloed = true; // seen a real client — the no-hello reaper stands down
         void (async () => {
         // Apple id is a RECOVERY KEY: if it already maps to an account, that
         // account's uid wins (reinstalls get their whole graph back); if not,

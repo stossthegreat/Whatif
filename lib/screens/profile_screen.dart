@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
 import '../net/api_client.dart';
+import '../net/image_upload.dart';
 import '../net/network_client.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
@@ -110,12 +111,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_photoUploading) return;
     Buzz.tick();
     try {
-      final x = await ImagePicker().pickImage(
-          source: ImageSource.gallery, maxWidth: 720, maxHeight: 720, imageQuality: 80);
+      // full-res pick — the compression ladder owns sizing (any photo fits)
+      final x = await ImagePicker().pickImage(source: ImageSource.gallery);
       if (x == null || !mounted) return;
       setState(() => _photoUploading = true);
-      final bytes = await x.readAsBytes();
-      final id = await Api.uploadMedia(bytes, kind: 'avatar');
+      final id = await uploadPickedImage(x, kind: 'avatar');
       if (!mounted) return;
       setState(() {
         _photoUploading = false;
