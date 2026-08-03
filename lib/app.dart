@@ -36,7 +36,6 @@ import 'screens/safety_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/party_screen.dart';
-import 'screens/mode_screen.dart';
 import 'screens/finding_screen.dart';
 import 'screens/live_screen.dart';
 
@@ -69,7 +68,7 @@ enum _Step {
   boot, welcome, signin,
   // one question per screen — the flow the research pointed at
   dob, ageBlocked, handle, gender, language, interests, photo, safety, permission,
-  home, mode, party, finding, live,
+  home, party, finding, live,
 }
 
 class _Root extends StatefulWidget {
@@ -572,10 +571,9 @@ class _RootState extends State<_Root> {
           Timer(const Duration(seconds: 2), Push.init);
         }),
       _Step.home => MainShell(
-          onPlay: () => _to(_Step.mode),
+          onPlay: _play,
           onParty: () => _to(_Step.party),
           onSignOut: () => _to(_Step.welcome)),
-      _Step.mode => ModeScreen(onPick: _play, onBack: () => _to(_Step.home)),
       _Step.party => PartyScreen(
           key: ValueKey('party${_partyCode ?? ''}${_partyInviteUid ?? ''}'),
           initialCode: _partyCode,

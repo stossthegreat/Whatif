@@ -24,6 +24,7 @@ import { mountMedia, startRetentionSweep, gifsEnabled } from './media.js';
 import * as calls from './calls.js';
 import * as matching from './matching.js';
 import * as moderation from './moderation.js';
+import * as explore from './explore.js';
 import { verifyAppleToken } from './apple_verify.js';
 import { mountAdmin } from './admin.js';
 
@@ -1012,6 +1013,10 @@ wss.on('connection', (ws, req) => {
       case 'unfriend': if (typeof m.target === 'string') void social.unfriend(user, m.target); break;
       case 'setTier': void social.setTier(user, m); break;
       case 'pinChat': void social.pinChat(user, m); break;
+      case 'explore':
+        // browsing is open to everyone; INVITING needs an account (canGoLive)
+        void explore.list(user);
+        break;
       case 'friends': void social.snapshot(user); break;
       case 'traitVote': void social.traitVote(user, m); break;
       case 'setProfile': social.setProfile(user, m); break;
@@ -1120,6 +1125,7 @@ server.listen(PORT, () => {
 social.init(send);
 chat.init(send);
 calls.init(send, formCell);
+explore.init(send, meetOk);
 social.startRepDecay();
 
 // crash guard: one bad code path must never take down every live room.

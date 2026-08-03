@@ -164,6 +164,15 @@ class NetworkClient {
   void setTitle(String title) => send({'t': 'setTitle', 'title': title});
   void callInvite(String to, {required bool video}) =>
       send({'t': 'callInvite', 'to': to, 'video': video});
+
+  // ---- explore --------------------------------------------------------------
+  void explore() => send({'t': 'explore'});
+
+  /// Ring someone from the Explore grid. Same machinery as a friend call, but
+  /// origin 'explore' lets it reach strangers and forms a NORMAL room (games,
+  /// P2P) instead of a private call cell.
+  void meetInvite(String to) =>
+      send({'t': 'callInvite', 'to': to, 'origin': 'explore', 'video': true});
   void callAccept(String callId) => send({'t': 'callAccept', 'callId': callId});
   void callDecline(String callId) => send({'t': 'callDecline', 'callId': callId});
   void rtcSignal(String to, Map<String, dynamic> d) => send({'t': 'rtc', 'to': to, 'd': d});

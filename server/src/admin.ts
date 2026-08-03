@@ -2,6 +2,7 @@ import type { Express, Request, Response } from 'express';
 import express from 'express';
 import { run, dbEnabled, addBan, clearBan, devicesFor } from './db.js';
 import { CATEGORIES } from './moderation.js';
+import { dropAvatarCache } from './media.js';
 
 /// The moderation desk. Reports were write-only until now — nothing could read
 /// them, so the Terms' "reviewed within 24 hours" was a promise with no
@@ -145,10 +146,15 @@ export function mountAdmin(app: Express): void {
   app.post('/admin/removephoto', form, async (req: Request, res: Response) => {
     if (!authed(req)) return res.status(404).send('Not found');
     const uid = String(req.body.uid ?? '');
-    const prev = await run('SELECT photo_media_id FROM users WHERE uid=$1', [uid]);
-    await run('UPDATE users SET photo_media_id = NULL WHERE uid=$1', [uid]);
-    const old = prev?.rows?.[0]?.photo_media_id;
-    if (old != null) void run('DELETE FROM media WHERE id=$1', [old]);
+    const prev = await run('SELECT photo_media_id, photo_thumb_id FROM users WHERE uid=$1', [uid]);
+    await run('UPDATE users SET photo_media_id = NULL, photo_thumb_id = NULL WHERE uid=$1', [uid]);
+    for (const col of ['photo_media_id', 'photo_thumb_id']) {
+      const old = prev?.rows?.[0]?.[col];
+      if (old != null) {
+        dropAvatarCache(Number(old)); // stop serving it from memory too
+        void run('DELETE FROM media WHERE id=$1', [old]);
+      }
+    }
     res.redirect(`/admin?key=${encodeURIComponent(String(req.body.key))}`);
   });
 

@@ -32,6 +32,30 @@ function magicOk(mime: string, b: Buffer): boolean {
   return true;
 }
 
+/// Avatar byte cache. Explore turns avatars into the hottest read in the
+/// system — every grid cell is a media GET, and each one otherwise drags a
+/// BYTEA back out of Postgres. Avatars are small (thumbnails), immutable
+/// (a new photo mints a new id) and public to signed-in users, so they are
+/// perfectly cacheable in-process. Same LRU shape as the GIF cache below.
+const AVATAR_CACHE_MAX = 500;
+const avatarCache = new Map<number, { mime: string; bytes: Buffer }>();
+function avatarCacheGet(id: number): { mime: string; bytes: Buffer } | undefined {
+  const hit = avatarCache.get(id);
+  if (!hit) return undefined;
+  avatarCache.delete(id); avatarCache.set(id, hit); // refresh recency
+  return hit;
+}
+function avatarCacheSet(id: number, mime: string, bytes: Buffer): void {
+  avatarCache.set(id, { mime, bytes });
+  while (avatarCache.size > AVATAR_CACHE_MAX) {
+    avatarCache.delete(avatarCache.keys().next().value!);
+  }
+}
+/// A replaced or moderated-away avatar must not linger in memory.
+export function dropAvatarCache(id: number): void {
+  avatarCache.delete(id);
+}
+
 // gif search cache — 5 minutes per query, LRU-bounded (Map insertion order):
 // keyed by user-typed text, so without a cap it grows forever.
 const GIF_CACHE_MAX = 400;
@@ -75,7 +99,10 @@ export function mountMedia(app: Express): void {
       const prev = await run('SELECT photo_media_id FROM users WHERE uid=$1', [uid]);
       await run('UPDATE users SET photo_media_id=$2 WHERE uid=$1', [uid, id]);
       const old = prev?.rows?.[0]?.photo_media_id;
-      if (old != null) void run('DELETE FROM media WHERE id=$1 AND owner=$2', [old, uid]);
+      if (old != null) {
+        dropAvatarCache(Number(old));
+        void run('DELETE FROM media WHERE id=$1 AND owner=$2', [old, uid]);
+      }
     }
     res.json({ id: Number(id), size: bytes.length });
   });
@@ -86,6 +113,13 @@ export function mountMedia(app: Express): void {
     if (!dbEnabled) return res.status(503).json({ err: 'noDb' });
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ err: 'id' });
+    // avatars short-circuit the database entirely on a cache hit
+    const cached = avatarCacheGet(id);
+    if (cached) {
+      res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+      res.setHeader('ETag', String(id));
+      return res.type(cached.mime).send(cached.bytes);
+    }
     const r = await run('SELECT owner, kind, mime, bytes, pair_key FROM media WHERE id=$1', [id]);
     const row = r?.rows?.[0];
     if (!row) return res.status(404).json({ err: 'gone' });
@@ -95,6 +129,11 @@ export function mountMedia(app: Express): void {
     if (!allowed) return res.status(403).json({ err: 'forbidden' });
     res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
     res.setHeader('ETag', String(id));
+    // only avatars are cached: they're small, immutable and readable by any
+    // signed-in user, so there is no per-viewer authorization to preserve
+    if (row.kind === 'avatar') {
+      avatarCacheSet(id, row.mime as string, row.bytes as Buffer);
+    }
     res.type(row.mime as string).send(row.bytes as Buffer);
   });
 

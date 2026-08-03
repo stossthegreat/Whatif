@@ -12,7 +12,10 @@ import 'chat_screen.dart';
 /// Messages — every conversation with your people. Pinned first, then by
 /// recency. Only matched friends can appear here, so it's never spam.
 class ChatsScreen extends StatefulWidget {
-  const ChatsScreen({super.key});
+  const ChatsScreen({super.key, this.embedded = false});
+
+  /// As a bottom-nav tab there's nothing to pop, so the back button goes.
+  final bool embedded;
 
   static void push(BuildContext context) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChatsScreen()));
@@ -125,16 +128,18 @@ class _ChatsScreenState extends State<ChatsScreen> {
               padding: const EdgeInsets.fromLTRB(22, 6, 22, 12),
               child: Row(
                 children: [
-                  Press(
-                    onTap: () => Navigator.of(context).maybePop(),
-                    child: Container(
-                      width: 38, height: 38,
-                      decoration: BoxDecoration(
-                          shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
-                      child: const Icon(Icons.arrow_back_rounded, size: 20, color: C.tx2),
+                  if (!widget.embedded) ...[
+                    Press(
+                      onTap: () => Navigator.of(context).maybePop(),
+                      child: Container(
+                        width: 38, height: 38,
+                        decoration: BoxDecoration(
+                            shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
+                        child: const Icon(Icons.arrow_back_rounded, size: 20, color: C.tx2),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 14),
+                    const SizedBox(width: 14),
+                  ],
                   Text('Messages', style: T.big.copyWith(fontSize: 26)),
                   const Spacer(),
                   // new message — pick any friend, start talking

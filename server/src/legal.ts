@@ -33,7 +33,7 @@ This Privacy Policy explains what Rivlr ("Rivlr", "we", "us", "our") collects, w
 Rivlr is the data controller for the personal information described in this policy. Contact: m2mb@info.com. This policy covers our handling of information collected through the Rivlr app and service. It does not cover the practices of third parties we do not own or control — including other users, the app stores you install Rivlr from, or external services you reach through Rivlr — and we encourage you to review their policies separately.
 
 2. THE SERVICE, IN ONE LINE
-Rivlr pairs people into live video rooms with games, and lets people who chose each other stay connected: friends, messaging, and calls. This policy is written around exactly that — nothing more is collected than the product needs.
+Rivlr pairs people into live video rooms with games, lets you browse who is online and ask them to meet, and lets people who chose each other stay connected: friends, messaging, and calls. This policy is written around exactly that — nothing more is collected than the product needs.
 
 3. INFORMATION YOU PROVIDE
 • A handle you choose (no real name required — and we ask you NOT to use one)
@@ -105,6 +105,24 @@ than it is:
 Live room video and audio are never in any of this, because they are never
 captured in the first place.
 
+12b. DISCOVERY — WHO CAN SEE YOU
+Rivlr has an Explore tab: a grid of people who are online right now, so the
+app still works when the matching queue is quiet.
+• While you are online and signed in, other signed-in adults may see a CARD:
+  your handle, your avatar, your title if you have one, your country, and any
+  interests you and they share. Nothing else.
+• Your date of birth is NEVER shown — only a derived age on the profile you
+  choose to open.
+• Guests (not signed in) cannot appear in Explore and cannot ask anyone to
+  meet.
+• Tapping your card does not connect anyone to you. It sends a request that
+  rings, exactly like a call, and nothing happens unless you accept.
+• You can switch this off completely: Settings → Discovery → "Show me in
+  Explore". With it off you disappear from the grid entirely and can still
+  play, message, and use every other part of Rivlr.
+People you have blocked, and people either of you answered "never again"
+about, never see each other in Explore.
+
 13. HOW WE USE INFORMATION
 To run the service you asked for (matching, rooms, games, friends, messaging, calls); to keep the community safe (report handling, blocks, abuse prevention, under-18 removal); to maintain and improve Rivlr using aggregate statistics; and to communicate service messages. We do not use your information for marketing to third parties.
 
@@ -165,7 +183,7 @@ These Terms are a binding contract between you and Rivlr ("Rivlr", "we", "us"). 
 You must be at least 18 years old and legally able to enter this agreement. By using Rivlr you warrant that you are. We cannot independently verify every user's age, and we accept no liability where information you provide is untruthful — but discovery of an under-18 user leads to immediate, permanent removal. IF YOU ARE UNDER 18, DO NOT ATTEMPT TO REGISTER OR USE THE SERVICE. You may hold one account, for your own personal, non-commercial use only.
 
 2. THE SERVICE
-Rivlr connects you into live video rooms with people you don't know (always one-to-one for strangers), rooms you create with friends, and — when two people choose each other — friendships with messaging and calls. Games run inside rooms. We may add, change, or remove features at any time as the service evolves.
+Rivlr connects you into live video rooms with people you don't know (always one-to-one for strangers), lets you browse people who are online and invite them to meet (they choose whether to accept), supports rooms you create with friends, and — when two people choose each other — friendships with messaging and calls. Games run inside rooms. We may add, change, or remove features at any time as the service evolves.
 
 3. YOUR ACCOUNT AND SECURITY
 Going live on camera requires signing in with Apple — this is what lets suspensions actually stick, and it is why the graph of friends and messages survives a reinstall. Your account (whether guest or Sign in with Apple) is yours alone: do not sell, transfer, or share it, and do not let anyone else use it. You may not choose a handle you have no right to use or one intended to impersonate another person. You are responsible for activity on your account. If we must resolve a dispute over who owns an account, our determination (which may include suspension or termination) is final. Tell us immediately at m2mb@info.com about any unauthorised use.

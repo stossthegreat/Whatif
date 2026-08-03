@@ -136,6 +136,7 @@ class AppSession extends ChangeNotifier {
       final dobMs = p.getInt('dob');
       if (dobMs != null) dob = DateTime.fromMillisecondsSinceEpoch(dobMs);
       dobRejected = p.getBool('dobRejected') ?? false;
+      discoverable = p.getBool('discoverable') ?? true;
       // moments survive restarts — they're the user's history, not a session
       try {
         final raw = p.getString('moments');
@@ -258,6 +259,14 @@ class AppSession extends ChangeNotifier {
   /// Set when someone fails the age gate. Remembered so coming back and
   /// typing a different year doesn't get them in.
   bool dobRejected = false;
+  /// Explore opt-out. Default on; mirrored to the server via setProfile.
+  bool discoverable = true;
+
+  void setDiscoverable(bool v) {
+    discoverable = v;
+    _prefs?.setBool('discoverable', v);
+    notifyListeners();
+  }
 
   void setDob(DateTime d) {
     dob = d;

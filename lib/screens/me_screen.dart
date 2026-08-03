@@ -5,6 +5,10 @@ import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
+import '../state/chat.dart';
+import 'chat_screen.dart' show AppNav;
+import 'chats_screen.dart';
+import 'friend_profile_screen.dart';
 import 'edit_profile_screen.dart';
 import 'moments_screen.dart';
 import 'settings_screen.dart';
@@ -159,6 +163,14 @@ class MeScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
+
+                // people you just met — the accidental-Next recovery
+                const _RecentlyMetRailM(),
+                // what your people are up to
+                const _FeedSectionM(),
+                // your people
+                const _FriendsSectionM(),
+                const SizedBox(height: 8),
 
                 // badges — what rooms voted you
                 _SectionHead(title: 'badges', trailing: 'the room decides'),
@@ -428,6 +440,227 @@ class _MomentMini extends StatelessWidget {
             Text(m.ago, style: T.tiny.copyWith(fontSize: 10)),
           ]),
         ],
+      ),
+    );
+  }
+}
+
+class _RecentlyMetRailM extends StatelessWidget {
+  const _RecentlyMetRailM();
+
+  @override
+  Widget build(BuildContext context) {
+    final r = Responsive.of(context);
+    return AnimatedBuilder(
+      animation: SocialState.instance,
+      builder: (context, _) {
+        final recent = SocialState.instance.recent;
+        if (recent.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(left: r.gutter, right: r.gutter, bottom: 12),
+              child: Text('RECENTLY MET', style: T.eyebrow),
+            ),
+            SizedBox(
+              height: 92,
+              child: ListView.separated(
+                physics: const BouncingScrollPhysics(),
+                scrollDirection: Axis.horizontal,
+                padding: EdgeInsets.symmetric(horizontal: r.gutter),
+                itemCount: recent.length,
+                separatorBuilder: (_, i) => const SizedBox(width: 16),
+                itemBuilder: (context, i) {
+                  final m = recent[i];
+                  return Press(
+                    haptic: false,
+                    onTap: () { Buzz.tick(); FriendsScreen.push(context, tab: 3); },
+                    child: Column(
+                      children: [
+                        IdentityOrb(hue: m.hue, size: 52),
+                        const SizedBox(height: 7),
+                        Text('@${m.name}',
+                            style: T.tiny.copyWith(
+                                color: Colors.white, fontWeight: FontWeight.w700, fontSize: 11.5)),
+                        Text(m.ago, style: T.tiny.copyWith(color: C.tx3, fontSize: 10)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 22),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _FeedSectionM extends StatelessWidget {
+  const _FeedSectionM();
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([SocialState.instance, ChatStore.instance]),
+      builder: (context, _) {
+        final s = SocialState.instance;
+        final unread = ChatStore.instance.unreadTotal;
+        final rows = <Widget>[];
+
+        for (final f in s.feed.take(5)) {
+          final line = switch (f.kind) {
+            'badge' => '🏅 @${f.name} earned ${f.x}',
+            'title' => '👑 @${f.name} is now “${f.x}”',
+            'party' => '🎮 @${f.name} opened a room',
+            _ => '',
+          };
+          if (line.isEmpty) continue;
+          rows.add(_row(context, line,
+              trailing: f.kind == 'party' ? 'Join' : null,
+              onTap: () {
+                Buzz.tick();
+                if (f.kind == 'party') {
+                  AppNav.joinPartyCode?.call(f.x);
+                  return;
+                }
+                final friend =
+                    s.friends.where((x) => x.uid == f.uid).toList();
+                if (friend.isNotEmpty) {
+                  FriendProfileScreen.push(context,
+                      uid: f.uid, name: f.name, hue: friend.first.hue);
+                }
+              }));
+        }
+        if (unread > 0) {
+          rows.add(_row(context, '💬 $unread unread message${unread == 1 ? '' : 's'}',
+              onTap: () { Buzz.tick(); ChatsScreen.push(context); }));
+        }
+        if (s.reqCount > 0) {
+          rows.add(_row(context, '⭐ ${s.reqCount} friend request${s.reqCount == 1 ? '' : 's'}',
+              onTap: () { Buzz.tick(); FriendsScreen.push(context, tab: 4); }));
+        }
+        if (rows.isEmpty) return const SizedBox.shrink();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('HAPPENING NOW', style: T.eyebrow),
+            const SizedBox(height: 10),
+            ...rows,
+            const SizedBox(height: 16),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _row(BuildContext context, String text, {String? trailing, VoidCallback? onTap}) {
+    return Press(
+      haptic: false,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: T.body.copyWith(
+                      color: C.tx2, fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+            if (trailing != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                decoration: BoxDecoration(
+                    color: Colors.white, borderRadius: BorderRadius.circular(100)),
+                child: Text(trailing,
+                    style: T.tiny.copyWith(
+                        color: Colors.black, fontWeight: FontWeight.w800, fontSize: 11)),
+              )
+            else
+              const Icon(Icons.chevron_right_rounded, size: 16, color: C.tx3),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FriendsSectionM extends StatelessWidget {
+  const _FriendsSectionM();
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: SocialState.instance,
+      builder: (context, _) {
+        final friends = SocialState.instance.friends;
+        if (friends.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('YOUR PEOPLE', style: T.eyebrow),
+                const Spacer(),
+                Press(
+                  haptic: false,
+                  onTap: () { Buzz.tick(); FriendsScreen.push(context); },
+                  child: Text('see all  ›',
+                      style: T.tiny.copyWith(color: C.tx2, fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            for (final f in friends.take(4)) _FriendRow(friend: f),
+            const SizedBox(height: 6),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _FriendRowM extends StatelessWidget {
+  const _FriendRowM({required this.friend});
+  final FriendInfo friend;
+
+  @override
+  Widget build(BuildContext context) {
+    return Press(
+      haptic: false,
+      onTap: () { Buzz.tick(); FriendsScreen.push(context); },
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          children: [
+            IdentityOrb(hue: friend.hue, size: 36, live: friend.online),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('@${friend.name}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: T.body.copyWith(
+                          color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                  Text(
+                    friend.online ? 'online now' : 'away',
+                    style: T.tiny.copyWith(
+                      color: friend.online ? const Color(0xFF3BE07A) : C.tx3,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

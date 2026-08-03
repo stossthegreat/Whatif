@@ -87,6 +87,12 @@ export function score(a: User, b: User): number {
 /// stop running into them. Deliberately a soft wall: see quarantineBlocks().
 const QUARANTINE_FLOOR = -25;
 
+/// Lowercased interests from the hydrated hints — used by Explore to show
+/// what you have in common. Empty when the user hasn't hydrated yet.
+export function interestsOf(uid: string): Set<string> {
+  return hints.get(uid)?.interests ?? new Set<string>();
+}
+
 export function quarantined(uid: string): boolean {
   return (hints.get(uid)?.rep ?? 0) <= QUARANTINE_FLOOR;
 }
