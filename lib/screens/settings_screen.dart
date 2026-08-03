@@ -98,9 +98,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _divider(),
                     _link('About Rivlr', () => LegalScreen.push(context, 'About', LegalCopy.about)),
                     _divider(),
-                    _info('Contact', 'appsdevelop2025@gmail.com'),
+                    _info('Contact', 'm2mb@info.com'),
                   ]),
                   const SizedBox(height: 20),
+                  _section('DISCOVERY'),
+                  _card([
+                    _toggle('Show me in Explore', s.discoverable, (v) {
+                      setState(() => s.setDiscoverable(v));
+                      NetworkClient.instance.setProfile({'discoverable': v});
+                    }),
+                  ]),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+                    child: Text(
+                      'On: other signed-in adults can see your card while you’re '
+                      'online and ask to meet — you always choose whether to accept. '
+                      'Off: you vanish from Explore and can still play and message.',
+                      style: T.tiny.copyWith(fontSize: 12, height: 1.4),
+                    ),
+                  ),
+                  const SizedBox(height: 26),
                   _section('ACCOUNT'),
                   _card([
                     if (!s.signedIn) ...[
@@ -121,7 +138,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _link('Delete account', () => _confirmDelete(context), color: C.live),
                   ]),
                   const SizedBox(height: 26),
-                  Center(child: Text('Rivlr · 1.0.0 (52)', style: T.tiny)),
+                  Center(child: Text('Rivlr · 1.0.0 (55)', style: T.tiny)),
                 ],
               ),
             ),

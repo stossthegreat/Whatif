@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { store, type User } from './store.js';
 import { dbEnabled } from './db.js';
 import * as dbs from './db_social.js';
+import * as social from './social.js';
 import { sendPush, pushEnabled } from './push.js';
 
 /// Calls between friends — a call IS a private 2-person cell (the room engine
@@ -14,6 +15,7 @@ let formCell: FormCell = async () => {};
 export function init(s: SendFn, f: FormCell) { send = s; formCell = f; }
 
 interface Ring {
+  meet?: boolean; // came from Explore -> forms a normal room
   from: string; // uid
   to: string;   // uid
   video: boolean;
@@ -36,13 +38,21 @@ async function missedCallDm(fromUser: User, toUid: string, video: boolean): Prom
   if (token) sendPush(token, fromUser.name, video ? '📹 missed video call' : '📞 missed call');
 }
 
+/// Ring someone. Two origins share this machine:
+///   • a friend CALL (origin absent) — friends only, forms a private call cell
+///   • an Explore MEET (origin 'explore') — strangers allowed, forms a normal
+///     'hang' room so games and P2P work exactly like a matched room
+/// Everything else — blocked check, busy/idle guard, 30s timeout, missed-call
+/// DM — is identical, which is the whole reason to reuse it.
 export async function invite(user: User, m: Record<string, unknown>): Promise<void> {
   if (!dbEnabled) return send(user, { t: 'err', code: 'noDb' });
   const to = typeof m.to === 'string' ? m.to : '';
-  const video = m.video === true;
+  const meet = m.origin === 'explore';
+  const video = meet ? true : m.video === true;
   if (!to || to === user.uid) return;
   if (store.isBlocked(user.uid, to)) return;
-  if ((await dbs.friendState(user.uid, to)) !== 'friends') {
+  if (social.isNeverPair(user.uid, to)) return;
+  if (!meet && (await dbs.friendState(user.uid, to)) !== 'friends') {
     return send(user, { t: 'err', code: 'notFriends' });
   }
   const callId = randomUUID();
@@ -62,9 +72,9 @@ export async function invite(user: User, m: Record<string, unknown>): Promise<vo
     if (t2) state(t2, callId, 'timeout');
     void missedCallDm(user, to, video);
   }, 30_000);
-  rings.set(callId, { from: user.uid, to, video, timer });
+  rings.set(callId, { from: user.uid, to, video, timer, meet });
   state(user, callId, 'ringing');
-  send(target, { t: 'call', callId, video,
+  send(target, { t: 'call', callId, video, meet,
     from: { uid: user.uid, name: user.name, hue: user.hue } });
 }
 
@@ -85,7 +95,8 @@ export async function accept(user: User, m: Record<string, unknown>): Promise<vo
   state(user, callId, 'accepted');
   // remember video-ness for the cell about to form (index reads per members)
   pendingVideo = ring.video;
-  await formCell([caller.id, user.id], 'call');
+  // an Explore meet is a REAL room — games, chaos, P2P — not a private call
+  await formCell([caller.id, user.id], ring.meet ? undefined : 'call');
   pendingVideo = false;
 }
 

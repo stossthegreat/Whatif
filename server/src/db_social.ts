@@ -30,6 +30,10 @@ export async function initSocial(): Promise<void> {
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS tz_offset_min INT',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS active_title TEXT',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_id TEXT',
+    // Explore: opt out and you vanish from the grid entirely
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS discoverable BOOLEAN NOT NULL DEFAULT true',
+    // small avatar derivative — grid cards must never pull the 1MB original
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_thumb_id BIGINT',
   ];
   for (const q of alters) await run(q);
   await run(`CREATE UNIQUE INDEX IF NOT EXISTS users_apple_idx
@@ -562,6 +566,36 @@ export function linkApple(uid: string, appleId: string): void {
     [uid, appleId]);
 }
 
+/// Grid-card data for many people in ONE query. profileCard costs nine
+/// round-trips per person, which is fine for a detail sheet and ruinous for a
+/// grid. Thumb id is preferred over the full photo by every caller.
+export async function cardsFor(uids: string[]): Promise<Map<string, {
+  name: string; hue: number; thumbId: number | null; photoId: number | null;
+  title: string | null; country: string | null; interests: string[];
+}>> {
+  const out = new Map<string, {
+    name: string; hue: number; thumbId: number | null; photoId: number | null;
+    title: string | null; country: string | null; interests: string[];
+  }>();
+  if (!dbEnabled || !uids.length) return out;
+  const r = await run(
+    `SELECT uid, name, hue, photo_media_id, photo_thumb_id, active_title, country, interests
+       FROM users WHERE uid = ANY($1) AND discoverable`,
+    [uids]);
+  for (const x of r?.rows ?? []) {
+    out.set(x.uid as string, {
+      name: (x.name as string) ?? 'someone',
+      hue: Number(x.hue ?? 210),
+      thumbId: x.photo_thumb_id == null ? null : Number(x.photo_thumb_id),
+      photoId: x.photo_media_id == null ? null : Number(x.photo_media_id),
+      title: (x.active_title as string | null) ?? null,
+      country: (x.country as string | null) ?? null,
+      interests: ((x.interests as string[] | null) ?? []),
+    });
+  }
+  return out;
+}
+
 export async function userCard(uid: string):
     Promise<{ name: string; hue: number; photoId: number | null; title: string | null } | null> {
   const r = await run('SELECT name, hue, photo_media_id, active_title FROM users WHERE uid=$1', [uid]);
@@ -627,6 +661,16 @@ export function setProfile(uid: string, m: Record<string, unknown>): void {
   if (typeof m.age === 'number' && m.age >= 18 && m.age <= 99) {
     params.push(Math.trunc(m.age));
     sets.push(`age = $${params.length}`);
+  }
+  // Explore opt-out — the user's switch, honoured everywhere the grid is built
+  if (typeof m.discoverable === 'boolean') {
+    params.push(m.discoverable);
+    sets.push(`discoverable = $${params.length}`);
+  }
+  // pointer to the small avatar derivative used by grid cards
+  if (typeof m.thumbId === 'number' && Number.isFinite(m.thumbId)) {
+    params.push(Math.trunc(m.thumbId));
+    sets.push(`photo_thumb_id = $${params.length}`);
   }
   if (!sets.length) return;
   void run(`UPDATE users SET ${sets.join(', ')} WHERE uid = $1`, params);

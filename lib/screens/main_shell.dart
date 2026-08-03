@@ -1,22 +1,30 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
-import '../core/sound.dart';
+import '../state/chat.dart';
 import '../state/social.dart';
 import '../theme/tokens.dart';
+import 'chats_screen.dart';
+import 'explore_screen.dart';
 import 'home_screen.dart';
 import 'me_screen.dart';
 
-/// Three tabs. That's the whole philosophy:
+/// Four tabs, and three of them still work when the queue is empty — which was
+/// the whole problem with the old two-tab shell: no one online meant an app
+/// with nothing in it.
 ///
-///   HOME    —  the action. One huge Start, trending games, chaos hour.
-///    PLAY   —  drop in. The button IS the company. It dominates the bar.
-///   PROFILE —  badges, sparks, moments, settings. One page.
+///   HOME     —  the three play presets, trending games, chaos hour
+///   EXPLORE  —  who's on right now, tap to say hello
+///   MESSAGES —  your conversations
+///   PROFILE  —  you: record, people, moments, settings
 ///
-/// People don't open Rivlr to browse — they open it to get dropped into chaos.
+/// The floating Play orb is gone: every Home preset card is its own play
+/// button, and two competing "go" affordances is one too many.
 class MainShell extends StatefulWidget {
   const MainShell({super.key, required this.onPlay, required this.onParty, required this.onSignOut});
-  final VoidCallback onPlay;
+
+  /// Mode string: 'roulette' | 'hang' | 'groups'.
+  final ValueChanged<String> onPlay;
   final VoidCallback onParty;
   final VoidCallback onSignOut;
 
@@ -25,7 +33,7 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  int _tab = 0; // 0 = LIVE, 1 = YOU
+  int _tab = 0; // 0 Home · 1 Explore · 2 Messages · 3 Profile
 
   static const double _barHeight = 64;
 
@@ -53,11 +61,12 @@ class _MainShellState extends State<MainShell> {
                     onSignOut: widget.onSignOut,
                     onParty: widget.onParty,
                     onPlay: widget.onPlay),
+                ExploreScreen(onPlay: widget.onPlay),
+                const ChatsScreen(embedded: true),
                 MeScreen(embedded: true, onSignOut: widget.onSignOut),
               ],
             ),
           ),
-          // the bar
           Positioned(
             left: 0,
             right: 0,
@@ -72,51 +81,53 @@ class _MainShellState extends State<MainShell> {
                     color: Color(0xE6060709),
                     border: Border(top: BorderSide(color: C.hair)),
                   ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _NavCell(
-                          icon: Icons.home_rounded,
-                          label: 'Home',
-                          selected: _tab == 0,
-                          onTap: () => _go(0),
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge(
+                        [SocialState.instance, ChatStore.instance]),
+                    builder: (context, _) => Row(
+                      children: [
+                        Expanded(
+                          child: _NavCell(
+                            icon: _tab == 0 ? Icons.home_rounded : Icons.home_outlined,
+                            label: 'Home',
+                            selected: _tab == 0,
+                            onTap: () => _go(0),
+                          ),
                         ),
-                      ),
-                      const Expanded(child: SizedBox()), // lane for the orb
-                      Expanded(
-                        child: AnimatedBuilder(
-                          animation: SocialState.instance,
-                          builder: (context, _) => _NavCell(
-                            icon: _tab == 1 ? Icons.person_rounded : Icons.person_outline_rounded,
-                            label: 'Profile',
+                        Expanded(
+                          child: _NavCell(
+                            icon: _tab == 1 ? Icons.explore_rounded : Icons.explore_outlined,
+                            label: 'Explore',
                             selected: _tab == 1,
-                            badge: SocialState.instance.reqCount,
                             onTap: () => _go(1),
                           ),
                         ),
-                      ),
-                    ],
+                        Expanded(
+                          child: _NavCell(
+                            icon: _tab == 2
+                                ? Icons.chat_bubble_rounded
+                                : Icons.chat_bubble_outline_rounded,
+                            label: 'Messages',
+                            selected: _tab == 2,
+                            badge: ChatStore.instance.unreadTotal,
+                            onTap: () => _go(2),
+                          ),
+                        ),
+                        Expanded(
+                          child: _NavCell(
+                            icon: _tab == 3 ? Icons.person_rounded : Icons.person_outline_rounded,
+                            label: 'Profile',
+                            selected: _tab == 3,
+                            badge: SocialState.instance.reqCount,
+                            onTap: () => _go(3),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          // the orb — floats above the bar, dominates it. "Play" sits under it
-          // on the same baseline as the other tab labels.
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: mq.padding.bottom + 11,
-            child: Center(
-              child: Text('Play',
-                  style: T.tiny.copyWith(fontSize: 10.5, color: C.tx3, fontWeight: FontWeight.w600)),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: mq.padding.bottom + 28,
-            child: Center(child: _PlayOrb(onTap: widget.onPlay)),
           ),
         ],
       ),
@@ -186,58 +197,3 @@ class _NavCell extends StatelessWidget {
 
 /// The drop-in orb. Breathing purple glow — the single most important pixel in
 /// the app. One tap from anywhere and you're in a room.
-class _PlayOrb extends StatefulWidget {
-  const _PlayOrb({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  State<_PlayOrb> createState() => _PlayOrbState();
-}
-
-class _PlayOrbState extends State<_PlayOrb> with SingleTickerProviderStateMixin {
-  late final AnimationController _c =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 2200))
-        ..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        Buzz.pop();
-        Sfx.pop();
-        widget.onTap();
-      },
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (context, _) {
-          final glow = 0.22 + 0.14 * _c.value;
-          return Container(
-            width: 62,
-            height: 62,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [C.sig, C.purpleDeep],
-              ),
-              border: Border.all(color: Colors.white.withOpacity(0.22), width: 1.5),
-              boxShadow: [
-                BoxShadow(color: C.sig.withOpacity(glow), blurRadius: 20, spreadRadius: -4),
-                const BoxShadow(color: Color(0x99000000), blurRadius: 18, offset: Offset(0, 8)),
-              ],
-            ),
-            child: const Icon(Icons.play_arrow_rounded, size: 34, color: Colors.white),
-          );
-        },
-      ),
-    );
-  }
-}

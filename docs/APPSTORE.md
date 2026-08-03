@@ -75,12 +75,23 @@ Data types to declare — everything else: "not collected".
 **Contact info → Email**: NOT collected (Apple sign-in may share a private
 relay email but we never read or store it — declare nothing).
 
-**User content → Audio/Video**: collected? **No** — live streams are
-transient, never recorded or stored (say exactly this in the notes field if
-asked). Do NOT declare photos/videos.
+**User content → Audio/Video (live streams)**: the LIVE streams remain
+NOT collected — transient, never recorded or stored (say exactly this in
+the notes field if asked). BUT since the social layer you MUST declare:
+
+**User content → Photos or Videos**: YES — linked to user, App
+Functionality (profile photos and photo messages; stored to deliver them,
+auto-deleted from chat after 90 days).
+
+**User content → Audio Data**: YES — linked to user, App Functionality
+(voice notes in chats; auto-deleted after 90 days). NOT the live rooms.
+
+**User content → Other User Content**: YES — linked to user, App
+Functionality (messages, bio/profile details, friend connections).
 
 **Identifiers → User ID**: YES — linked to user, used for App Functionality
-(stable anonymous id / Apple user id for sparks, blocks, moderation).
+(stable anonymous id / Apple user id for friendships, messages, blocks,
+moderation).
 
 **Usage data → Product interaction**: YES — NOT linked to identity, used for
 Analytics (Firebase: screens, game picks, matches). We do not use it for
@@ -115,7 +126,7 @@ Answer honestly to land on 17+:
 >    (long-press ⋯); 3 reports auto-remove a user; blocked users are
 >    never matched again and can be managed in Settings → Safety.
 > 5. Account deletion: Settings → Delete account (Guideline 5.1.1(v)).
-> 6. Contact: appsdevelop2025@gmail.com
+> 6. Contact: m2mb@info.com
 
 ## 5 · Screenshots (6.9" iPhone required set)
 

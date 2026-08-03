@@ -344,16 +344,42 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                   // block/report — required reachable from any profile
                   const SizedBox(height: 26),
                   Center(
-                    child: Press(
-                      haptic: false,
-                      onTap: () {
-                        Buzz.tick();
-                        AppSession.instance.noteBlocked(widget.uid, widget.name);
-                        NetworkClient.instance.block(widget.uid);
-                        Navigator.of(context).maybePop();
-                      },
-                      child: Text('Block @${widget.name}',
-                          style: T.tiny.copyWith(color: C.live, fontWeight: FontWeight.w700)),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // reporting a profile PHOTO is its own path: it carries
+                        // the media id so a moderator can view and take it down
+                        if (photoId != null) ...[
+                          Press(
+                            haptic: false,
+                            onTap: () {
+                              Buzz.tick();
+                              NetworkClient.instance.reportPhoto(widget.uid, photoId);
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                behavior: SnackBarBehavior.floating,
+                                backgroundColor: C.char2,
+                                content: Text('photo reported — a human reviews this',
+                                    style: T.body.copyWith(color: Colors.white)),
+                              ));
+                            },
+                            child: Text('Report photo',
+                                style: T.tiny.copyWith(
+                                    color: C.tx2, fontWeight: FontWeight.w700)),
+                          ),
+                          Text('   ·   ', style: T.tiny.copyWith(color: C.tx3)),
+                        ],
+                        Press(
+                          haptic: false,
+                          onTap: () {
+                            Buzz.tick();
+                            AppSession.instance.noteBlocked(widget.uid, widget.name);
+                            NetworkClient.instance.block(widget.uid);
+                            Navigator.of(context).maybePop();
+                          },
+                          child: Text('Block @${widget.name}',
+                              style: T.tiny.copyWith(color: C.live, fontWeight: FontWeight.w700)),
+                        ),
+                      ],
                     ),
                   ),
                 ],

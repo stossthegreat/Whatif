@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:app_links/app_links.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter/material.dart';
 import 'config.dart';
 import 'core/analytics.dart';
+import 'core/apple_auth.dart';
+import 'core/device_id.dart';
 import 'core/push.dart';
 import 'models/game.dart';
 import 'models/person.dart';
@@ -15,6 +18,7 @@ import 'state/chat.dart';
 import 'state/session.dart';
 import 'state/social.dart';
 import 'theme/tokens.dart';
+import 'widgets/glass.dart';
 import 'widgets/incoming_call_overlay.dart';
 import 'widgets/match_overlay.dart';
 import 'widgets/rating_overlay.dart';
@@ -22,12 +26,16 @@ import 'screens/chat_screen.dart';
 import 'screens/friends_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/signin_screen.dart';
-import 'screens/profile_screen.dart';
+import 'screens/dob_screen.dart';
+import 'screens/handle_screen.dart';
+import 'screens/gender_screen.dart';
+import 'screens/language_screen.dart';
+import 'screens/interests_screen.dart';
+import 'screens/photo_screen.dart';
+import 'screens/safety_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/party_screen.dart';
-import 'screens/rules_screen.dart';
-import 'screens/mode_screen.dart';
 import 'screens/finding_screen.dart';
 import 'screens/live_screen.dart';
 
@@ -56,7 +64,12 @@ class RivlrApp extends StatelessWidget {
   }
 }
 
-enum _Step { boot, welcome, signin, profile, rules, permission, home, mode, party, finding, live }
+enum _Step {
+  boot, welcome, signin,
+  // one question per screen — the flow the research pointed at
+  dob, ageBlocked, handle, gender, language, interests, photo, safety, permission,
+  home, party, finding, live,
+}
 
 class _Root extends StatefulWidget {
   const _Root();
@@ -114,6 +127,7 @@ class _RootState extends State<_Root> {
     // load saved identity BEFORE the network hello, so the backend sees a
     // stable uid and we can skip onboarding for returning users.
     await AppSession.instance.load();
+    await DeviceId.load(); // must precede connect() — hello carries it
     if (AppConfig.isLive) {
       SocialState.instance.attach(); // before connect so they see the welcome
       ChatStore.instance.attach(AppSession.instance.myUid);
@@ -171,6 +185,93 @@ class _RootState extends State<_Root> {
     super.dispose();
   }
 
+  /// Everything the flow collected, sent once at the end. Country comes from
+  /// the device locale rather than a screen asking people to type it — it only
+  /// feeds a +2 same-country matching nudge, which isn't worth a whole step.
+  void _commitProfile() {
+    final s = AppSession.instance;
+    final country = ui.PlatformDispatcher.instance.locale.countryCode ?? '';
+    if (country.isNotEmpty) s.setIdentityDetails(country: country);
+    NetworkClient.instance.setProfile({
+      if (s.age != null) 'age': s.age,
+      'country': s.country,
+      'languages': s.languages,
+      'interests': s.interests,
+    });
+  }
+
+  /// Suspended. Leave any room, drop to a dead-end screen, and say plainly
+  /// how long it lasts — a silent disconnect loop is what this replaces.
+  void _onBanned(Map<String, dynamic> m) {
+    RtcService.instance.leave();
+    final until = m['until'] as String?;
+    final reason = (m['reason'] as String?) ?? 'Your account has been suspended.';
+    if (!mounted) return;
+    _to(_Step.home);
+    final ctx = RivlrApp.navKey.currentContext;
+    if (ctx == null) return;
+    final when = until == null
+        ? 'This suspension is permanent.'
+        : 'You can come back after ${until.replaceFirst('T', ' ').substring(0, 16)}.';
+    showDialog<void>(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (d) => AlertDialog(
+        backgroundColor: C.char2,
+        title: Text('Account suspended', style: T.h3),
+        content: Text('$reason\n\n$when\n\nThink this is wrong? Email m2mb@info.com.',
+            style: T.body.copyWith(fontSize: 14.5, height: 1.45)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(d).pop(),
+            child: Text('OK', style: T.body.copyWith(color: C.sig, fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The server refused a live action because this session is a guest.
+  void _needAccount() {
+    if (!mounted) return;
+    if (_step == _Step.finding) _to(_Step.home);
+    final ctx = RivlrApp.navKey.currentContext;
+    if (ctx == null) return;
+    showModalBottomSheet<void>(
+      context: ctx,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Padding(
+        padding: const EdgeInsets.all(12),
+        child: Glass(
+          radius: 26,
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Sign in to go live', style: T.h3),
+              const SizedBox(height: 10),
+              Text(
+                'Meeting people on camera needs an account — it’s what keeps '
+                'banned users out and makes your friends and messages stick. '
+                'Takes one tap and we never see your name or email.',
+                style: T.body.copyWith(fontSize: 14.5, height: 1.45),
+              ),
+              const SizedBox(height: 20),
+              Cta(
+                label: 'Sign in with Apple',
+                onTap: () async {
+                  Navigator.of(sheetCtx).pop();
+                  await appleSignIn();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _to(_Step s) {
     Track.screen(s.name);
     setState(() => _step = s);
@@ -204,6 +305,12 @@ class _RootState extends State<_Root> {
               rooms: (m['rooms'] as num?)?.toInt(),
               matches: (m['matches'] as num?)?.toInt());
         }
+      case 'banned':
+        _onBanned(m);
+      case 'err':
+        // going live needs a real account — surface the sign-in at the exact
+        // moment they wanted to play, which is when they're most willing
+        if (m['code'] == 'needAccount') _needAccount();
       case 'cell':
         _onCell(m);
       case 'ended':
@@ -409,9 +516,54 @@ class _RootState extends State<_Root> {
     final Widget screen = switch (_step) {
       _Step.boot => const ColoredBox(color: C.black),
       _Step.welcome => WelcomeScreen(onNext: () => _to(_Step.signin)),
-      _Step.signin => SignInScreen(onContinue: () => _to(_Step.profile)),
-      _Step.profile => ProfileScreen(onDone: () => _to(_Step.rules)),
-      _Step.rules => RulesScreen(onAgree: () => _to(_Step.permission)),
+      _Step.signin => SignInScreen(
+          onContinue: () =>
+              _to(AppSession.instance.dobRejected ? _Step.ageBlocked : _Step.dob)),
+      _Step.dob => DobScreen(
+          onBack: () => _to(_Step.signin),
+          onRejected: () => _to(_Step.ageBlocked),
+          onDone: (d) {
+            AppSession.instance.setDob(d);
+            _to(_Step.handle);
+          }),
+      _Step.ageBlocked => const AgeBlockedScreen(),
+      _Step.handle => HandleScreen(
+          onBack: () => _to(_Step.dob),
+          onDone: (h) {
+            AppSession.instance.setHandle(h);
+            _to(_Step.gender);
+          }),
+      _Step.gender => GenderScreen(
+          initial: AppSession.instance.gender,
+          onBack: () => _to(_Step.handle),
+          onDone: (g) {
+            // gender only — who you WANT to meet is a paid filter, not a
+            // free onboarding question
+            AppSession.instance.setProfile(gender: g);
+            _to(_Step.language);
+          }),
+      _Step.language => LanguageScreen(
+          onBack: () => _to(_Step.gender),
+          onDone: (lang) {
+            AppSession.instance.setIdentityDetails(languages: [lang]);
+            _to(_Step.interests);
+          }),
+      _Step.interests => InterestsScreen(
+          initial: AppSession.instance.interests,
+          onBack: () => _to(_Step.language),
+          onDone: (list) {
+            AppSession.instance.setIdentityDetails(interests: list);
+            _to(_Step.photo);
+          }),
+      _Step.photo => PhotoScreen(
+          onBack: () => _to(_Step.interests),
+          onDone: () => _to(_Step.safety)),
+      _Step.safety => SafetyScreen(
+          onBack: () => _to(_Step.photo),
+          onAgree: () {
+            _commitProfile();
+            _to(_Step.permission);
+          }),
       _Step.permission => OnboardingScreen(onDone: () {
           AppSession.instance.completeOnboarding();
           Track.event('onboarding_done');
@@ -419,10 +571,9 @@ class _RootState extends State<_Root> {
           Timer(const Duration(seconds: 2), Push.init);
         }),
       _Step.home => MainShell(
-          onPlay: () => _to(_Step.mode),
+          onPlay: _play,
           onParty: () => _to(_Step.party),
           onSignOut: () => _to(_Step.welcome)),
-      _Step.mode => ModeScreen(onPick: _play, onBack: () => _to(_Step.home)),
       _Step.party => PartyScreen(
           key: ValueKey('party${_partyCode ?? ''}${_partyInviteUid ?? ''}'),
           initialCode: _partyCode,

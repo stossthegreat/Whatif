@@ -1,100 +1,18 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../core/haptics.dart';
-import '../core/sound.dart';
 import '../theme/tokens.dart';
-import '../widgets/glass.dart';
+import 'glass.dart';
 
-/// Press play → choose your poison. Three cards, all on one screen:
+/// The three play presets, lifted out of the old standalone mode screen so
+/// they can live on Home. Each card is its own play button — which is why the
+/// floating orb is gone: two competing "go" affordances is one too many.
 ///
-///   ROULETTE — no choices. Games hit you back to back. Want out? Go home.
-///   1 ON 1   — person to person. Games are a choice, not a demand.
-///   GROUPS   — your own room. Invite up to 3 friends, code or direct.
-///
-/// Obsidian cards splitting the height, one living animation each.
-class ModeScreen extends StatelessWidget {
-  const ModeScreen({super.key, required this.onPick, required this.onBack});
-  final ValueChanged<String> onPick;
-  final VoidCallback onBack;
+/// Written for a bounded box (Home gives them a fixed height); the art layers
+/// animate continuously and are cheap (no images, pure paint).
 
-  @override
-  Widget build(BuildContext context) {
-    final r = Responsive.of(context);
-    return Scaffold(
-      backgroundColor: C.black,
-      body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: r.gutter),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Press(
-                    onTap: onBack,
-                    child: Container(
-                      width: 38, height: 38,
-                      decoration: BoxDecoration(
-                          shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
-                      child: const Icon(Icons.arrow_back_rounded, size: 20, color: C.tx2),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Text('How do you want it?', style: T.big.copyWith(fontSize: 24)),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: _ModeCard(
-                  title: 'Roulette',
-                  line: 'No choices. Games hit you, back to back.',
-                  art: const _RouletteArt(),
-                  onTap: () {
-                    Buzz.pop();
-                    Sfx.match();
-                    onPick('roulette');
-                  },
-                ),
-              ),
-              const SizedBox(height: 10),
-              Expanded(
-                child: _ModeCard(
-                  title: '1 on 1',
-                  line: 'Person to person. Games are a choice —\nplay one or just talk.',
-                  art: const _HangArt(),
-                  onTap: () {
-                    Buzz.pop();
-                    Sfx.pop();
-                    onPick('hang');
-                  },
-                ),
-              ),
-              const SizedBox(height: 10),
-              Expanded(
-                child: _ModeCard(
-                  title: 'Groups',
-                  line: 'Your room, your people — invite up to 3 friends.',
-                  art: const _GroupsArt(),
-                  onTap: () {
-                    Buzz.pop();
-                    Sfx.pop();
-                    onPick('groups');
-                  },
-                ),
-              ),
-              const SizedBox(height: 14),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ModeCard extends StatelessWidget {
-  const _ModeCard({required this.title, required this.line, required this.art, required this.onTap});
+class ModeCard extends StatelessWidget {
+  const ModeCard({super.key, required this.title, required this.line, required this.art, required this.onTap});
   final String title;
   final String line;
   final Widget art;
@@ -179,13 +97,13 @@ class _ModeCard extends StatelessWidget {
 }
 
 /// Roulette's living layer — a big slow-cycling emoji reel with a purple glow.
-class _RouletteArt extends StatefulWidget {
-  const _RouletteArt();
+class RouletteArt extends StatefulWidget {
+  const RouletteArt({super.key});
   @override
-  State<_RouletteArt> createState() => _RouletteArtState();
+  State<RouletteArt> createState() => RouletteArtState();
 }
 
-class _RouletteArtState extends State<_RouletteArt> {
+class RouletteArtState extends State<RouletteArt> {
   static const _faces = ['🎰', '😜', '🔥', '👀', '🍾', '💀', '😏', '🎭'];
   int _i = 0;
   Timer? _t;
@@ -238,13 +156,13 @@ class _RouletteArtState extends State<_RouletteArt> {
 }
 
 /// Groups' living layer — a tight cluster of orbs, your circle in one room.
-class _GroupsArt extends StatefulWidget {
-  const _GroupsArt();
+class GroupsArt extends StatefulWidget {
+  const GroupsArt({super.key});
   @override
-  State<_GroupsArt> createState() => _GroupsArtState();
+  State<GroupsArt> createState() => GroupsArtState();
 }
 
-class _GroupsArtState extends State<_GroupsArt> with SingleTickerProviderStateMixin {
+class GroupsArtState extends State<GroupsArt> with SingleTickerProviderStateMixin {
   late final AnimationController _c =
       AnimationController(vsync: this, duration: const Duration(seconds: 6))..repeat(reverse: true);
 
@@ -294,13 +212,13 @@ class _GroupsArtState extends State<_GroupsArt> with SingleTickerProviderStateMi
 }
 
 /// Hang's living layer — two soft orbs breathing toward each other.
-class _HangArt extends StatefulWidget {
-  const _HangArt();
+class HangArt extends StatefulWidget {
+  const HangArt({super.key});
   @override
-  State<_HangArt> createState() => _HangArtState();
+  State<HangArt> createState() => HangArtState();
 }
 
-class _HangArtState extends State<_HangArt> with SingleTickerProviderStateMixin {
+class HangArtState extends State<HangArt> with SingleTickerProviderStateMixin {
   late final AnimationController _c =
       AnimationController(vsync: this, duration: const Duration(seconds: 5))..repeat(reverse: true);
 

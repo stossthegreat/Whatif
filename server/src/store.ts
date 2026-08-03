@@ -17,6 +17,8 @@ export interface User {
   queuedAt: number;
   lastPong: number;
   connectedAt?: number;  // handshake time — the no-hello reaper's clock
+  deviceId?: string | null; // Keychain-backed device id — bans outlive reinstalls
+  appleVerified?: boolean;  // proved a real Apple identity token, not a claim
   helloed?: boolean;     // real client spoke — reaper stands down
   tz?: number;                 // client tz offset minutes (Night Owl badge etc.)
   friendUids?: Set<string>;    // hydrated on hello — for presence broadcasts

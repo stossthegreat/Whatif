@@ -23,6 +23,10 @@ import { mintAuthToken } from './auth.js';
 import { mountMedia, startRetentionSweep, gifsEnabled } from './media.js';
 import * as calls from './calls.js';
 import * as matching from './matching.js';
+import * as moderation from './moderation.js';
+import * as explore from './explore.js';
+import { verifyAppleToken } from './apple_verify.js';
+import { mountAdmin } from './admin.js';
 
 const PORT = Number(process.env.PORT || 8080);
 const ALLOW_SOLO = (process.env.ALLOW_SOLO || 'true') === 'true';
@@ -32,7 +36,9 @@ const LIVE_BASELINE = Number(process.env.LIVE_BASELINE || 0);
 // LiveKit is the automatic fallback and still carries groups + calls.
 // Kill-switch: set P2P=false on Railway and redeploy.
 const P2P_ENABLED = (process.env.P2P ?? 'true') === 'true';
-const REPORT_KICK = Number(process.env.REPORT_KICK || 3);
+// Sign-in gate for going live. Off by default so a misconfigured deploy can
+// never lock every user out; Railway sets REQUIRE_ACCOUNT=true.
+const REQUIRE_ACCOUNT = (process.env.REQUIRE_ACCOUNT ?? 'false') === 'true';
 
 const NAMES = ['kai', 'noor', 'remy', 'sasha', 'theo', 'luca', 'emi', 'dro', 'wren',
   'max', 'ira', 'jae', 'nova', 'sol', 'zed', 'fin', 'ash', 'juno'];
@@ -66,9 +72,18 @@ function compatible(a: User, b: User): boolean {
     && !store.isBlocked(a.uid, b.uid)
     && !social.isNeverPair(a.uid, b.uid) // "never again" is forever
     && !matching.hardBlocked(a, b)       // met in the last 24h — keep it fresh
+    && !matching.quarantineBlocks(a, b)  // low-rep accounts pool together
     && (a.mode ?? 'hang') === (b.mode ?? 'hang') // roulette matches roulette
     && meetOk(a.meet, b.gender)
     && meetOk(b.meet, a.gender);
+}
+
+/// Guests can browse everything; going on camera needs a verified account so
+/// that bans, reports and reputation attach to something durable.
+function canGoLive(u: User): boolean {
+  if (!REQUIRE_ACCOUNT || u.appleVerified === true) return true;
+  send(u, { t: 'err', code: 'needAccount' });
+  return false;
 }
 
 // ---- matchmaking -----------------------------------------------------------
@@ -618,17 +633,36 @@ function notifyLive(u: User) {
 }
 
 // ---- moderation ------------------------------------------------------------
-function onReport(target: string, reporter = '') {
-  const n = store.report(target);
-  db.addReport(reporter, target);
-  console.log(`[report] ${target} (${n})`);
-  if (n >= REPORT_KICK) {
+/// A report is a SIGNAL, not a verdict. The old `count >= 3 -> close socket`
+/// was both abusable (three friends could erase anyone) and broken (the count
+/// rehydrated from the DB, so a past-threshold user hit a reconnect loop
+/// forever). Now: record it with its category, let moderation.ts weigh
+/// distinct reporters, their credibility, recency and severity, and act only
+/// on high confidence — and only ever with a TEMPORARY hold. Permanent bans
+/// are a human decision in /admin.
+function onReport(
+  target: string, reporter = '',
+  opts: { reason?: string; context?: string; mediaId?: number } = {},
+) {
+  const reason = opts.reason ?? 'other';
+  store.report(target);
+  db.addReport(reporter, target, {
+    reason, severity: moderation.severityOf(reason),
+    context: opts.context, mediaId: opts.mediaId,
+  });
+  console.log(`[report] ${target} (${reason})`);
+  void moderation.onReportFiled(target).then((v) => {
+    if (v.action !== 'hold') return;
+    console.log(`[hold] ${target} score=${v.score} distinct=${v.distinct}`);
     const u = store.userByUid(target);
     if (u) {
-      send(u, { t: 'removed', reason: 'community reports' });
+      send(u, {
+        t: 'banned', until: v.until,
+        reason: 'Temporarily suspended while we review reports.',
+      });
       try { u.ws.close(); } catch { /* ignore */ }
     }
-  }
+  });
 }
 
 // ---- background loops ------------------------------------------------------
@@ -699,6 +733,7 @@ app.get('/terms', (_req, res) => res.type('html').send(legal.page('Terms of Serv
 app.get('/rules', (_req, res) => res.type('html').send(legal.page('House Rules', legal.rules)));
 app.get('/delete-account', (_req, res) => res.type('html').send(legal.page('Delete your account', legal.deleteAccount)));
 mountMedia(app);
+mountAdmin(app);
 startRetentionSweep();
 app.get('/stats', (_req, res) => res.json({
   online: store.onlineCount, queued: store.queue.length, cells: store.cells.size,
@@ -775,17 +810,40 @@ wss.on('connection', (ws, req) => {
         // Apple id is a RECOVERY KEY: if it already maps to an account, that
         // account's uid wins (reinstalls get their whole graph back); if not,
         // it links to whatever uid this session uses. Zero data migration.
+        //
+        // The id must come from a VERIFIED identity token — a raw string is
+        // just a claim, and believing it let anyone who learned someone's
+        // Apple id take over their account.
         let appleLink: string | null = null;
-        if (typeof m.appleId === 'string' && m.appleId.length) {
-          const appleId = (m.appleId as string).slice(0, 64);
-          const canonical = db.dbEnabled ? await dbs.uidForApple(appleId) : null;
-          if (canonical) m = { ...m, uid: canonical };
-          else appleLink = appleId;
+        const appleToken = typeof m.appleToken === 'string' ? m.appleToken : '';
+        if (appleToken) {
+          const verified = await verifyAppleToken(appleToken);
+          if (verified) {
+            user.appleVerified = true;
+            const canonical = db.dbEnabled ? await dbs.uidForApple(verified) : null;
+            if (canonical) m = { ...m, uid: canonical };
+            else appleLink = verified;
+          }
         }
+        // device identity (Keychain-backed, survives reinstall) — the anchor
+        // that makes a ban outlast deleting the app
+        const deviceId = typeof m.deviceId === 'string' && m.deviceId.length
+          ? (m.deviceId as string).slice(0, 64) : null;
+        user.deviceId = deviceId;
         if (typeof m.uid === 'string' && m.uid.length) {
           store.byUid.delete(user.uid);
           user.uid = m.uid.slice(0, 64);
           store.byUid.set(user.uid, id);
+        }
+        // sanctions are checked against BOTH the account and the hardware
+        if (db.dbEnabled) {
+          const ban = await db.activeBan(user.uid, deviceId);
+          if (ban) {
+            send(user, { t: 'banned', until: ban.until, reason: ban.reason });
+            try { user.ws.close(); } catch { /* ignore */ }
+            return;
+          }
+          if (deviceId) db.noteDevice(user.uid, deviceId);
         }
         if (typeof m.name === 'string' && m.name.trim()) user.name = m.name.trim().slice(0, 16);
         if (typeof m.gender === 'string') user.gender = m.gender;
@@ -796,6 +854,7 @@ wss.on('connection', (ws, req) => {
           live: LIVE_BASELINE + store.onlineCount,
           http: { token: mintAuthToken(user.uid), base: process.env.PUBLIC_URL || '' },
           features: { social: db.dbEnabled, media: db.dbEnabled, gifs: gifsEnabled },
+          account: { signedIn: user.appleVerified === true },
         });
         notifyLive(user);
         void social.hydrate(user);
@@ -822,12 +881,15 @@ wss.on('connection', (ws, req) => {
         break;
       }
       case 'play':
+        // going live requires a real account — that's what makes a ban stick
+        if (!canGoLive(user)) break;
         if (m.mode === 'roulette' || m.mode === 'hang') user.mode = m.mode;
         leaveParty(id); leaveCell(user); enqueue(user);
         break;
       case 'next': leaveCell(user); enqueue(user); break;
       case 'leave': dequeue(id); leaveCell(user); user.state = 'idle'; break;
       case 'host': {
+        if (!canGoLive(user)) break;
         // IDEMPOTENT: reopening the screen must NOT rotate the code — a code
         // the host already shared has to stay joinable while they're online.
         const heldCode = partyByUser.get(id);
@@ -843,6 +905,7 @@ wss.on('connection', (ws, req) => {
         break;
       }
       case 'joinParty': {
+        if (!canGoLive(user)) break;
         const code = String(m.code ?? '').toUpperCase().trim();
         // Joining the party you're already in (e.g. typing your own code) must
         // be a no-op success. The old flow left-then-rejoined — leaving a solo
@@ -950,6 +1013,10 @@ wss.on('connection', (ws, req) => {
       case 'unfriend': if (typeof m.target === 'string') void social.unfriend(user, m.target); break;
       case 'setTier': void social.setTier(user, m); break;
       case 'pinChat': void social.pinChat(user, m); break;
+      case 'explore':
+        // browsing is open to everyone; INVITING needs an account (canGoLive)
+        void explore.list(user);
+        break;
       case 'friends': void social.snapshot(user); break;
       case 'traitVote': void social.traitVote(user, m); break;
       case 'setProfile': social.setProfile(user, m); break;
@@ -975,7 +1042,23 @@ wss.on('connection', (ws, req) => {
         break;
       case 'report':
         if (typeof m.target === 'string') {
-          onReport(m.target, user.uid);
+          onReport(m.target, user.uid, {
+            reason: moderation.normalizeReason(m.reason),
+            context: user.cellId ?? undefined,
+            mediaId: typeof m.mediaId === 'number' ? m.mediaId : undefined,
+          });
+          social.onReported(m.target);
+        }
+        break;
+      case 'reportPhoto':
+        // a reported profile photo goes to the same queue, tagged with the
+        // media id so a moderator can view and take it down
+        if (typeof m.target === 'string') {
+          onReport(m.target, user.uid, {
+            reason: moderation.normalizeReason(m.reason ?? 'nudity'),
+            context: 'profile photo',
+            mediaId: typeof m.mediaId === 'number' ? m.mediaId : undefined,
+          });
           social.onReported(m.target);
         }
         break;
@@ -1042,6 +1125,7 @@ server.listen(PORT, () => {
 social.init(send);
 chat.init(send);
 calls.init(send, formCell);
+explore.init(send, meetOk);
 social.startRepDecay();
 
 // crash guard: one bad code path must never take down every live room.
