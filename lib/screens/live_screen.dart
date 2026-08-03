@@ -1220,10 +1220,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             children: [
               _sheetRow(Icons.flag_outlined, 'Report @$name', C.tx, () {
                 Navigator.pop(ctx);
-                // the server keys moderation by the STABLE uid, never conn-id
-                final target = p.uid ?? p.id;
-                if (widget.live && target != null) NetworkClient.instance.report(target);
-                _toast('reported — our team is on it');
+                _pickReportReason(p);
               }),
               const Divider(height: 1, color: C.hair),
               _sheetRow(Icons.block_rounded, 'Block @$name', C.live, () {
@@ -1237,6 +1234,55 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                 widget.onNext();
               }),
               const Divider(height: 1, color: C.hair),
+              _sheetRow(null, 'Cancel', C.tx2, () => Navigator.pop(ctx), center: true),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// What kind of report? Category drives triage: child-safety and nudity go
+  /// to the top of the moderation queue instead of sitting behind spam.
+  void _pickReportReason(Person p) {
+    const reasons = <(String, String, IconData)>[
+      ('child_safety', 'A minor / child safety', Icons.report_gmailerrorred_rounded),
+      ('nudity', 'Nudity or sexual content', Icons.no_adult_content_rounded),
+      ('harassment', 'Harassment, hate or abuse', Icons.mood_bad_rounded),
+      ('violence', 'Violence or threats', Icons.dangerous_rounded),
+      ('impersonation', 'Pretending to be someone', Icons.person_off_rounded),
+      ('other', 'Something else', Icons.more_horiz_rounded),
+    ];
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(12),
+        child: Glass(
+          radius: 26,
+          padding: const EdgeInsets.fromLTRB(6, 16, 6, 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text('WHAT HAPPENED?', style: T.eyebrow),
+              ),
+              const SizedBox(height: 12),
+              for (final r in reasons) ...[
+                _sheetRow(r.\$3, r.\$2, r.\$1 == 'child_safety' ? C.live : C.tx, () {
+                  Navigator.pop(ctx);
+                  // the server keys moderation by the STABLE uid, never conn-id
+                  final target = p.uid ?? p.id;
+                  if (widget.live && target != null) {
+                    NetworkClient.instance.report(target, reason: r.\$1);
+                  }
+                  _toast('reported — a human reviews this, fast');
+                }),
+                const Divider(height: 1, color: C.hair),
+              ],
               _sheetRow(null, 'Cancel', C.tx2, () => Navigator.pop(ctx), center: true),
             ],
           ),

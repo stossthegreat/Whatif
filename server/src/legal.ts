@@ -37,8 +37,9 @@ Rivlr pairs people into live video rooms with games, and lets people who chose e
 
 3. INFORMATION YOU PROVIDE
 • A handle you choose (no real name required — and we ask you NOT to use one)
-• Your age (to enforce our 18+ policy), gender, who you want to meet, and the "vibes" you select
-• Profile details you CHOOSE to add, all optional: a bio, city and country (typed by you as free text — used to make better matches; we never collect GPS or precise location), pronouns, languages, interests, what you're looking for, and a profile photo
+• Your date of birth (to enforce our 18+ policy and to match you with people near your age — never shown to anyone) and your gender
+• Your primary language and your interests — these are what the matching actually runs on
+• Profile details you CHOOSE to add, all optional: a bio, city, pronouns, what you're looking for, and a profile photo. Your COUNTRY is taken from your phone's region setting (a country, never GPS or a precise location) purely to nudge matching
 • Reports you file about other users, and the people you block, save, or add as friends
 • Anything you include when you contact us at m2mb@info.com
 
@@ -73,16 +74,36 @@ We use Firebase Analytics to understand which screens and games people use, in a
 10. PUSH NOTIFICATIONS
 If you allow notifications, we store a device push token so we can tell you things like a friend coming online, a new message, or a friend request. Sending uses Apple Push Notification service and Google Firebase Cloud Messaging. Turn notifications off in your device Settings at any time; the token stops being used.
 
-11. TECHNICAL DATA
+11. TECHNICAL DATA AND YOUR DEVICE IDENTIFIER
 Like every online service, our servers momentarily see your IP address and connection metadata when your device connects. We use it transiently for delivery, rate limiting, and abuse prevention (for example, limiting how many simultaneous connections one address can open). We do not build profiles from it.
 
+We also generate a random identifier for your device and store it in your phone's secure keychain. It is a random string — it contains nothing about you, is not your advertising identifier, and is never shared with anyone. Its only job is safety: it is what stops someone who has been suspended from deleting the app, reinstalling it, and walking straight back in. It is linked to the accounts that have signed in on this device, and to any suspension applied to it.
+
 12. WHAT WE DO NOT DO
-• We do not record rooms — no video, no audio, no transcripts
+• We do not record rooms — no video, no audio, no transcripts of live rooms
 • We do not request your contacts or address book
 • We do not collect GPS or precise location
 • We do not use cookies, web tracking, or advertising identifiers
 • We do not show ads, and we do not sell or rent personal data to anyone
 • We do not use your content or your conversations to train AI systems
+
+To be precise about the one thing people care most about: "never recorded"
+means LIVE ROOM video and audio. It does not mean we hold nothing at all —
+the things we do hold are listed in sections 3, 6 and 7, and the two places a
+human may look at your content are listed in section 12a.
+12a. WHEN A HUMAN MAY SEE SOMETHING
+We would rather over-explain this than let "never recorded" be read as more
+than it is:
+• If someone reports your profile photo or a photo/voice note you sent, a
+  moderator may open that specific item to decide whether it breaks the rules,
+  and may remove it. Reported items are only ever viewed in response to a
+  report, never browsed.
+• Crash and error diagnostics sent to Firebase include the technical error
+  text from the failure. They do not contain your messages or media.
+• Report records contain who reported whom, the category, the time, and which
+  room it happened in.
+Live room video and audio are never in any of this, because they are never
+captured in the first place.
 
 13. HOW WE USE INFORMATION
 To run the service you asked for (matching, rooms, games, friends, messaging, calls); to keep the community safe (report handling, blocks, abuse prevention, under-18 removal); to maintain and improve Rivlr using aggregate statistics; and to communicate service messages. We do not use your information for marketing to third parties.
@@ -108,12 +129,13 @@ We review every government or law-enforcement request individually and require v
 • Messages: until you delete your account (your sent messages are then deleted)
 • Chat photos and voice notes: 90 days from sending, then deleted automatically
 • Push token: until you disable notifications or delete your account
-• Reports: up to 24 months, for community safety, even after account deletion
+• Reports (including the category and the media item reported, if any): up to
+  24 months, for community safety, even after account deletion
 • Rolling database backups: purged within 30 days
 There is no video or audio retention because none is ever captured.
 
 18. DELETING YOUR ACCOUNT
-In-app: Settings → Delete account removes your device data AND instructs our servers to delete your account record, profile and photo, friendships and requests, the messages and media you sent, your encounter log, ratings and votes you cast, stats, badges and push token immediately; residual copies leave backups within 30 days. No app access? Email m2mb@info.com from any address with your handle and we will delete within 30 days. Two honest caveats: messages and media already delivered to other people's devices may persist on their side, and report records about behaviour may be retained for community safety. Deletion is permanent — friendships and messages cannot be recovered. See /delete-account for the step-by-step guide.
+In-app: Settings → Delete account removes your device data AND instructs our servers to delete your account record, profile and photo, friendships and requests, the messages and media you sent, your encounter log, ratings and votes you cast, stats, badges and push token immediately; residual copies leave backups within 30 days. No app access? Email m2mb@info.com from any address with your handle and we will delete within 30 days. Three honest caveats: messages and media already delivered to other people's devices may persist on their side; report records about behaviour may be retained for community safety; and if your account or device is under an active suspension, the record of that suspension is retained so deletion cannot be used to escape it. Deletion is permanent — friendships and messages cannot be recovered. See /delete-account for the step-by-step guide.
 
 19. YOUR RIGHTS
 Depending on where you live, you may have the right to access, correct, export, restrict, object to processing of, or delete your personal data, and to withdraw consent at any time. Exercise any of them by emailing m2mb@info.com — we answer within 30 days and may ask you to verify control of the account first (a safeguard, not an obstacle). If you are in the EEA or UK you may also complain to your data-protection authority (in the UK, the ICO at ico.org.uk).
@@ -146,7 +168,7 @@ You must be at least 18 years old and legally able to enter this agreement. By u
 Rivlr connects you into live video rooms with people you don't know (always one-to-one for strangers), rooms you create with friends, and — when two people choose each other — friendships with messaging and calls. Games run inside rooms. We may add, change, or remove features at any time as the service evolves.
 
 3. YOUR ACCOUNT AND SECURITY
-Your account (whether guest or Sign in with Apple) is yours alone: do not sell, transfer, or share it, and do not let anyone else use it. You may not choose a handle you have no right to use or one intended to impersonate another person. You are responsible for activity on your account. If we must resolve a dispute over who owns an account, our determination (which may include suspension or termination) is final. Tell us immediately at m2mb@info.com about any unauthorised use.
+Going live on camera requires signing in with Apple — this is what lets suspensions actually stick, and it is why the graph of friends and messages survives a reinstall. Your account (whether guest or Sign in with Apple) is yours alone: do not sell, transfer, or share it, and do not let anyone else use it. You may not choose a handle you have no right to use or one intended to impersonate another person. You are responsible for activity on your account. If we must resolve a dispute over who owns an account, our determination (which may include suspension or termination) is final. Tell us immediately at m2mb@info.com about any unauthorised use.
 
 4. FREE SERVICE; FUTURE PAID FEATURES
 Rivlr is currently free. If we ever introduce paid features or subscriptions, they will be governed by the applicable app store's payment terms and by Additional Terms posted at the time, including clear pricing, renewal, and cancellation rules, with any detrimental changes notified in advance.
@@ -168,7 +190,13 @@ You agree that you will NOT, in any room, message, profile, or other content:
 We may investigate any of the above and take any action we consider appropriate, including removing content, suspending or permanently terminating accounts, and reporting to law enforcement.
 
 6. MODERATION
-We filter and act on objectionable content and abusive users: reports are one tap away in every room and chat, blocks are instant and permanent, accounts that accumulate community reports are removed automatically, and we act on every report within 24 hours — typically by removing the offending content or user. We may remove any content or user at our discretion to keep the community safe.
+Reporting is one tap away in every room, chat and profile, and asks what kind of problem it is — child safety, nudity or sexual content, harassment or hate, violence or threats, impersonation, or something else. Blocks are instant and permanent: a blocked person can never be matched with you again.
+
+Every report reaches a human review queue, ordered by severity, and we act within 24 hours — child-safety and nudity reports are handled ahead of everything else. Outcomes include removing a profile photo or other content, temporarily suspending an account, and permanently removing it.
+
+Reports are a signal, not an automatic verdict: we weigh how many independent people reported you, their standing, how recent it is, and how serious the category, and only a strong combination triggers an automatic temporary suspension pending review. Permanent removal is a decision made by a person. Suspensions may be applied to an account and to the device it used, so deleting and reinstalling the app does not undo them.
+
+We may remove any content or user at our discretion to keep the community safe, and we report illegal material to the appropriate authorities.
 
 7. YOUR CONTENT AND LICENCES
 Live video and audio: they belong to you, and WE DO NOT RECORD THEM. You grant us only the limited, technical, non-exclusive licence required to transmit them in real time to the members of your room. No recording exists, so no further licence is needed or taken.

@@ -81,6 +81,25 @@ export function score(a: User, b: User): number {
   return s;
 }
 
+/// Hidden-reputation quarantine. Accounts that have collected real negative
+/// signal (reports, blocks, "never again" ratings) drift into their own pool
+/// instead of being banned — no appeals process, no drama, and clean users
+/// stop running into them. Deliberately a soft wall: see quarantineBlocks().
+const QUARANTINE_FLOOR = -25;
+
+export function quarantined(uid: string): boolean {
+  return (hints.get(uid)?.rep ?? 0) <= QUARANTINE_FLOOR;
+}
+
+/// True when these two shouldn't meet YET because exactly one of them is
+/// quarantined. Escapes after 20s of waiting so nobody is ever stranded —
+/// starvation is a worse failure than an occasional mixed pairing.
+export function quarantineBlocks(a: User, b: User): boolean {
+  if (quarantined(a.uid) === quarantined(b.uid)) return false;
+  const waited = Math.max(Date.now() - a.queuedAt, Date.now() - b.queuedAt);
+  return waited < 20_000;
+}
+
 /// Cannot be paired at all right now (beyond compatible()): met in the last 24h.
 export function hardBlocked(a: User, b: User): boolean {
   return metWithin(a.uid, b.uid, DAY);

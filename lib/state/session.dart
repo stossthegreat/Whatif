@@ -133,6 +133,9 @@ class AppSession extends ChangeNotifier {
       interests = p.getStringList('interests') ?? [];
       languages = p.getStringList('languages') ?? [];
       photoId = p.getInt('photoId');
+      final dobMs = p.getInt('dob');
+      if (dobMs != null) dob = DateTime.fromMillisecondsSinceEpoch(dobMs);
+      dobRejected = p.getBool('dobRejected') ?? false;
       // moments survive restarts — they're the user's history, not a session
       try {
         final raw = p.getString('moments');
@@ -185,11 +188,15 @@ class AppSession extends ChangeNotifier {
   /// Apple id is a recovery key linked to it server-side, so signing in later
   /// never migrates anything, and a reinstall gets the whole graph back.
   String? appleUserId;
-  void setAppleIdentity(String id) {
-    appleUserId = id;
+  /// Apple's signed identity token. Held in memory only — it expires quickly
+  /// and the server re-verifies on each fresh sign-in, so persisting it would
+  /// be storing a stale credential for no benefit.
+  String? appleToken;
+  void setAppleIdentity(String appleId, {String? token}) {
+    appleUserId = appleId;
+    appleToken = token;               // signed proof, sent once on the next hello
+    _prefs?.setString('appleUserId', appleId);
     signedIn = true;
-    _prefs?.setString('appleUserId', id);
-    _persist();
     notifyListeners();
   }
 
@@ -247,6 +254,27 @@ class AppSession extends ChangeNotifier {
   List<String> interests = [];
   List<String> languages = [];
   int? photoId; // server media id of the avatar
+  DateTime? dob; // real date of birth — drives the 18+ gate and age matching
+  /// Set when someone fails the age gate. Remembered so coming back and
+  /// typing a different year doesn't get them in.
+  bool dobRejected = false;
+
+  void setDob(DateTime d) {
+    dob = d;
+    final now = DateTime.now();
+    var a = now.year - d.year;
+    if (now.month < d.month || (now.month == d.month && now.day < d.day)) a--;
+    age = a;
+    _prefs?.setInt('dob', d.millisecondsSinceEpoch);
+    _prefs?.setInt('age', a);
+    notifyListeners();
+  }
+
+  void setDobRejected() {
+    dobRejected = true;
+    _prefs?.setBool('dobRejected', true);
+    notifyListeners();
+  }
 
   void setIdentityDetails({
     String? bio,

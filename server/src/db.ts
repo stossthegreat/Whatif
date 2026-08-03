@@ -99,6 +99,32 @@ export async function initDb(): Promise<void> {
     target TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`);
+  // categories make triage possible — an untriaged report queue can't honour
+  // the 24h promise, and child-safety/nudity must jump the line
+  await run("ALTER TABLE reports ADD COLUMN IF NOT EXISTS reason TEXT NOT NULL DEFAULT 'other'");
+  await run('ALTER TABLE reports ADD COLUMN IF NOT EXISTS severity SMALLINT NOT NULL DEFAULT 1');
+  await run('ALTER TABLE reports ADD COLUMN IF NOT EXISTS context TEXT');
+  await run('ALTER TABLE reports ADD COLUMN IF NOT EXISTS media_id BIGINT');
+  await run('ALTER TABLE reports ADD COLUMN IF NOT EXISTS handled_at TIMESTAMPTZ');
+
+  // Real sanctions. Keyed by uid OR device: a device ban survives the
+  // delete-app-and-reinstall trick that made every previous ban a suggestion.
+  await run(`CREATE TABLE IF NOT EXISTS bans (
+    id BIGSERIAL PRIMARY KEY,
+    subject_type TEXT NOT NULL CHECK (subject_type IN ('uid','device')),
+    subject TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    until TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  // which hardware an account has used — lets an account ban also pin the
+  // device, so the reinstall path is closed too
+  await run(`CREATE TABLE IF NOT EXISTS user_devices (
+    uid TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    last_seen TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (uid, device_id)
+  )`);
   await run(`CREATE TABLE IF NOT EXISTS day_stats (
     day DATE PRIMARY KEY,
     matches BIGINT NOT NULL DEFAULT 0
@@ -110,6 +136,8 @@ export async function initDb(): Promise<void> {
     'CREATE INDEX IF NOT EXISTS saves_target ON saves(target)',
     'CREATE INDEX IF NOT EXISTS blocks_target ON blocks(target)',
     'CREATE INDEX IF NOT EXISTS reports_target ON reports(target)',
+    'CREATE INDEX IF NOT EXISTS reports_open ON reports(handled_at, severity DESC, created_at DESC)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS bans_subject ON bans(subject_type, subject)',
   ]);
   console.log('[db] connected, schema ready');
 }
@@ -183,8 +211,67 @@ export async function mutualPushTargets(uid: string): Promise<{ uid: string; tok
   );
   return (r?.rows ?? []).map((x) => ({ uid: x.uid as string, token: x.token as string }));
 }
-export function addReport(reporter: string, target: string): void {
-  void run('INSERT INTO reports (reporter, target) VALUES ($1,$2)', [reporter, target]);
+export function addReport(
+  reporter: string, target: string,
+  opts: { reason?: string; severity?: number; context?: string; mediaId?: number } = {},
+): void {
+  void run(
+    `INSERT INTO reports (reporter, target, reason, severity, context, media_id)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [reporter, target, opts.reason ?? 'other', opts.severity ?? 1,
+     opts.context ?? null, opts.mediaId ?? null]);
+}
+
+// ---- bans -------------------------------------------------------------------
+// A ban is a row, not a socket close: it must survive reconnects, restarts and
+// reinstalls. `until` NULL means permanent.
+
+export interface BanRow { subject: string; subjectType: string; reason: string; until: string | null; }
+
+/// Is this uid OR device banned right now? Expired rows are ignored (and
+/// swept lazily) so a 24h hold lifts itself with no cron.
+export async function activeBan(uid: string, deviceId?: string | null): Promise<BanRow | null> {
+  const r = await run(
+    `SELECT subject, subject_type, reason, until FROM bans
+      WHERE (until IS NULL OR until > now())
+        AND ((subject_type='uid' AND subject=$1)
+          OR (subject_type='device' AND $2::text IS NOT NULL AND subject=$2))
+      ORDER BY until IS NULL DESC, until DESC LIMIT 1`,
+    [uid, deviceId ?? null]);
+  const row = r?.rows?.[0];
+  if (!row) return null;
+  return {
+    subject: row.subject as string, subjectType: row.subject_type as string,
+    reason: (row.reason as string) ?? '', until: row.until ? String(row.until) : null,
+  };
+}
+
+/// Ban a uid or device. hours <= 0 (or omitted) means permanent.
+export function addBan(subjectType: 'uid' | 'device', subject: string, reason: string, hours?: number): void {
+  const until = hours && hours > 0 ? `now() + interval '${Math.floor(hours)} hours'` : 'NULL';
+  void run(
+    `INSERT INTO bans (subject_type, subject, reason, until)
+     VALUES ($1,$2,$3, ${until})
+     ON CONFLICT (subject_type, subject) DO UPDATE SET
+       reason = EXCLUDED.reason, until = EXCLUDED.until, created_at = now()`,
+    [subjectType, subject, reason.slice(0, 200)]);
+}
+
+export function clearBan(subjectType: 'uid' | 'device', subject: string): void {
+  void run('DELETE FROM bans WHERE subject_type=$1 AND subject=$2', [subjectType, subject]);
+}
+
+/// The device(s) a uid has connected from — so banning the account can also
+/// pin the hardware it used.
+export function devicesFor(uid: string): Promise<pg.QueryResult | null> {
+  return run('SELECT device_id FROM user_devices WHERE uid=$1 ORDER BY last_seen DESC LIMIT 5', [uid]);
+}
+
+export function noteDevice(uid: string, deviceId: string): void {
+  void run(
+    `INSERT INTO user_devices (uid, device_id, last_seen) VALUES ($1,$2, now())
+     ON CONFLICT (uid, device_id) DO UPDATE SET last_seen = now()`,
+    [uid, deviceId.slice(0, 64)]);
 }
 
 /// Account deletion — the privacy policy's §8 made real. Removes the user

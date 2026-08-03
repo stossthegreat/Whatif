@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
-import '../config.dart';
-import '../core/camera_service.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../theme/tokens.dart';
+import '../widgets/aurora.dart';
 import '../widgets/glass.dart';
-import '../widgets/self_view.dart';
 
-/// First run, ≤60s to a live face. Opens on a value moment, not a form. The 18+
-/// gate and camera permission are framed as "getting ready", requested at the
-/// moment of intent (the button), never as a wall.
+/// Permission priming — the last screen before the room.
+///
+/// This used to prime a dialog it never fired: in live mode the screen said
+/// "enable camera" and then skipped straight past, leaving iOS to ask cold,
+/// mid-match, for camera AND mic at once. A "no" there is permanent and kills
+/// the user forever.
+///
+/// Now the ask happens HERE, at peak intent, with the arrow pointing at the
+/// button that triggers it — and a denial routes to Settings instead of a
+/// dead end.
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key, required this.onDone});
   final VoidCallback onDone;
@@ -18,16 +25,27 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  bool _asked = false;
+  bool _busy = false;
+  bool _blocked = false; // permanently denied — only Settings can fix it
 
   Future<void> _go() async {
+    if (_busy) return;
     Buzz.commit();
-    setState(() => _asked = true);
-    // In simulated mode the camera plugin powers the self-view. In live mode
-    // LiveKit owns the camera (and prompts for permission on first match), so we
-    // don't open the plugin here — that would fight LiveKit for the device.
-    if (!AppConfig.isLive) {
-      await CameraService.instance.ensure();
+    setState(() => _busy = true);
+    try {
+      final res = await [Permission.camera, Permission.microphone].request();
+      final denied = res.values.any((s) => s.isPermanentlyDenied);
+      Track.event('permissions_asked', {
+        'camera': res[Permission.camera]?.isGranted == true ? 1 : 0,
+        'mic': res[Permission.microphone]?.isGranted == true ? 1 : 0,
+      });
+      if (!mounted) return;
+      if (denied) {
+        setState(() { _busy = false; _blocked = true; });
+        return;
+      }
+    } catch (_) {
+      // plugin unavailable (simulator quirks) — never trap the user here
     }
     if (mounted) widget.onDone();
   }
@@ -40,67 +58,45 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // a faint self-preview already breathing behind the words
-          const Opacity(opacity: 0.5, child: SelfView(grade: true, label: null)),
+          const Aurora(orbs: 3, opacity: 0.5),
           SafeArea(
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: r.gutter),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      const Wordmark(size: 30),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: C.glass,
-                          borderRadius: BorderRadius.circular(100),
-                          border: Border.all(color: C.hair),
-                        ),
-                        child: Text('18+ · verified adults', style: T.tiny),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  RichText(
-                    text: TextSpan(
-                      style: T.huge(44 * r.scale),
-                      children: const [
-                        TextSpan(text: 'Meet someone\nnew. '),
-                        TextSpan(text: 'Right now', style: TextStyle(color: C.sig)),
-                        TextSpan(text: '.'),
-                      ],
-                    ),
+                  const Spacer(flex: 2),
+                  Text(
+                    'Turn on your camera & mic to get started',
+                    textAlign: TextAlign.center,
+                    style: T.huge(36 * r.scale),
                   ),
                   const SizedBox(height: 18),
                   Text(
-                    'One tap drops you live with a stranger — sometimes a few. '
-                    'You never know who you’ll get. That’s the fun.',
-                    style: T.body.copyWith(fontSize: 17),
+                    _blocked
+                        ? 'Camera access is off. Open Settings → Rivlr and switch '
+                            'on Camera and Microphone, then come back.'
+                        : 'Rivlr is face to face — it doesn’t work without them. '
+                            'Nothing is ever recorded.',
+                    textAlign: TextAlign.center,
+                    style: T.body.copyWith(fontSize: 16, height: 1.45),
                   ),
-                  const SizedBox(height: 34),
+                  const Spacer(flex: 2),
+                  // the arrow points at the button that fires the real dialog
+                  const Icon(Icons.arrow_downward_rounded, size: 34, color: Colors.white),
+                  const SizedBox(height: 22),
+                  Text('You can change this any time in your device settings.',
+                      textAlign: TextAlign.center, style: T.tiny),
+                  const SizedBox(height: 12),
                   Cta(
-                    label: _asked ? 'Getting ready…' : 'Enable camera & go',
-                    onTap: _asked ? null : _go,
+                    label: _blocked
+                        ? 'Open Settings'
+                        : (_busy ? 'Getting ready…' : 'Continue'),
+                    onTap: _blocked
+                        ? () => openAppSettings()
+                        : (_busy ? null : _go),
                   ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      const Icon(Icons.lock_outline_rounded, size: 14, color: C.tx3),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Groups, not just strangers. Report or block anyone, instantly. '
-                          'We never record your video.',
-                          style: T.tiny.copyWith(height: 1.35),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 22),
                 ],
               ),
             ),

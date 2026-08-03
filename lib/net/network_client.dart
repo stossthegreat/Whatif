@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../config.dart';
+import '../core/device_id.dart';
 import '../state/session.dart';
 
 /// Thin WebSocket matchmaking client (pure Dart). Connects to the Railway
@@ -84,6 +85,10 @@ class NetworkClient {
       'vibes': s.myVibes,
       'tz': DateTime.now().timeZoneOffset.inMinutes,
       if (s.appleUserId != null) 'appleId': s.appleUserId,
+      // signed proof of the Apple identity — the server ignores the bare id
+      if (s.appleToken != null) 'appleToken': s.appleToken,
+      // Keychain-backed hardware id: what makes a ban survive a reinstall
+      if (DeviceId.value != null) 'deviceId': DeviceId.value,
     });
   }
 
@@ -113,7 +118,12 @@ class NetworkClient {
   void pickGame([String? name]) =>
       send({'t': 'pickGame', if (name != null) 'name': name});
   void react(String e) => send({'t': 'react', 'e': e});
-  void report(String target) => send({'t': 'report', 'target': target});
+  void report(String target, {String reason = 'other'}) =>
+      send({'t': 'report', 'target': target, 'reason': reason});
+  void reportPhoto(String target, int? mediaId, {String reason = 'nudity'}) => send({
+        't': 'reportPhoto', 'target': target, 'reason': reason,
+        if (mediaId != null) 'mediaId': mediaId,
+      });
   void block(String target) => send({'t': 'block', 'target': target});
   void save(String target) => send({'t': 'save', 'target': target});
   void unsave(String target) => send({'t': 'unsave', 'target': target});
