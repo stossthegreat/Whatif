@@ -109,6 +109,11 @@ class SocialState extends ChangeNotifier {
   List<FriendInfo> friends = [];
   List<FriendInfo> reqsIn = [];
   List<FriendInfo> reqsOut = [];
+
+  /// Whether the server can actually persist (db online + current deploy).
+  /// True until proven otherwise so the banner never flashes during connect.
+  bool serverStorage = true;
+  bool welcomed = false;
   List<RecentMeet> recent = [];
   final List<RatePromptItem> pendingRates = [];
   final List<FriendInfo> celebrations = []; // matched / accepted, queued FIFO
@@ -133,8 +138,21 @@ class SocialState extends ChangeNotifier {
   void _onNet(Map<String, dynamic> m) {
     switch (m['t']) {
       case 'welcome':
-        // fresh connection — pull the graph
+        // fresh connection — pull the graph. Also read the server's honest
+        // capability flags: social=false means NOTHING can save (no
+        // DATABASE_URL, or a deploy older than the social layer) — the UI
+        // shows a loud banner instead of silently eating every action.
+        final feats = (m['features'] as Map?)?.cast<String, dynamic>();
+        serverStorage = feats?['social'] == true;
+        welcomed = true;
+        notifyListeners();
         NetworkClient.instance.friendsSnapshot();
+      case 'err':
+        if (m['code'] == 'noDb') {
+          serverStorage = false;
+          welcomed = true;
+          notifyListeners();
+        }
       case 'friends':
         friends = _list(m['friends']).map(FriendInfo.fromMap).toList()
           ..sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0));

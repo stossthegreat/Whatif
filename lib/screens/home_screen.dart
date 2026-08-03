@@ -110,6 +110,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ],
                   ),
                 ),
+                const _StorageBanner(),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, box) => SingleChildScrollView(
@@ -242,6 +243,48 @@ class _StatusLine extends StatelessWidget {
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+}
+
+/// Shown ONLY when the server admits it cannot persist (no database, or a
+/// deploy older than the social layer). Silence here cost days of "why does
+/// nothing save" — never again: if friends/messages/photos can't save, the
+/// app says so on the front page.
+class _StorageBanner extends StatelessWidget {
+  const _StorageBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    if (!AppConfig.isLive) return const SizedBox.shrink();
+    return AnimatedBuilder(
+      animation: SocialState.instance,
+      builder: (context, _) {
+        final s = SocialState.instance;
+        if (!s.welcomed || s.serverStorage) return const SizedBox.shrink();
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: const Color(0x33FF3B5C),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: C.live.withOpacity(0.6)),
+          ),
+          child: Row(
+            children: [
+              const Text('⚠️', style: TextStyle(fontSize: 16)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Server storage is offline — friends, messages and photos can’t save. '
+                  'Redeploy the backend with DATABASE_URL set.',
+                  style: T.tiny.copyWith(color: Colors.white, fontSize: 12, height: 1.35),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
