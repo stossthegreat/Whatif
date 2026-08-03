@@ -408,7 +408,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     Buzz.impact();
     Sfx.fanfare();
     setState(() => _phase = _Phase.awards);
-    _idle = Timer(const Duration(seconds: 30), () {
+    _idle = Timer(const Duration(seconds: 15), () {
       if (mounted && _phase == _Phase.awards) widget.onNext();
     });
   }
@@ -674,11 +674,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     });
     // mirrors the server's conversation-first table exactly
     var secs = switch (game.kind) {
-      GameKind.point => 75, // talk/perform games — they need real time
-      GameKind.spin => 45,
-      GameKind.freeze => 15,
-      GameKind.rapidFire => 20,
-      _ => 30, // tap-answer kinds — answer, then chat
+      GameKind.point => 20, // perform games — quick fire, not a monologue
+      GameKind.spin => 15,
+      GameKind.freeze => 8,
+      GameKind.rapidFire => 10,
+      _ => 10, // tap-answer kinds — answer, then chat
     };
     final beatSecs = cell.rounds[_round].secs;
     if (beatSecs != null) secs = beatSecs;
@@ -861,7 +861,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     setState(() => _phase = _Phase.awards);
     // never a dead end — if you just sit there, the loop pulls you forward.
     _idle?.cancel();
-    _idle = Timer(const Duration(seconds: 30), () {
+    _idle = Timer(const Duration(seconds: 15), () {
       if (mounted && _phase == _Phase.awards) widget.onNext();
     });
   }

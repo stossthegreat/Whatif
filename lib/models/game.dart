@@ -680,14 +680,14 @@ class SeqDef {
 
   static const ten = <SeqDef>[
     SeqDef(name: 'Face Off', icon: '😜', hint: 'pull it · hold it · crown it', vibe: 'warm', beats: [
-      SeqBeat(kind: GameKind.freeze, secs: 15, pool: [['UGLIEST face contest. 3…2…1 GO'], ['Best fish face 🐟 HOLD IT'], ['Double chin championship. Commit.']]),
-      SeqBeat(kind: GameKind.freeze, secs: 15, pool: [['Now your best villain smirk. Freeze.'], ['The face you make reading old texts'], ['Your “I just saw my ex” face']]),
-      SeqBeat(kind: GameKind.point, secs: 25, pool: [['Crown the funniest face 👑']]),
+      SeqBeat(kind: GameKind.freeze, secs: 8, pool: [['UGLIEST face contest. 3…2…1 GO'], ['Best fish face 🐟 HOLD IT'], ['Double chin championship. Commit.']]),
+      SeqBeat(kind: GameKind.freeze, secs: 8, pool: [['Now your best villain smirk. Freeze.'], ['The face you make reading old texts'], ['Your “I just saw my ex” face']]),
+      SeqBeat(kind: GameKind.point, secs: 10, pool: [['Crown the funniest face 👑']]),
     ]),
     SeqDef(name: 'Eye Contact', icon: '👀', hint: 'hold it · smile · don’t crack', vibe: 'spark', beats: [
-      SeqBeat(kind: GameKind.freeze, secs: 15, pool: [['Dead-eye contact with the camera. No laughing.']]),
-      SeqBeat(kind: GameKind.freeze, secs: 15, pool: [['Now a SLOW smile. Do not crack.'], ['Now wink like a movie star. Hold it.']]),
-      SeqBeat(kind: GameKind.point, secs: 25, pool: [['Who broke first? Point.']]),
+      SeqBeat(kind: GameKind.freeze, secs: 8, pool: [['Dead-eye contact with the camera. No laughing.']]),
+      SeqBeat(kind: GameKind.freeze, secs: 8, pool: [['Now a SLOW smile. Do not crack.'], ['Now wink like a movie star. Hold it.']]),
+      SeqBeat(kind: GameKind.point, secs: 10, pool: [['Who broke first? Point.']]),
     ]),
     SeqDef(name: 'Hot Takes', icon: '🔥', hint: 'three takes · pick sides · argue', vibe: 'warm', beats: [
       SeqBeat(kind: GameKind.poll, pool: [['Pineapple on pizza?', 'crime', 'genius'], ['Is a hotdog a sandwich?', 'yes', 'how dare you'], ['Cereal then milk?', 'right', 'chaos']]),
@@ -699,9 +699,9 @@ class SeqDef {
       SeqBeat(kind: GameKind.point, pool: [['Worst date you’ve ever been on'], ['A time you got caught lying'], ['The dumbest thing you believed as a kid']]),
     ]),
     SeqDef(name: 'Rizz Off', icon: '😏', hint: 'best line · worst line · shoot your shot', vibe: 'spark', beats: [
-      SeqBeat(kind: GameKind.point, secs: 40, pool: [['Best pickup line. GO']]),
-      SeqBeat(kind: GameKind.point, secs: 40, pool: [['Now the WORST pickup line on purpose']]),
-      SeqBeat(kind: GameKind.point, secs: 40, pool: [['Shoot your shot at the camera — smoothest wins']]),
+      SeqBeat(kind: GameKind.point, secs: 15, pool: [['Best pickup line. GO']]),
+      SeqBeat(kind: GameKind.point, secs: 15, pool: [['Now the WORST pickup line on purpose']]),
+      SeqBeat(kind: GameKind.point, secs: 15, pool: [['Shoot your shot at the camera — smoothest wins']]),
     ]),
     SeqDef(name: 'Spin the Bottle', icon: '🍾', hint: 'the bottle picks · no escape', vibe: 'spark', beats: [
       SeqBeat(kind: GameKind.spin, pool: [['{target} — what’s your actual type? Be honest'], ['{target} — rate your own rizz out of 10'], ['{target} — who in this room would you take on a date? 👀']]),
@@ -720,12 +720,12 @@ class SeqDef {
     SeqDef(name: 'Impressions', icon: '🎭', hint: 'do it badly · funniest wins', vibe: 'wild', beats: [
       SeqBeat(kind: GameKind.point, pool: [['Your worst BATMAN'], ['Your worst British accent'], ['Your worst influencer apology']]),
       SeqBeat(kind: GameKind.point, pool: [['Talk like a movie VILLAIN 😈 — best one wins'], ['Talk like your GRANDMA 👵'], ['Talk like a CEO on a podcast 💼']]),
-      SeqBeat(kind: GameKind.point, secs: 40, pool: [['Do your best EVIL LAUGH — crown the winner']]),
+      SeqBeat(kind: GameKind.point, secs: 15, pool: [['Do your best EVIL LAUGH — crown the winner']]),
     ]),
     SeqDef(name: 'Roast Circle', icon: '💀', hint: 'roast · get roasted · make up', vibe: 'wild', beats: [
       SeqBeat(kind: GameKind.point, pool: [['Roast the person on your left (with love)'], ['Roast this app. Go.']]),
       SeqBeat(kind: GameKind.point, pool: [['Roast your OWN haircut before someone else does'], ['Confess your pettiest move ever — pettiest wins']]),
-      SeqBeat(kind: GameKind.point, secs: 40, pool: [['Now the best COMPLIMENT — make someone blush to make up']]),
+      SeqBeat(kind: GameKind.point, secs: 15, pool: [['Now the best COMPLIMENT — make someone blush to make up']]),
     ]),
   ];
 

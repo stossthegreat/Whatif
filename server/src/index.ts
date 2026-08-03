@@ -202,12 +202,12 @@ function leaveParty(userId: string) {
 // Conversation-first pacing: talk games get real time; a round ends early when
 // everyone has answered. This is a place to meet people, not a quiz show.
 const ROUND_SECS: Record<string, number> = {
-  point: 75,     // perform/talk games — storytime, debates, roasts
-  spin: 45,      // bottle + the target performs
-  freeze: 15,
-  rapidFire: 20,
+  point: 20,     // perform/talk games — quick fire, not a monologue
+  spin: 15,      // bottle + the target performs
+  freeze: 8,
+  rapidFire: 10,
 };
-const secsFor = (kind: string) => ROUND_SECS[kind] ?? 30; // tap-answer kinds
+const secsFor = (kind: string) => ROUND_SECS[kind] ?? 10; // tap-answer kinds
 
 const CHAOS_CARDS: [string, string][] = [
   ['🤫', 'Everyone WHISPER until the next game'],
@@ -360,7 +360,7 @@ function endRound(cell: Cell) {
   // more beats in this game? quick flip, straight into the next beat
   if (cell.seqBeats && cell.seqPos < cell.seqBeats.length - 1) {
     cell.seqPos += 1;
-    later(cell.id, 4000, (c) => startBeat(c));
+    later(cell.id, 2000, (c) => startBeat(c));
     return;
   }
 
@@ -373,14 +373,14 @@ function endRound(cell: Cell) {
     if (uid) social.onGameComplete(uid);
   }
   if (cell.gamesPlayed % 3 === 0) {
-    later(cell.id, 7000, (c) => sendAwards(c));
+    later(cell.id, 3500, (c) => sendAwards(c));
     if (cell.mode === 'roulette') {
-      later(cell.id, 22000, (c) => { if (!c.inRound) startPickedGame(c); });
+      later(cell.id, 12000, (c) => { if (!c.inRound) startPickedGame(c); });
     }
   } else {
-    later(cell.id, 7000, (c) => broadcastCell(c.id, { t: 'talk' }));
+    later(cell.id, 3500, (c) => broadcastCell(c.id, { t: 'talk' }));
     if (cell.mode === 'roulette') {
-      later(cell.id, 14000, (c) => { if (!c.inRound) startPickedGame(c); });
+      later(cell.id, 8000, (c) => { if (!c.inRound) startPickedGame(c); });
     }
   }
 }
@@ -829,14 +829,14 @@ wss.on('connection', (ws) => {
         const cell = store.cells.get(user.cellId);
         if (cell && (m.round == null || m.round === cell.roundIdx)) {
           cell.answers.set(id, m.v);
-          // everyone's in — give the room 4s to see it, then flip early
+          // everyone's in — a quick beat to see it, then flip early
           if (cell.answers.size >= cell.members.length && cell.roundTimer) {
             clearTimeout(cell.roundTimer);
             const idx = cell.roundIdx;
             cell.roundTimer = setTimeout(() => {
               const c = store.cells.get(cell.id);
               if (c && c.roundIdx === idx) endRound(c);
-            }, 4000);
+            }, 2000);
           }
         }
         break;
