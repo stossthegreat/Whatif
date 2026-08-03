@@ -616,7 +616,7 @@ class _FriendsSectionM extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            for (final f in friends.take(4)) _FriendRow(friend: f),
+            for (final f in friends.take(4)) _FriendRowM(friend: f),
             const SizedBox(height: 6),
           ],
         );
