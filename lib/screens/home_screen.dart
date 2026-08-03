@@ -1,38 +1,31 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
 import '../core/analytics.dart';
+import '../core/camera_service.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
-import '../models/game.dart';
-import '../state/chat.dart';
 import '../state/session.dart';
 import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
-import '../widgets/mode_card.dart';
-import '../widgets/identity_orb.dart';
-import 'chat_screen.dart' show AppNav;
-import 'friend_profile_screen.dart';
-import 'friends_screen.dart';
+import '../widgets/self_view.dart';
 import 'settings_screen.dart';
 
-/// HOME — one job: get you to press Start within half a second.
+/// HOME — you, live, full bleed. The app is already on before you press
+/// anything: your own camera is the stage, the world's headcount is at the
+/// top, and one huge TAP TO START floats in the middle. The three ways in
+/// are chips at the bottom — pick a lane, tap anywhere, you're moving.
 ///
-/// The hero is the ACTION, not a statistic: a huge glowing Start with
-/// "connect to a random person" over it. Live numbers only appear when they're
-/// big enough to create FOMO — a real count when the world is busy, and
-/// "someone is waiting" when it isn't. A low number is never shown; a shown
-/// number is never invented.
-///
-/// Below the fold: trending games, the Chaos Hour banner, friends.
+/// A low number is never shown; a shown number is never invented.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     required this.onSignOut,
     required this.onParty,
     required this.onPlay,
+    this.active = true,
   });
   final VoidCallback onSignOut;
   final VoidCallback onParty;
@@ -40,23 +33,86 @@ class HomeScreen extends StatefulWidget {
   /// Mode string: 'roulette' | 'hang' | 'groups'.
   final ValueChanged<String> onPlay;
 
+  /// True while Home is the visible tab. The camera runs only then — other
+  /// tabs must not burn battery, and live rooms need the lens free.
+  final bool active;
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
-  late final AnimationController _t =
-      AnimationController(vsync: this, duration: const Duration(seconds: 30))..repeat();
-  final _rng = math.Random();
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  late final AnimationController _glow = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1600))
+    ..repeat(reverse: true);
 
-  late final List<_Particle> _particles =
-      List.generate(18, (_) => _Particle.random(_rng));
+  /// 'hang' | 'roulette' — what TAP TO START launches. Groups is a door, not
+  /// a lane: its chip navigates immediately and never becomes the selection.
+  String _mode = 'hang';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadMode();
+    if (widget.active) CameraService.instance.ensure();
+  }
+
+  Future<void> _loadMode() async {
+    final sp = await SharedPreferences.getInstance();
+    final m = sp.getString('home.mode');
+    if (!mounted || (m != 'hang' && m != 'roulette')) return;
+    setState(() => _mode = m!);
+  }
+
+  @override
+  void didUpdateWidget(HomeScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) CameraService.instance.ensure();
+    if (!widget.active && old.active) CameraService.instance.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState s) {
+    if (s == AppLifecycleState.paused) {
+      CameraService.instance.dispose();
+    } else if (s == AppLifecycleState.resumed && widget.active) {
+      CameraService.instance.ensure();
+    }
+  }
 
   @override
   void dispose() {
-    _t.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _glow.dispose();
+    // Leaving Home always releases the lens — finding, party and live rooms
+    // (LiveKit / WebRTC) open their own capture session.
+    CameraService.instance.dispose();
     super.dispose();
   }
+
+  void _select(String m) {
+    if (m == _mode) return;
+    Buzz.tick();
+    setState(() => _mode = m);
+    SharedPreferences.getInstance().then((sp) => sp.setString('home.mode', m));
+  }
+
+  void _start() {
+    Buzz.pop();
+    if (_mode == 'roulette') {
+      Sfx.match();
+    } else {
+      Sfx.pop();
+    }
+    Track.event('home_start', {'mode': _mode});
+    widget.onPlay(_mode);
+  }
+
+  String get _modeLine => _mode == 'roulette'
+      ? 'no choices — games hit back to back'
+      : 'someone new · games when you want';
 
   @override
   Widget build(BuildContext context) {
@@ -66,26 +122,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ambient particle + glow field
-          RepaintBoundary(
-            child: AnimatedBuilder(
-              animation: _t,
-              builder: (context, _) => CustomPaint(
-                painter: _LobbyPainter(_t.value, _particles),
-                isComplex: true,
-                willChange: true,
-              ),
-            ),
+          // the living stage — you, mirrored, full bleed (elegant placeholder
+          // when the camera is off or denied)
+          const SelfView(grade: true),
+          // the whole stage is the start button
+          Positioned.fill(
+            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _start),
           ),
-          // legibility scrim above the nav bar
+          // legibility scrim behind the chips + nav bar
           const Positioned(
-            bottom: 0, left: 0, right: 0, height: 220,
+            bottom: 0, left: 0, right: 0, height: 240,
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter, end: Alignment.topCenter,
-                    colors: [Color(0xF2000000), Color(0x00000000)],
+                    colors: [Color(0xE6000000), Color(0x00000000)],
                   ),
                 ),
               ),
@@ -99,7 +151,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   padding: EdgeInsets.symmetric(horizontal: r.gutter),
                   child: Row(
                     children: [
-                      const Wordmark(size: 30),
+                      const Wordmark(size: 26),
                       const Spacer(),
                       const _LivePill(),
                       const SizedBox(width: 8),
@@ -111,103 +163,98 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ),
                 ),
                 const _StorageBanner(),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, box) => SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // ---- the three ways in. Each card is its own
-                          // play button — this replaced the floating orb.
-                          const SizedBox(height: 14),
-                          const _StatusLine(),
-                          const SizedBox(height: 14),
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: r.gutter),
-                            child: Text('Who are you meeting?',
-                                style: T.huge(30 * r.scale)),
-                          ),
-                          const SizedBox(height: 16),
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: r.gutter),
-                            child: Column(
+                _ChaosPill(onTap: () => widget.onPlay('roulette')),
+                const Spacer(),
+                // hero — taps fall through to the stage
+                IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _glow,
+                    builder: (context, _) {
+                      final v = _glow.value;
+                      return SizedBox(
+                        height: 200,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          alignment: Alignment.center,
+                          children: [
+                            Container(
+                              width: 250 + 26 * v,
+                              height: 250 + 26 * v,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(colors: [
+                                  C.sig.withOpacity(0.26 + 0.14 * v),
+                                  C.sig.withOpacity(0),
+                                ]),
+                              ),
+                            ),
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                SizedBox(
-                                  height: 152,
-                                  child: ModeCard(
-                                    title: '1 on 1',
-                                    line: 'Someone new, face to face.\nGames when you want them.',
-                                    art: const HangArt(),
-                                    onTap: () {
-                                      Buzz.pop();
-                                      Sfx.pop();
-                                      widget.onPlay('hang');
-                                    },
+                                Text(
+                                  'TAP TO START',
+                                  textAlign: TextAlign.center,
+                                  style: T.display(42 * r.scale).copyWith(
+                                    shadows: const [
+                                      Shadow(color: Color(0xB3000000), blurRadius: 18),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(height: 12),
-                                SizedBox(
-                                  height: 152,
-                                  child: ModeCard(
-                                    title: 'Roulette',
-                                    line: 'No choices. Games hit you, back to back.',
-                                    art: const RouletteArt(),
-                                    onTap: () {
-                                      Buzz.pop();
-                                      Sfx.match();
-                                      widget.onPlay('roulette');
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                SizedBox(
-                                  height: 152,
-                                  child: ModeCard(
-                                    title: 'Groups',
-                                    line: 'Your room, your people — invite up to 3.',
-                                    art: const GroupsArt(),
-                                    onTap: () {
-                                      Buzz.pop();
-                                      Sfx.pop();
-                                      widget.onPlay('groups');
-                                    },
+                                const SizedBox(height: 8),
+                                AnimatedSwitcher(
+                                  duration: M.quick,
+                                  child: Text(
+                                    _modeLine,
+                                    key: ValueKey(_mode),
+                                    style: T.body.copyWith(
+                                      color: Colors.white,
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w700,
+                                      shadows: const [
+                                        Shadow(color: Color(0xCC000000), blurRadius: 10),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                          const SizedBox(height: 28),
-                          // ---- TRENDING — our flavour, front and centre
-                          Padding(
-                            padding: EdgeInsets.only(left: r.gutter, right: r.gutter, bottom: 12),
-                            child: Text('TRENDING TONIGHT', style: T.eyebrow),
-                          ),
-                          SizedBox(
-                            height: 128,
-                            child: ListView.separated(
-                              physics: const BouncingScrollPhysics(),
-                              scrollDirection: Axis.horizontal,
-                              padding: EdgeInsets.symmetric(horizontal: r.gutter),
-                              itemCount: _trending.length,
-                              separatorBuilder: (_, _) => const SizedBox(width: 10),
-                              itemBuilder: (context, i) => _GameCard(
-                                  def: _trending[i], onTap: () => widget.onPlay('hang')),
-                            ),
-                          ),
-                          const SizedBox(height: 22),
-                          // ---- CHAOS HOUR — full-width ritual banner
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: r.gutter),
-                            child: _ChaosBanner(onTap: () => widget.onPlay('roulette')),
-                          ),
-                          const SizedBox(height: 26),
-                          const SizedBox(height: 28),
-                        ],
-                      ),
-                    ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
+                const Spacer(),
+                // the three ways in — chips, not slabs
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: r.gutter),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _ModeChip(
+                        emoji: '🎥',
+                        label: '1 ON 1',
+                        selected: _mode == 'hang',
+                        onTap: () => _select('hang'),
+                      ),
+                      const SizedBox(width: 10),
+                      _ModeChip(
+                        emoji: '🎰',
+                        label: 'ROULETTE',
+                        selected: _mode == 'roulette',
+                        onTap: () => _select('roulette'),
+                      ),
+                      const SizedBox(width: 10),
+                      _ModeChip(
+                        emoji: '👥',
+                        label: 'GROUPS',
+                        selected: false,
+                        onTap: () { Buzz.pop(); widget.onPlay('groups'); },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
               ],
             ),
           ),
@@ -215,63 +262,53 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ),
     );
   }
-
-  /// "Trending" order rotates daily so the rail feels alive — editorial
-  /// ordering, not fabricated player counts.
-  List<SeqDef> get _trending {
-    final shift = DateTime.now().difference(DateTime(2026)).inDays % SeqDef.ten.length;
-    return [...SeqDef.ten.sublist(shift), ...SeqDef.ten.sublist(0, shift)];
-  }
 }
 
-// ---- hero pieces -----------------------------------------------------------
+// ---- chips -----------------------------------------------------------------
 
-/// One line of truth above the headline — warm copy only, no digits (the
-/// number lives in the header pill). Never "1 stranger on camera".
-class _StatusLine extends StatelessWidget {
-  const _StatusLine();
+class _ModeChip extends StatelessWidget {
+  const _ModeChip({
+    required this.emoji,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+  final String emoji;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: AppSession.instance,
-      builder: (context, _) {
-        final s = AppSession.instance;
-        // In live builds the drifting simulated count must never leak — treat
-        // the world as quiet until the server's first presence message.
-        final trusted = !AppConfig.isLive || s.serverDriven;
-        final String text;
-        if (trusted && s.liveCount >= 100) {
-          text = 'PEOPLE ARE LIVE RIGHT NOW';
-        } else if (AppConfig.isLive && s.serverDriven && s.liveCount >= 2) {
-          text = 'SOMEONE IS WAITING RIGHT NOW';
-        } else {
-          text = 'READY TO MATCH';
-        }
-        return Row(
+    return Press(
+      haptic: false,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: M.quick,
+        curve: M.ease,
+        padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 12),
+        decoration: BoxDecoration(
+          gradient: selected ? C.gradSig : null,
+          color: selected ? null : const Color(0x66000000),
+          borderRadius: BorderRadius.circular(R.chip),
+          border: Border.all(
+              color: selected ? const Color(0x47FFFFFF) : C.hair2, width: 1),
+          boxShadow: selected ? C.glowSig(blur: 18, spread: -4) : null,
+        ),
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const _PulseDot(),
-            const SizedBox(width: 8),
-            AnimatedSwitcher(
-              duration: M.base,
-              child: Text(
-                text,
-                key: ValueKey(text),
-                style: T.eyebrow.copyWith(
-                  color: C.tx2,
-                  fontSize: 11,
-                  letterSpacing: 2.6,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
+            Text(emoji, style: const TextStyle(fontSize: 15)),
+            const SizedBox(width: 7),
+            Text(label, style: T.display(14).copyWith(letterSpacing: 0.8)),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 }
+
+// ---- header pieces ---------------------------------------------------------
 
 /// Shown ONLY when the server admits it cannot persist (no database, or a
 /// deploy older than the social layer). Silence here cost days of "why does
@@ -315,9 +352,9 @@ class _StorageBanner extends StatelessWidget {
   }
 }
 
-/// The live headcount — a quiet pill beside settings. Green dot + the real
-/// number when it's big enough to impress; just "LIVE" while the world is
-/// small; nothing at all until the server has actually spoken.
+/// The live headcount — acid dot + the real number when it's big enough to
+/// impress; just "LIVE" while the world is small; nothing at all until the
+/// server has actually spoken.
 class _LivePill extends StatelessWidget {
   const _LivePill();
 
@@ -337,9 +374,9 @@ class _LivePill extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: C.glass,
-            borderRadius: BorderRadius.circular(100),
-            border: Border.all(color: C.hair),
+            color: const Color(0x66000000),
+            borderRadius: BorderRadius.circular(R.chip),
+            border: Border.all(color: C.hair2),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -348,13 +385,13 @@ class _LivePill extends StatelessWidget {
                 width: 7, height: 7,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Color(0xFF30D158),
-                  boxShadow: [BoxShadow(color: Color(0x8030D158), blurRadius: 6)],
+                  color: C.acid,
+                  boxShadow: [BoxShadow(color: C.acidGlow, blurRadius: 6)],
                 ),
               ),
               const SizedBox(width: 7),
               Text(
-                showCount ? _fmt(s.liveCount) : 'LIVE',
+                showCount ? '${_fmt(s.liveCount)} ONLINE' : 'LIVE',
                 style: T.tiny.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -370,63 +407,6 @@ class _LivePill extends StatelessWidget {
   }
 }
 
-/// Real activity, dot-separated — each entry appears only once it's big
-/// enough to impress. Early days: the row simply isn't there.
-class _StatsStrip extends StatelessWidget {
-  const _StatsStrip();
-
-  String _fmt(int n) =>
-      n.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: AppSession.instance,
-      builder: (context, _) {
-        final s = AppSession.instance;
-        final parts = <String>[
-          if (s.roomsLive >= 8) '${s.roomsLive} rooms open',
-          if (s.matchesToday >= 500) '${_fmt(s.matchesToday)} matches today',
-        ];
-        if (parts.isEmpty) return const SizedBox(height: 18);
-        return SizedBox(
-          height: 18,
-          child: Text(
-            parts.join('  ·  '),
-            style: T.tiny.copyWith(color: C.tx3, fontWeight: FontWeight.w600, letterSpacing: 0.2),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _PulseDot extends StatefulWidget {
-  const _PulseDot();
-  @override
-  State<_PulseDot> createState() => _PulseDotState();
-}
-
-class _PulseDotState extends State<_PulseDot> with SingleTickerProviderStateMixin {
-  late final AnimationController _c =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat(reverse: true);
-  @override
-  void dispose() { _c.dispose(); super.dispose(); }
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (context, _) => Container(
-        width: 8, height: 8,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle, color: C.live,
-          boxShadow: [BoxShadow(color: C.live.withOpacity(0.4 + 0.6 * _c.value), blurRadius: 8 + 6 * _c.value)],
-        ),
-      ),
-    );
-  }
-}
-
 class _RoundBtn extends StatelessWidget {
   const _RoundBtn({required this.icon, required this.onTap});
   final IconData icon;
@@ -437,92 +417,37 @@ class _RoundBtn extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: 34, height: 34,
-        decoration: BoxDecoration(shape: BoxShape.circle, color: C.glass, border: Border.all(color: C.hair)),
-        child: Icon(icon, size: 18, color: C.tx2),
-      ),
-    );
-  }
-}
-
-// ---- trending cards --------------------------------------------------------
-
-class _GameCard extends StatelessWidget {
-  const _GameCard({required this.def, required this.onTap});
-  final SeqDef def;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final spark = def.vibe == 'spark';
-    return Press(
-      onTap: () { Buzz.tick(); Track.event('trending_tap', {'game': def.name}); onTap(); },
-      child: Container(
-        width: 150,
-        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: C.glass,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: C.hair),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(def.icon, style: const TextStyle(fontSize: 30)),
-            const Spacer(),
-            Text(def.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15, letterSpacing: -0.2)),
-            const SizedBox(height: 3),
-            Text(
-              spark ? 'SPARK' : (def.vibe == 'wild' ? 'WILD' : 'WARM'),
-              style: T.tiny.copyWith(
-                fontSize: 9.5,
-                letterSpacing: 1.6,
-                fontWeight: FontWeight.w800,
-                color: spark ? C.sig : C.tx3,
-              ),
-            ),
-          ],
-        ),
+            shape: BoxShape.circle,
+            color: const Color(0x66000000),
+            border: Border.all(color: C.hair2)),
+        child: Icon(icon, size: 18, color: Colors.white),
       ),
     );
   }
 }
 
-// ---- chaos hour banner -----------------------------------------------------
+// ---- chaos pill ------------------------------------------------------------
 
-/// The hourly ritual, full width. Counting down it's quiet glass; for the
-/// first five minutes of every hour it flips to hot white.
-class _ChaosBanner extends StatefulWidget {
-  const _ChaosBanner({required this.onTap});
+/// The hourly ritual, now a slim pill that exists ONLY while it's on — the
+/// first five minutes of every hour, or a live seasonal event. The rest of
+/// the time Home stays pure camera.
+class _ChaosPill extends StatefulWidget {
+  const _ChaosPill({required this.onTap});
   final VoidCallback onTap;
   @override
-  State<_ChaosBanner> createState() => _ChaosBannerState();
+  State<_ChaosPill> createState() => _ChaosPillState();
 }
 
-class _ChaosBannerState extends State<_ChaosBanner> {
+class _ChaosPillState extends State<_ChaosPill> {
   Timer? _timer;
-  Duration _left = Duration.zero;
-  bool _live = false;
 
   @override
   void initState() {
     super.initState();
-    _tick();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
-  }
-
-  void _tick() {
-    final now = DateTime.now();
-    if (now.minute < 5) {
-      _live = true;
-      _left = DateTime(now.year, now.month, now.day, now.hour, 5).difference(now);
-    } else {
-      _live = false;
-      _left = DateTime(now.year, now.month, now.day, now.hour + 1).difference(now);
-    }
-    if (mounted) setState(() {});
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -533,133 +458,52 @@ class _ChaosBannerState extends State<_ChaosBanner> {
 
   @override
   Widget build(BuildContext context) {
-    // a live seasonal event owns this slot; Chaos Hour is the everyday ritual
+    final now = DateTime.now();
     final social = SocialState.instance;
     final ev = social.eventEndsAt;
-    final eventLive = social.eventName != null && ev != null && ev.isAfter(DateTime.now());
+    final eventLive = social.eventName != null && ev != null && ev.isAfter(now);
+    final chaosLive = now.minute < 5;
+    if (!eventLive && !chaosLive) return const SizedBox.shrink();
 
-    final String title;
-    final String subtitle;
+    final String label;
     final String clock;
-    final bool hot;
     if (eventLive) {
-      final left = ev.difference(DateTime.now());
-      title = '⚡ ${social.eventName!.toUpperCase()}';
-      subtitle = 'limited time · exclusive badges';
+      final left = ev.difference(now);
+      label = '⚡ ${social.eventName!.toUpperCase()}';
       clock = left.inDays >= 1
           ? '${left.inDays}d ${left.inHours.remainder(24)}h'
           : '${left.inHours}:${left.inMinutes.remainder(60).toString().padLeft(2, '0')}';
-      hot = true;
     } else {
-      final m = _left.inMinutes.remainder(60).toString().padLeft(2, '0');
-      final s = _left.inSeconds.remainder(60).toString().padLeft(2, '0');
-      title = _live ? '⚡ CHAOS HOUR — LIVE' : 'CHAOS HOUR';
-      subtitle = '2× badges · wilder games · top of every hour';
+      final end = DateTime(now.year, now.month, now.day, now.hour, 5);
+      final leftC = end.difference(now);
+      final m = leftC.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final s = leftC.inSeconds.remainder(60).toString().padLeft(2, '0');
+      label = '⚡ CHAOS HOUR — LIVE';
       clock = '$m:$s';
-      hot = _live;
     }
-    final fg = hot ? Colors.black : Colors.white;
-    final fg2 = hot ? Colors.black.withOpacity(0.6) : C.tx3;
-    return Press(
-      onTap: () { Buzz.tick(); Track.event('chaos_banner_tap'); widget.onTap(); },
-      child: AnimatedContainer(
-        duration: M.base,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-        decoration: BoxDecoration(
-          color: hot ? Colors.white : C.glass,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: hot ? Colors.white : C.hair),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: T.body.copyWith(color: fg, fontWeight: FontWeight.w800, fontSize: 15, letterSpacing: 0.4)),
-                  const SizedBox(height: 4),
-                  Text(subtitle,
-                      style: T.tiny.copyWith(color: fg2, fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              clock,
-              style: T.huge(26).copyWith(
-                color: fg,
-                fontFeatures: const [FontFeature.tabularFigures()],
-                letterSpacing: 0,
-              ),
-            ),
-          ],
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Press(
+        onTap: () { Buzz.tick(); Track.event('chaos_banner_tap'); widget.onTap(); },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(R.chip),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: T.tiny.copyWith(
+                      color: Colors.black, fontWeight: FontWeight.w800, fontSize: 12)),
+              const SizedBox(width: 8),
+              Text(clock,
+                  style: T.mono.copyWith(color: Colors.black, fontSize: 13)),
+            ],
+          ),
         ),
       ),
     );
   }
-}
-
-// ---- friends ---------------------------------------------------------------
-
-/// Your real friends (the matched ones), online first. Hidden entirely until
-/// you have some — no hollow placeholder rows.
-
-/// The "accidentally pressed Next" recovery — people you just met, one tap
-/// from becoming permanent. A headline surface, right under the hero.
-
-/// HAPPENING NOW — a bounded activity module, never a scroll pit. Friend
-/// badges/titles/rooms, plus your unread + requests lines. Every line taps
-/// somewhere useful. Hidden entirely when nothing's happening.
-
-/// Messages entry — badge shows total unread across every conversation.
-
-/// Pending friend requests — a quiet purple chip beside the live pill.
-
-/// The friends-room entry — always present, right under the friends list.
-
-// ---- particle / glow field ------------------------------------------------
-class _Particle {
-  _Particle(this.x, this.baseY, this.speed, this.size, this.red);
-  double x, baseY, speed, size;
-  bool red;
-  static _Particle random(math.Random r) => _Particle(
-        r.nextDouble(), r.nextDouble(), 0.02 + r.nextDouble() * 0.06,
-        0.8 + r.nextDouble() * 1.8, r.nextDouble() > 0.35,
-      );
-}
-
-class _LobbyPainter extends CustomPainter {
-  _LobbyPainter(this.t, this.particles);
-  final double t;
-  final List<_Particle> particles;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final tau = math.pi * 2;
-    // two soft glow blobs
-    void blob(Color c, double cx, double cy, double rad, double op) {
-      final paint = Paint()
-        ..blendMode = BlendMode.plus
-        ..shader = RadialGradient(colors: [c.withOpacity(op), c.withOpacity(0)])
-            .createShader(Rect.fromCircle(center: Offset(cx * size.width, cy * size.height), radius: rad));
-      canvas.drawCircle(Offset(cx * size.width, cy * size.height), rad, paint);
-    }
-    blob(C.purpleDeep, 0.28 + 0.1 * math.sin(t * tau), 0.30 + 0.06 * math.cos(t * tau), size.width * 0.7, 0.10);
-    blob(C.blue, 0.78 + 0.08 * math.cos(t * tau * 0.8), 0.22 + 0.05 * math.sin(t * tau), size.width * 0.5, 0.04);
-
-    // rising particles
-    final p = Paint();
-    for (final part in particles) {
-      final y = (part.baseY - t * part.speed * 8) % 1.0;
-      final yy = y < 0 ? y + 1 : y;
-      final x = (part.x + 0.02 * math.sin((t * 6 + part.baseY) * tau)) % 1.0;
-      final op = (math.sin(yy * math.pi)).clamp(0.0, 1.0) * 0.6;
-      p.color = (part.red ? C.live : C.sig).withOpacity(op * (part.red ? 0.35 : 0.22));
-      canvas.drawCircle(Offset(x * size.width, yy * size.height), part.size, p);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_LobbyPainter old) => old.t != t;
 }

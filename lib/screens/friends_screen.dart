@@ -290,7 +290,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                       Text(
                         f.online ? 'online now' : 'away',
                         style: T.tiny.copyWith(
-                          color: f.online ? const Color(0xFF3BE07A) : C.tx3,
+                          color: f.online ? C.acid : C.tx3,
                           fontWeight: FontWeight.w700,
                         ),
                       ),

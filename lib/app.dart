@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'config.dart';
 import 'core/analytics.dart';
 import 'core/apple_auth.dart';
+import 'core/camera_service.dart';
 import 'core/device_id.dart';
 import 'core/push.dart';
 import 'models/game.dart';
@@ -362,7 +363,7 @@ class _RootState extends State<_Root> {
     }
   }
 
-  void _onCell(Map<String, dynamic> m) {
+  Future<void> _onCell(Map<String, dynamic> m) async {
     final isCall = m['mode'] == 'call';
     // rooms are only expected while matching, in a party lobby, already live
     // (resume/re-roll), or when a CALL was just accepted. Anywhere else —
@@ -372,6 +373,10 @@ class _RootState extends State<_Root> {
       NetworkClient.instance.leaveCell();
       return;
     }
+    // Home's camera stage must hand the lens over before a room capture
+    // starts — iOS won't run two sessions (no-op when already released).
+    await CameraService.instance.dispose();
+    if (!mounted) return;
     final cell = _cellFromServer(m);
     AppSession.instance.noteCell(cell);
     Track.event('matched', {

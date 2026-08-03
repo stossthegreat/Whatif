@@ -580,7 +580,8 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: mine ? Colors.white : C.glass2,
+            gradient: mine ? C.gradSig : null,
+            color: mine ? null : C.glass2,
             borderRadius: BorderRadius.circular(18),
             border: mine ? null : Border.all(color: C.hair),
           ),
@@ -588,11 +589,11 @@ class _ChatScreenState extends State<ChatScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(playing ? Icons.stop_rounded : Icons.play_arrow_rounded,
-                  size: 22, color: mine ? Colors.black : Colors.white),
+                  size: 22, color: Colors.white),
               const SizedBox(width: 8),
               Text('🎤 ${secs > 0 ? '${secs}s' : 'voice note'}',
                   style: T.body.copyWith(
-                      color: mine ? Colors.black : Colors.white,
+                      color: Colors.white,
                       fontWeight: FontWeight.w600,
                       fontSize: 14)),
             ],
@@ -604,7 +605,8 @@ class _ChatScreenState extends State<ChatScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         constraints: const BoxConstraints(maxWidth: 280),
         decoration: BoxDecoration(
-          color: mine ? Colors.white : C.glass2,
+          gradient: mine ? C.gradSig : null,
+          color: mine ? null : C.glass2,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(18),
             topRight: const Radius.circular(18),
@@ -616,7 +618,7 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Text(
           msg.body,
           style: T.body.copyWith(
-            color: mine ? Colors.black : Colors.white,
+            color: Colors.white,
             fontSize: 15.5,
             height: 1.35,
           ),

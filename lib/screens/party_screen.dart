@@ -270,7 +270,7 @@ class _PartyScreenState extends State<PartyScreen> {
                           const SizedBox(height: 14),
                           _code == null
                               ? Text(AppConfig.isLive ? '· · · ·' : 'OFFLINE',
-                                  style: T.huge(56).copyWith(color: C.tx3, letterSpacing: 8))
+                                  style: T.display(56).copyWith(color: C.tx3, letterSpacing: 8))
                               : Press(
                                   onTap: () {
                                     Clipboard.setData(ClipboardData(text: _code!));
@@ -278,7 +278,7 @@ class _PartyScreenState extends State<PartyScreen> {
                                   },
                                   child: Text(
                                     _code!.split('').join(' '),
-                                    style: T.huge(64).copyWith(letterSpacing: 6),
+                                    style: T.display(64).copyWith(letterSpacing: 6),
                                   ),
                                 ),
                           const SizedBox(height: 8),

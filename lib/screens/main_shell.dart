@@ -13,13 +13,10 @@ import 'me_screen.dart';
 /// the whole problem with the old two-tab shell: no one online meant an app
 /// with nothing in it.
 ///
-///   HOME     —  the three play presets, trending games, chaos hour
+///   HOME     —  your live camera + TAP TO START, mode chips at the bottom
 ///   EXPLORE  —  who's on right now, tap to say hello
-///   MESSAGES —  your conversations
+///   MESSAGES —  conversations and your friends
 ///   PROFILE  —  you: record, people, moments, settings
-///
-/// The floating Play orb is gone: every Home preset card is its own play
-/// button, and two competing "go" affordances is one too many.
 class MainShell extends StatefulWidget {
   const MainShell({super.key, required this.onPlay, required this.onParty, required this.onSignOut});
 
@@ -60,7 +57,9 @@ class _MainShellState extends State<MainShell> {
                 HomeScreen(
                     onSignOut: widget.onSignOut,
                     onParty: widget.onParty,
-                    onPlay: widget.onPlay),
+                    onPlay: widget.onPlay,
+                    // the camera stage runs only while Home is the visible tab
+                    active: _tab == 0),
                 ExploreScreen(onPlay: widget.onPlay),
                 const ChatsScreen(embedded: true),
                 MeScreen(embedded: true, onSignOut: widget.onSignOut),
@@ -78,7 +77,7 @@ class _MainShellState extends State<MainShell> {
                   height: _barHeight + mq.padding.bottom,
                   padding: EdgeInsets.only(bottom: mq.padding.bottom),
                   decoration: const BoxDecoration(
-                    color: Color(0xE6060709),
+                    color: Color(0xE60A0714),
                     border: Border(top: BorderSide(color: C.hair)),
                   ),
                   child: AnimatedBuilder(
@@ -158,6 +157,21 @@ class _NavCell extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // active-tab indicator — a small purple bar sliding in above the icon
+          AnimatedContainer(
+            duration: M.quick,
+            curve: M.ease,
+            margin: const EdgeInsets.only(bottom: 4),
+            width: selected ? 18 : 0,
+            height: 3,
+            decoration: BoxDecoration(
+              color: C.sig,
+              borderRadius: BorderRadius.circular(100),
+              boxShadow: selected
+                  ? [BoxShadow(color: C.sigGlow, blurRadius: 8, spreadRadius: -1)]
+                  : null,
+            ),
+          ),
           Stack(
             clipBehavior: Clip.none,
             children: [
@@ -169,15 +183,15 @@ class _NavCell extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     constraints: const BoxConstraints(minWidth: 15),
-                    decoration: BoxDecoration(
-                      color: C.sig,
-                      borderRadius: BorderRadius.circular(100),
-                      boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 8, spreadRadius: -2)],
+                    decoration: const BoxDecoration(
+                      color: C.acid,
+                      borderRadius: BorderRadius.all(Radius.circular(100)),
+                      boxShadow: [BoxShadow(color: C.acidGlow, blurRadius: 8, spreadRadius: -2)],
                     ),
                     child: Text('$badge',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
-                            fontSize: 9.5, color: Colors.white, fontWeight: FontWeight.w800)),
+                            fontSize: 9.5, color: Colors.black, fontWeight: FontWeight.w800)),
                   ),
                 ),
             ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../net/api_client.dart';
+import '../theme/tokens.dart';
 import 'identity_orb.dart';
 
 /// A person: their photo if they have one, their glow orb if they don't.
@@ -49,7 +50,7 @@ class Avatar extends StatelessWidget {
               width: size * 0.24, height: size * 0.24,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF3BE07A),
+                color: C.acid,
                 border: Border.all(color: Colors.black, width: 2),
               ),
             ),
