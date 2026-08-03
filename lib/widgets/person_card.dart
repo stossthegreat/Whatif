@@ -47,17 +47,29 @@ class PersonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final flag = flagEmoji(country);
+    // every card carries its person's identity hue — the wall is never a
+    // uniform brand color, because the people aren't uniform
+    final safeHue = ((hue % 360) + 360) % 360;
+    final tint = Color.lerp(
+        C.purpleDeep, HSLColor.fromAHSL(1.0, safeHue, 0.55, 0.45).toColor(), 0.4)!;
     return Press(
       haptic: false,
       scale: 0.97,
       onTap: onTap,
-      child: ClipRRect(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(R.card),
+          boxShadow: [
+            BoxShadow(color: tint.withOpacity(0.32), blurRadius: 16, spreadRadius: -8),
+          ],
+        ),
+        child: ClipRRect(
         borderRadius: BorderRadius.circular(R.card),
         child: Container(
           decoration: BoxDecoration(
             color: C.char2,
             borderRadius: BorderRadius.circular(R.card),
-            border: Border.all(color: C.hair2),
+            border: Border.all(color: tint.withOpacity(0.5)),
           ),
           child: Stack(
             fit: StackFit.expand,
@@ -72,7 +84,8 @@ class PersonCard extends StatelessWidget {
                         child: Avatar(hue: hue, photoId: thumbId, size: 300),
                       ),
               ),
-              // the purple drown — legibility AND brand in one move
+              // the drown — legibility AND identity in one move: brand purple
+              // blended toward this person's own hue
               DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -81,7 +94,7 @@ class PersonCard extends StatelessWidget {
                     colors: [
                       const Color(0x00000000),
                       const Color(0x00000000),
-                      C.purpleDeep.withOpacity(0.55),
+                      tint.withOpacity(0.55),
                       const Color(0xE60E0618),
                     ],
                     stops: const [0.0, 0.48, 0.78, 1.0],
@@ -200,6 +213,7 @@ class PersonCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

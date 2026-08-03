@@ -132,30 +132,72 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 },
                 child: _people.isEmpty
                     ? _empty(context)
-                    : GridView.builder(
-                        padding: EdgeInsets.fromLTRB(r.gutter, 2, r.gutter, 24),
-                        physics: const AlwaysScrollableScrollPhysics(
-                            parent: BouncingScrollPhysics()),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: 0.62,
-                        ),
-                        itemCount: _people.length,
-                        itemBuilder: (context, i) {
-                          final p = _people[i];
-                          return PersonCard(
-                            name: p.name,
-                            hue: p.hue,
-                            thumbId: p.thumbId,
-                            title: p.title,
-                            shared: p.shared,
-                            busy: p.busy,
-                            country: p.country,
-                            age: p.age,
-                            onHi: () => _open(p),
-                            onTap: () => _open(p),
+                    : LayoutBuilder(
+                        builder: (context, box) {
+                          // staggered editorial columns — the right lane runs
+                          // 26px lower, so the wall reads like a poster board,
+                          // not a uniform grid. Capped at 40 thumbnails, so
+                          // two plain Columns beat grid virtualization.
+                          final colW = (box.maxWidth - r.gutter * 2 - 12) / 2;
+                          final cardH = colW / 0.62;
+                          Widget card(int i) {
+                            final p = _people[i];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: TweenAnimationBuilder<double>(
+                                tween: Tween(begin: 0, end: 1),
+                                duration: Duration(milliseconds: 380 + (i % 8) * 45),
+                                curve: Curves.easeOutCubic,
+                                builder: (context, v, child) => Opacity(
+                                  opacity: v,
+                                  child: Transform.translate(
+                                      offset: Offset(0, 18 * (1 - v)), child: child),
+                                ),
+                                child: SizedBox(
+                                  height: cardH,
+                                  child: PersonCard(
+                                    name: p.name,
+                                    hue: p.hue,
+                                    thumbId: p.thumbId,
+                                    title: p.title,
+                                    shared: p.shared,
+                                    busy: p.busy,
+                                    country: p.country,
+                                    age: p.age,
+                                    onHi: () => _open(p),
+                                    onTap: () => _open(p),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                          return ListView(
+                            padding: EdgeInsets.fromLTRB(r.gutter, 2, r.gutter, 24),
+                            physics: const AlwaysScrollableScrollPhysics(
+                                parent: BouncingScrollPhysics()),
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      children: [
+                                        for (var i = 0; i < _people.length; i += 2) card(i),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      children: [
+                                        const SizedBox(height: 26),
+                                        for (var i = 1; i < _people.length; i += 2) card(i),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           );
                         },
                       ),

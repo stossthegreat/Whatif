@@ -70,6 +70,10 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
   Widget build(BuildContext context) {
     final c = widget.call;
     final f = _friend;
+    // the card glows in the caller's own hue, blended into brand purple
+    final safeHue = ((c.hue % 360) + 360) % 360;
+    final tint = Color.lerp(const Color(0xFF8B3DFF),
+        HSLColor.fromAHSL(1.0, safeHue, 0.55, 0.5).toColor(), 0.4)!;
     return Positioned.fill(
       child: Container(
         color: const Color(0xF2000000),
@@ -83,7 +87,10 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                 color: C.char2,
                 borderRadius: BorderRadius.circular(R.card + 4),
                 border: Border.all(color: C.hair2),
-                boxShadow: C.glowSig(blur: 60, spread: -18),
+                boxShadow: [
+                  BoxShadow(
+                      color: tint.withOpacity(0.55), blurRadius: 60, spreadRadius: -18),
+                ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
