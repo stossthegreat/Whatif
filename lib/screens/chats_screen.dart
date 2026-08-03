@@ -214,6 +214,73 @@ class _ChatsScreenState extends State<ChatsScreen> {
 
   // ---- MESSAGE lane --------------------------------------------------------
 
+  /// Friends who are on RIGHT NOW — the most valuable pixel in a live app's
+  /// message tab. Hidden entirely when nobody's on.
+  Widget _onNowRail(BuildContext context) {
+    final on = SocialState.instance.friends.where((f) => f.online).toList();
+    if (on.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 8),
+          child: Row(
+            children: [
+              Container(
+                width: 6, height: 6,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: C.acid,
+                  boxShadow: [BoxShadow(color: C.acidGlow, blurRadius: 6)],
+                ),
+              ),
+              const SizedBox(width: 7),
+              Text('ON NOW', style: T.eyebrow),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 84,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            itemCount: on.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 14),
+            itemBuilder: (context, i) {
+              final f = on[i];
+              return Press(
+                haptic: false,
+                onTap: () {
+                  Buzz.tick();
+                  ChatScreen.push(context, uid: f.uid, name: f.name, hue: f.hue);
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Avatar(hue: f.hue, photoId: f.photoId, size: 54, ring: C.acid),
+                    const SizedBox(height: 5),
+                    SizedBox(
+                      width: 62,
+                      child: Text(f.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: T.tiny.copyWith(
+                              color: Colors.white,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 6),
+      ],
+    );
+  }
+
   Widget _messagesLane(BuildContext context) {
     final chats = ChatStore.instance.chats;
     if (chats.isEmpty) {
@@ -235,6 +302,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 30),
         children: [
+          _onNowRail(context),
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Text('No conversations yet — message one of your people:',
@@ -246,8 +314,10 @@ class _ChatsScreenState extends State<ChatsScreen> {
     }
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 30),
-      itemCount: chats.length,
-      itemBuilder: (context, i) {
+      itemCount: chats.length + 1,
+      itemBuilder: (context, idx) {
+        if (idx == 0) return _onNowRail(context);
+        final i = idx - 1;
         final c = chats[i];
         return GestureDetector(
           onLongPress: () {
@@ -262,10 +332,31 @@ class _ChatsScreenState extends State<ChatsScreen> {
               Buzz.tick();
               ChatScreen.push(context, uid: c.uid, name: c.name, hue: c.hue);
             },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 2),
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+              decoration: c.unread > 0
+                  ? BoxDecoration(
+                      color: C.sig.withOpacity(0.07),
+                      borderRadius: BorderRadius.circular(14),
+                    )
+                  : null,
               child: Row(
                 children: [
+                  // the heat bar — acid means something is waiting for you
+                  if (c.unread > 0)
+                    Container(
+                      width: 3,
+                      height: 34,
+                      margin: const EdgeInsets.only(right: 9),
+                      decoration: const BoxDecoration(
+                        color: C.acid,
+                        borderRadius: BorderRadius.all(Radius.circular(100)),
+                        boxShadow: [
+                          BoxShadow(color: C.acidGlow, blurRadius: 8, spreadRadius: -1),
+                        ],
+                      ),
+                    ),
                   IdentityOrb(hue: c.hue, size: 46, live: c.online),
                   const SizedBox(width: 13),
                   Expanded(

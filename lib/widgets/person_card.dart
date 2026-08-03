@@ -30,6 +30,7 @@ class PersonCard extends StatelessWidget {
     this.country,
     this.age,
     this.onHi,
+    this.hero = false,
     required this.onTap,
   });
 
@@ -42,6 +43,10 @@ class PersonCard extends StatelessWidget {
   final String? country;
   final int? age;
   final VoidCallback? onHi;
+
+  /// The full-width billboard treatment for the #1 ranked person.
+  final bool hero;
+
   final VoidCallback onTap;
 
   @override
@@ -109,32 +114,58 @@ class PersonCard extends StatelessWidget {
               Positioned(
                 left: 10,
                 top: 10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0x99000000),
-                    borderRadius: BorderRadius.circular(R.chip),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: busy ? C.tx3 : C.acid,
-                          boxShadow: busy
-                              ? null
-                              : const [BoxShadow(color: C.acidGlow, blurRadius: 6)],
-                        ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0x99000000),
+                        borderRadius: BorderRadius.circular(R.chip),
                       ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: busy ? C.tx3 : C.acid,
+                              boxShadow: busy
+                                  ? null
+                                  : const [BoxShadow(color: C.acidGlow, blurRadius: 6)],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(busy ? 'in a room' : 'free now',
+                              style: T.tiny.copyWith(
+                                  color: Colors.white,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                    ),
+                    if (hero) ...[
                       const SizedBox(width: 6),
-                      Text(busy ? 'in a room' : 'free now',
-                          style: T.tiny.copyWith(
-                              color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w800)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: C.acid,
+                          borderRadius: BorderRadius.circular(R.chip),
+                          boxShadow: const [
+                            BoxShadow(color: C.acidGlow, blurRadius: 10, spreadRadius: -2),
+                          ],
+                        ),
+                        child: Text('★ TOP MATCH',
+                            style: T.tiny.copyWith(
+                                color: Colors.black,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.6)),
+                      ),
                     ],
-                  ),
+                  ],
                 ),
               ),
               // say hi — the one loud key on the card
@@ -145,14 +176,15 @@ class PersonCard extends StatelessWidget {
                   child: Press(
                     onTap: onHi,
                     child: Container(
-                      width: 38,
-                      height: 38,
+                      width: hero ? 44 : 38,
+                      height: hero ? 44 : 38,
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
                         color: C.acid,
                         boxShadow: [BoxShadow(color: C.acidGlow, blurRadius: 12, spreadRadius: -2)],
                       ),
-                      child: const Icon(Icons.bolt_rounded, size: 22, color: Colors.black),
+                      child: Icon(Icons.bolt_rounded,
+                          size: hero ? 25 : 22, color: Colors.black),
                     ),
                   ),
                 ),
@@ -177,12 +209,12 @@ class PersonCard extends StatelessWidget {
                           child: Text(name.toUpperCase(),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: T.display(19)),
+                              style: T.display(hero ? 26 : 19)),
                         ),
                         if (age != null) ...[
                           const SizedBox(width: 6),
                           Text('$age',
-                              style: T.display(15).copyWith(color: C.tx2)),
+                              style: T.display(hero ? 19 : 15).copyWith(color: C.tx2)),
                         ],
                       ],
                     ),

@@ -114,14 +114,24 @@ class MeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
 
-                // identity — the billboard, drowned in brand purple
+                // identity — the billboard, tinted YOUR hue. No two profiles
+                // render the same color; this page is yours down to the light.
                 Container(
                   padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [C.purpleDeep.withOpacity(0.38), C.char2.withOpacity(0.45)],
+                      colors: [
+                        Color.lerp(
+                                C.purpleDeep,
+                                HSLColor.fromAHSL(
+                                        1.0, ((s.myHue % 360) + 360) % 360, 0.55, 0.45)
+                                    .toColor(),
+                                0.4)!
+                            .withOpacity(0.40),
+                        C.char2.withOpacity(0.45),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(R.card),
                     border: Border.all(color: C.hair2),
@@ -386,12 +396,13 @@ class _BadgeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // a trophy, not a grey pill
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
       decoration: BoxDecoration(
-        color: C.glass,
-        borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: C.hair2),
+        color: C.sig.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(R.chip),
+        border: Border.all(color: C.sig.withOpacity(0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -401,9 +412,10 @@ class _BadgeChip extends StatelessWidget {
             const SizedBox(width: 7),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(color: C.sig, borderRadius: BorderRadius.circular(100)),
+              decoration: const BoxDecoration(
+                  color: C.acid, borderRadius: BorderRadius.all(Radius.circular(100))),
               child: Text('x$count',
-                  style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w900)),
+                  style: const TextStyle(fontSize: 10, color: Colors.black, fontWeight: FontWeight.w900)),
             ),
           ],
         ],
@@ -431,7 +443,7 @@ class _Stat extends StatelessWidget {
         children: [
           Text(emoji, style: const TextStyle(fontSize: 18)),
           const SizedBox(height: 6),
-          Text(value, style: T.h3.copyWith(fontSize: 19)),
+          Text(value, style: T.display(21)),
           const SizedBox(height: 2),
           Text(label, style: T.tiny.copyWith(fontSize: 10.5)),
         ],

@@ -138,7 +138,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
                           // 26px lower, so the wall reads like a poster board,
                           // not a uniform grid. Capped at 40 thumbnails, so
                           // two plain Columns beat grid virtualization.
-                          final colW = (box.maxWidth - r.gutter * 2 - 12) / 2;
+                          final fullW = box.maxWidth - r.gutter * 2;
+                          final colW = (fullW - 12) / 2;
                           final cardH = colW / 0.62;
                           Widget card(int i) {
                             final p = _people[i];
@@ -171,18 +172,39 @@ class _ExploreScreenState extends State<ExploreScreen> {
                               ),
                             );
                           }
+                          // person[0] is the server's best match for YOU —
+                          // it gets the full-width billboard; the poster
+                          // board starts from person[1]
+                          final top = _people.first;
                           return ListView(
                             padding: EdgeInsets.fromLTRB(r.gutter, 2, r.gutter, 24),
                             physics: const AlwaysScrollableScrollPhysics(
                                 parent: BouncingScrollPhysics()),
                             children: [
+                              SizedBox(
+                                height: fullW * 0.72,
+                                child: PersonCard(
+                                  name: top.name,
+                                  hue: top.hue,
+                                  thumbId: top.thumbId,
+                                  title: top.title,
+                                  shared: top.shared,
+                                  busy: top.busy,
+                                  country: top.country,
+                                  age: top.age,
+                                  hero: true,
+                                  onHi: () => _open(top),
+                                  onTap: () => _open(top),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Expanded(
                                     child: Column(
                                       children: [
-                                        for (var i = 0; i < _people.length; i += 2) card(i),
+                                        for (var i = 1; i < _people.length; i += 2) card(i),
                                       ],
                                     ),
                                   ),
@@ -191,7 +213,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                     child: Column(
                                       children: [
                                         const SizedBox(height: 26),
-                                        for (var i = 1; i < _people.length; i += 2) card(i),
+                                        for (var i = 2; i < _people.length; i += 2) card(i),
                                       ],
                                     ),
                                   ),
