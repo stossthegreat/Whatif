@@ -1272,12 +1272,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               ),
               const SizedBox(height: 12),
               for (final r in reasons) ...[
-                _sheetRow(r.\$3, r.\$2, r.\$1 == 'child_safety' ? C.live : C.tx, () {
+                _sheetRow(r.$3, r.$2, r.$1 == 'child_safety' ? C.live : C.tx, () {
                   Navigator.pop(ctx);
                   // the server keys moderation by the STABLE uid, never conn-id
                   final target = p.uid ?? p.id;
                   if (widget.live && target != null) {
-                    NetworkClient.instance.report(target, reason: r.\$1);
+                    NetworkClient.instance.report(target, reason: r.$1);
                   }
                   _toast('reported — a human reviews this, fast');
                 }),
