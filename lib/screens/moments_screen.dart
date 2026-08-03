@@ -220,7 +220,14 @@ class _ShareCardScreenState extends State<ShareCardScreen> {
     setState(() => _sharing = true);
     Buzz.impact();
     try {
-      final boundary = _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      // let the frame fully paint before rasterizing — capturing a boundary
+      // mid-paint throws, which looked like the share button doing nothing
+      await WidgetsBinding.instance.endOfFrame;
+      var boundary = _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null || boundary.debugNeedsPaint) {
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        boundary = _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      }
       if (boundary == null) throw StateError('card not ready');
       final image = await boundary.toImage(pixelRatio: 3);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,12 +24,40 @@ class Spark {
 /// A captured moment — the reveal beat, saved. The unit of the growth loop:
 /// each one becomes a shareable card built to spread.
 class Moment {
-  Moment({required this.game, required this.result, required this.hues, required this.laughs, required this.ago});
+  Moment({required this.game, required this.result, required this.hues,
+      required this.laughs, required this.ago, DateTime? at})
+      : at = at ?? DateTime.now();
   final String game;
   final String result;
   final List<double> hues; // participant glows
   final int laughs;
   final String ago;
+  final DateTime at;
+
+  Map<String, dynamic> toJson() => {
+        'g': game, 'r': result, 'h': hues, 'l': laughs,
+        'at': at.millisecondsSinceEpoch,
+      };
+
+  static Moment? fromJson(Map<String, dynamic> m) {
+    final at = DateTime.fromMillisecondsSinceEpoch((m['at'] as num?)?.toInt() ?? 0);
+    final d = DateTime.now().difference(at);
+    final ago = d.inMinutes < 60
+        ? '${d.inMinutes.clamp(1, 59)}m ago'
+        : d.inHours < 24
+            ? '${d.inHours}h ago'
+            : '${d.inDays}d ago';
+    final r = (m['r'] as String?) ?? '';
+    if (r.isEmpty) return null;
+    return Moment(
+      game: (m['g'] as String?) ?? 'Rivlr',
+      result: r,
+      hues: ((m['h'] as List?) ?? const []).whereType<num>().map((x) => x.toDouble()).toList(),
+      laughs: (m['l'] as num?)?.toInt() ?? 0,
+      ago: ago,
+      at: at,
+    );
+  }
 }
 
 /// App-wide state: identity, funny stats, sparks, moments, live count, and the
@@ -104,6 +133,16 @@ class AppSession extends ChangeNotifier {
       interests = p.getStringList('interests') ?? [];
       languages = p.getStringList('languages') ?? [];
       photoId = p.getInt('photoId');
+      // moments survive restarts — they're the user's history, not a session
+      try {
+        final raw = p.getString('moments');
+        if (raw != null) {
+          moments.addAll(((jsonDecode(raw) as List))
+              .whereType<Map>()
+              .map((m) => Moment.fromJson(m.cast<String, dynamic>()))
+              .whereType<Moment>());
+        }
+      } catch (_) {/* corrupt cache — start clean */}
       // persist the freshly-generated identity the first time
       if (p.getString('uid') == null) await _persist();
     } catch (_) {/* first run / no store — defaults are fine */}
@@ -315,12 +354,19 @@ class AppSession extends ChangeNotifier {
   // ---- moments (the shareable growth loop) ----
   final List<Moment> moments = <Moment>[];
   void captureMoment({required String game, required String result, required List<double> hues}) {
+    // a card with no verdict is a blank card — capture only real reveals
+    if (result.trim().isEmpty) return;
     moments.insert(0, Moment(game: game, result: result, hues: hues, laughs: 3 + _r.nextInt(40), ago: 'just now'));
     while (moments.length > 40) {
       moments.removeLast();
     }
+    _persistMoments();
     laughs += _r.nextInt(8);
     notifyListeners();
+  }
+
+  void _persistMoments() {
+    _prefs?.setString('moments', jsonEncode([for (final m in moments) m.toJson()]));
   }
 
   // ---- unpredictability memory ----
