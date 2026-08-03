@@ -7,6 +7,7 @@ import 'package:record/record.dart';
 import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../net/api_client.dart';
+import '../net/image_upload.dart';
 import '../net/network_client.dart';
 import '../state/chat.dart';
 import '../state/session.dart';
@@ -83,12 +84,11 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_uploading) return;
     Buzz.tick();
     try {
-      final x = await ImagePicker().pickImage(
-          source: ImageSource.gallery, maxWidth: 1080, maxHeight: 1080, imageQuality: 72);
+      // full-res pick — the compression ladder owns sizing (any photo fits)
+      final x = await ImagePicker().pickImage(source: ImageSource.gallery);
       if (x == null || !mounted) return;
       setState(() => _uploading = true);
-      final bytes = await x.readAsBytes();
-      final id = await Api.uploadMedia(bytes, kind: 'photo');
+      final id = await uploadPickedImage(x, kind: 'photo');
       if (!mounted) return;
       setState(() => _uploading = false);
       if (id != null) {

@@ -19,6 +19,12 @@ const MIN_SECS = Number(process.env.MIN_ENCOUNTER_SECS || 60);
 // Hydrated on hello, extended live on rate(0).
 const neverAgain = new Map<string, Set<string>>();
 
+/// Same contract as matching.pruneHints — rehydrated on hello, safe to drop
+/// for anyone offline.
+export function pruneNeverAgain(online: (uid: string) => boolean): void {
+  for (const uid of neverAgain.keys()) if (!online(uid)) neverAgain.delete(uid);
+}
+
 export function isNeverPair(a: string, b: string): boolean {
   return (neverAgain.get(a)?.has(b) ?? false) || (neverAgain.get(b)?.has(a) ?? false);
 }

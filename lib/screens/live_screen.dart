@@ -152,7 +152,23 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   /// Fill prompt variables — the same prompt lands on a different victim
   /// every single time it's played.
-  String _fill(String s) => s.replaceAll('{target}', _targetName);
+  String _fill(String s) => _duoize(s.replaceAll('{target}', _targetName));
+
+  /// 1:1 rooms: "point at the person who…" is nonsense with one face on
+  /// screen — the vote is the me/them buttons. Rewritten at display time so
+  /// the shared prompt pool stays group-phrased.
+  String _duoize(String s) {
+    if (cell.people.length != 1 || game.kind != GameKind.point) return s;
+    var out = s
+        .replaceAll(RegExp(r'^Point at the person who\s*', caseSensitive: false), 'Who ')
+        .replaceAll(RegExp(r'^Point at who(?:’s|\u2019s)?\s*'), 'Who\u2019s ')
+        .replaceAll(RegExp(r'^Point at\s*', caseSensitive: false), 'Vote — ')
+        .replaceAll(RegExp(r'\s*[—-]\s*point at (the|who(?:’s)?)?\s*', caseSensitive: false), ' — vote for ')
+        .replaceAll(RegExp(r'point at', caseSensitive: false), 'vote for')
+        .replaceAll(RegExp(r'tap (a|the) (face|screen|person)( of the person)?', caseSensitive: false), 'vote below');
+    if (out.isNotEmpty) out = out[0].toUpperCase() + out.substring(1);
+    return out;
+  }
 
   @override
   void initState() {

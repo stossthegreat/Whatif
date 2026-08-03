@@ -27,6 +27,101 @@ class FriendsScreen extends StatefulWidget {
 }
 
 class _FriendsScreenState extends State<FriendsScreen> {
+  /// Everyone you've recently met, one tap from a friend request. There's no
+  /// username search on purpose — you add people you've actually met.
+  void _addPeopleSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => AnimatedBuilder(
+        animation: SocialState.instance,
+        builder: (ctx2, _) {
+          final s = SocialState.instance;
+          final friendUids = s.friends.map((f) => f.uid).toSet();
+          final candidates = s.recent.where((r) => !friendUids.contains(r.uid)).toList();
+          return Padding(
+            padding: const EdgeInsets.all(12),
+            child: Glass(
+              radius: 26,
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('ADD PEOPLE YOU MET', style: T.eyebrow),
+                  const SizedBox(height: 12),
+                  if (candidates.isEmpty)
+                    Text(
+                      'Nobody new yet — press play, meet someone, and they show up here (or add them right in the room with 👥).',
+                      style: T.body.copyWith(color: C.tx3, fontSize: 14, height: 1.45),
+                    )
+                  else
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(ctx2).size.height * 0.5),
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (final r in candidates)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: Row(
+                                children: [
+                                  IdentityOrb(hue: r.hue, size: 42),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text('@${r.name}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: T.body.copyWith(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 15.5)),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  if (s.requested(r.uid))
+                                    Text('requested ✓',
+                                        style: T.tiny.copyWith(
+                                            color: C.tx2,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 12.5))
+                                  else
+                                    Press(
+                                      haptic: false,
+                                      onTap: () {
+                                        Buzz.commit();
+                                        NetworkClient.instance.friendRequest(r.uid);
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 14, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: C.sig,
+                                          borderRadius: BorderRadius.circular(100),
+                                        ),
+                                        child: Text('Add friend',
+                                            style: T.tiny.copyWith(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 12.5)),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   static const tabs = ['People', 'Close', 'Favourites', 'Recently met', 'Requests', 'Blocked'];
   late int _tab = widget.initialTab;
 
@@ -63,6 +158,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
                       ),
                       const SizedBox(width: 14),
                       Text('Your people', style: T.big.copyWith(fontSize: 26)),
+                      const Spacer(),
+                      // add people — everyone you've met is one tap from friend
+                      Press(
+                        onTap: () { Buzz.tick(); _addPeopleSheet(context); },
+                        child: Container(
+                          width: 38, height: 38,
+                          decoration: const BoxDecoration(shape: BoxShape.circle, color: C.sig),
+                          child: const Icon(Icons.person_add_alt_1_rounded, size: 19, color: Colors.white),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -127,7 +232,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
     switch (_tab) {
       case 0:
         return _friendList(s.friends,
-            empty: 'Meet someone, both say “meet again” — they land here forever.');
+            empty: 'Meet someone and add them — 👥 in the room, or ＋ up top for people you’ve met. They land here forever.');
       case 1:
         return _friendList(s.friends.where((f) => f.tier >= 1).toList(),
             empty: 'Long-press a friend to make them a Close Friend.');

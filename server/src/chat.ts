@@ -19,6 +19,14 @@ const MAX_BODY = 4000;
 // offline-push soft limit: at most one message push per pair per minute
 const lastMsgPush = new Map<string, number>();
 
+/// Prune by AGE, never by online-status: this map rate-limits pushes to
+/// OFFLINE recipients — the cooldown is 60s, so anything older than 2min
+/// is inert.
+export function pruneMsgPush(): void {
+  const cutoff = Date.now() - 120_000;
+  for (const [k, t] of lastMsgPush) if (t < cutoff) lastMsgPush.delete(k);
+}
+
 export async function dm(user: User, m: Record<string, unknown>): Promise<void> {
   if (!dbEnabled) return err(user, 'noDb');
   const to = typeof m.to === 'string' ? m.to : '';
