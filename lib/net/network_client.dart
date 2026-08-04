@@ -91,10 +91,33 @@ class NetworkClient {
             if (photo != null) {
               AppSession.instance.healPhotoId((photo['id'] as num?)?.toInt());
             }
+            // Rivlr+ — the server is the only authority on what you've paid
+            // for and which filter is switched on
+            final plus = (m['plus'] as Map?)?.cast<String, dynamic>();
+            if (plus != null) {
+              AppSession.instance.setPlus(
+                active: plus['active'] == true,
+                until: DateTime.tryParse((plus['until'] as String?) ?? ''),
+                meet: plus['meet'] as String?,
+              );
+            }
             // the socket is fully open for business — release anything the
             // reconnect gap held back
             _welcomed = true;
             _flushOutbox();
+          } else if (m['t'] == 'plus') {
+            // pushed the moment RevenueCat tells the server something changed
+            AppSession.instance.setPlus(
+              active: m['active'] == true,
+              until: DateTime.tryParse((m['until'] as String?) ?? ''),
+              meet: m['meet'] as String?,
+            );
+          } else if (m['t'] == 'meetPref') {
+            AppSession.instance.setPlus(
+              active: AppSession.instance.plus,
+              until: AppSession.instance.plusUntil,
+              meet: m['meet'] as String?,
+            );
           }
           _events.add(m);
         } catch (_) {/* ignore malformed */}
@@ -218,6 +241,18 @@ class NetworkClient {
   // ---- explore --------------------------------------------------------------
   void explore() => send({'t': 'explore'});
   void searchUsers(String q) => send({'t': 'searchUsers', 'q': q});
+
+  /// The paid gender filter. The server rejects this with `needPlus` unless
+  /// the subscription is live — the client never decides entitlement.
+  void meetPref(String meet) => send({'t': 'meetPref', 'meet': meet});
+
+  /// Who rated you Friend+ and is waiting on you. Free accounts get a count,
+  /// Plus gets the faces.
+  void likesMe() => send({'t': 'likesMe'});
+
+  /// Widen to everyone for ONE room. The saved filter is untouched — the
+  /// next search goes back to what they chose.
+  void widenOnce() => send({'t': 'widenOnce'});
 
   /// Ring someone from the Explore grid. Same machinery as a friend call, but
   /// origin 'explore' lets it reach strangers and forms a NORMAL room (games,

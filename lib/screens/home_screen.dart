@@ -159,6 +159,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
                 const _StorageBanner(),
+                const _FilterChip(),
                 _ChaosPill(onTap: () => widget.onPlay('roulette')),
                 const Spacer(),
                 // the Portal — Rivlr's living mark; taps fall through to the stage
@@ -527,6 +528,53 @@ class _GameTickerState extends State<_GameTicker> with SingleTickerProviderState
           ),
         ),
       ),
+    );
+  }
+}
+
+// ---- active filter ---------------------------------------------------------
+
+/// Shows only when a paid filter is switched on, so you always know what
+/// you're searching inside. Tapping goes straight to changing it.
+class _FilterChip extends StatelessWidget {
+  const _FilterChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: AppSession.instance,
+      builder: (context, _) {
+        final meet = AppSession.instance.meetPref;
+        if (meet == 'Everyone') return const SizedBox.shrink();
+        final word = meet == 'Women' ? 'women only' : 'men only';
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Press(
+            onTap: () {
+              Buzz.tick();
+              SettingsScreen.push(context, () {});
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+              decoration: BoxDecoration(
+                gradient: C.gradSig,
+                borderRadius: BorderRadius.circular(R.chip),
+                boxShadow: C.glowSig(blur: 14, spread: -5),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.tune_rounded, size: 13, color: Colors.white),
+                  const SizedBox(width: 6),
+                  Text(word,
+                      style: T.tiny.copyWith(
+                          color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

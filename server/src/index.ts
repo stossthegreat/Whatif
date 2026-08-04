@@ -27,6 +27,7 @@ import * as moderation from './moderation.js';
 import * as explore from './explore.js';
 import { verifyAppleToken } from './apple_verify.js';
 import { mountAdmin } from './admin.js';
+import { mountIap } from './iap.js';
 
 const PORT = Number(process.env.PORT || 8080);
 const ALLOW_SOLO = (process.env.ALLOW_SOLO || 'true') === 'true';
@@ -67,6 +68,12 @@ function meetOk(meet: Meet, gender?: string): boolean {
   if (meet === 'Men') return gender === 'Man';
   return true; // Everyone (or unknown gender) — don't starve the queue
 }
+/// The filter actually in force. A one-room widen is honoured here and
+/// nowhere else, so `user.meet` always still holds what they chose.
+function effMeet(u: User): Meet {
+  return u.meetRelaxed ? 'Everyone' : u.meet;
+}
+
 function compatible(a: User, b: User): boolean {
   return a.uid !== b.uid
     && !store.isBlocked(a.uid, b.uid)
@@ -74,8 +81,8 @@ function compatible(a: User, b: User): boolean {
     && !matching.hardBlocked(a, b)       // met in the last 24h — keep it fresh
     && !matching.quarantineBlocks(a, b)  // low-rep accounts pool together
     && (a.mode ?? 'hang') === (b.mode ?? 'hang') // roulette matches roulette
-    && meetOk(a.meet, b.gender)
-    && meetOk(b.meet, a.gender);
+    && meetOk(effMeet(a), b.gender)
+    && meetOk(effMeet(b), a.gender);
 }
 
 /// Guests can browse everything; going on camera needs a verified account so
@@ -86,12 +93,24 @@ function canGoLive(u: User): boolean {
   return false;
 }
 
+/// Rivlr+ — hydrated from Postgres on hello and refreshed by the RevenueCat
+/// webhook. Never taken from anything the client says.
+function isPlus(u: User): boolean {
+  return !!u.plusUntil && u.plusUntil.getTime() > Date.now();
+}
+
 // ---- matchmaking -----------------------------------------------------------
 function enqueue(u: User) {
   u.state = 'queued';
   u.queuedAt = Date.now();
-  if (!store.queue.includes(u.id)) store.queue.push(u.id);
+  if (!store.queue.includes(u.id)) {
+    // Plus jumps the line. It reorders who gets looked at first; it never
+    // removes anyone, so a free user still matches — just behind a payer.
+    if (isPlus(u)) store.queue.unshift(u.id);
+    else store.queue.push(u.id);
+  }
   send(u, { t: 'searching' });
+  if (u.meet !== 'Everyone') sendQueueHint(u);
   // someone waiting alone in a room? walk straight in — their full-screen
   // solo view shrinks to a PiP the moment you arrive
   if (tryJoinLonelyCell(u)) return;
@@ -466,6 +485,12 @@ function noteMatch() {
 async function formCell(memberIds: string[], modeOverride?: 'call') {
   const live = memberIds.filter((id) => store.users.get(id)?.ws.readyState === WebSocket.OPEN);
   if (live.length === 0) return;
+  // a one-room widen expires the moment that room exists — the next search
+  // uses the filter they actually chose
+  for (const id of live) {
+    const u = store.users.get(id);
+    if (u) u.meetRelaxed = false;
+  }
 
   const strangers = live.length - 1;
   const rounds = rollSession(strangers);
@@ -709,7 +734,37 @@ setInterval(() => {
       try { u.ws.send(payload); } catch { /* ignore */ }
     }
   }
+  // Anyone waiting behind a paid filter gets the honest number of people
+  // their filter can actually reach. Only computed for filtered users who
+  // are actually queued — a tiny set — so the O(n) scan stays cheap.
+  for (const id of store.queue) {
+    const u = store.users.get(id);
+    if (u && u.meet !== 'Everyone') sendQueueHint(u);
+  }
 }, 4000);
+
+/// How many people online right now could this user actually be matched
+/// with, respecting BOTH sides' filters. Honest counts are the whole
+/// anti-starvation strategy: nobody rages at a number they can see.
+function filterReach(u: User): number {
+  let n = 0;
+  for (const o of store.users.values()) {
+    if (o.uid === u.uid || !o.helloed) continue;
+    if (!meetOk(u.meet, o.gender) || !meetOk(o.meet, u.gender)) continue;
+    if (store.isBlocked(u.uid, o.uid)) continue;
+    n++;
+  }
+  return n;
+}
+
+function sendQueueHint(u: User): void {
+  send(u, {
+    t: 'queueHint',
+    meet: u.meet,
+    reach: filterReach(u),
+    waitedMs: Date.now() - u.queuedAt,
+  });
+}
 
 // heartbeat — drop dead sockets, and sockets that connected but never sent
 // a hello (bots, port scanners, wedged clients holding a User slot)
@@ -748,6 +803,20 @@ app.get('/rules', (_req, res) => res.type('html').send(legal.page('House Rules',
 app.get('/delete-account', (_req, res) => res.type('html').send(legal.page('Delete your account', legal.deleteAccount)));
 mountMedia(app);
 mountAdmin(app);
+// Rivlr+ — the webhook and the app's "check my subscription now" endpoint.
+// Both need to reach a connected user, so we hand them a sender.
+mountIap(app, (uid, until) => {
+  const u = store.userByUid(uid);
+  if (!u) return;
+  u.plusUntil = until;
+  if (!isPlus(u)) u.meet = 'Everyone'; // entitlement gone, filter goes with it
+  send(u, {
+    t: 'plus',
+    active: isPlus(u),
+    until: until ? until.toISOString() : null,
+    meet: u.meet,
+  });
+});
 startRetentionSweep();
 app.get('/stats', (_req, res) => res.json({
   online: store.onlineCount, queued: store.queue.length, cells: store.cells.size,
@@ -860,19 +929,36 @@ wss.on('connection', (ws, req) => {
           if (deviceId) db.noteDevice(user.uid, deviceId);
         }
         if (typeof m.name === 'string' && m.name.trim()) user.name = m.name.trim().slice(0, 16);
-        if (typeof m.gender === 'string') user.gender = m.gender;
+        // whitelist: other people's paid filters read this, so it can't be
+        // an arbitrary string a modified client invents
+        if (m.gender === 'Woman' || m.gender === 'Man' || m.gender === 'Non-binary') {
+          user.gender = m.gender;
+        }
         if (m.meet === 'Women' || m.meet === 'Men' || m.meet === 'Everyone') user.meet = m.meet;
         if (typeof m.tz === 'number' && Number.isFinite(m.tz)) user.tz = Math.trunc(m.tz);
-        // your own photo ids ride in welcome so the client can heal a stale
-        // local id (the pre-b61 thumb bug left phones pointing at deleted blobs)
-        const myMedia = await dbs.userPhotoIds(user.uid);
+        // one round-trip for everything about your own account: photo ids (to
+        // heal a stale client), the paid entitlement, and the meet filter.
+        const acct = await dbs.accountState(user.uid);
+        user.plusUntil = acct?.plusUntil ?? null;
+        // the filter is a PAID setting — the database owns it, not the phone.
+        // (a reinstall would otherwise silently drop what someone bought)
+        if (acct?.meet === 'Women' || acct?.meet === 'Men' || acct?.meet === 'Everyone') {
+          user.meet = acct.meet;
+        }
+        // ...but only Plus keeps a filter switched on
+        if (!isPlus(user)) user.meet = 'Everyone';
         send(user, {
           t: 'welcome', id, uid: user.uid, name: user.name, hue: user.hue,
           live: LIVE_BASELINE + store.onlineCount,
           http: { token: mintAuthToken(user.uid), base: process.env.PUBLIC_URL || '' },
           features: { social: db.dbEnabled, media: db.dbEnabled, gifs: gifsEnabled },
           account: { signedIn: user.appleVerified === true },
-          photo: { id: myMedia?.photoId ?? null, thumbId: myMedia?.thumbId ?? null },
+          photo: { id: acct?.photoId ?? null, thumbId: acct?.thumbId ?? null },
+          plus: {
+            active: isPlus(user),
+            until: user.plusUntil ? user.plusUntil.toISOString() : null,
+            meet: user.meet,
+          },
         });
         notifyLive(user);
         void social.hydrate(user);
@@ -882,7 +968,10 @@ wss.on('connection', (ws, req) => {
         const vibes = Array.isArray(m.vibes)
           ? (m.vibes as unknown[]).filter((v): v is string => typeof v === 'string').slice(0, 12)
           : [];
-        db.upsertUser({ uid: user.uid, name: user.name, hue: user.hue, gender: user.gender, meet: user.meet, vibes });
+        // don't let a lapsed subscription clobber the stored filter — if they
+        // resubscribe, the preference they paid for is still there
+        db.upsertUser({ uid: user.uid, name: user.name, hue: user.hue,
+          gender: user.gender, meet: acct?.meet ?? user.meet, vibes });
         if (appleLink && db.dbEnabled) dbs.linkApple(user.uid, appleLink);
         void db.loadSocial(user.uid).then((d) => {
           if (!d) return;
@@ -1071,6 +1160,53 @@ wss.on('connection', (ws, req) => {
           const people = rows.filter((p) =>
               !store.isBlocked(user.uid, p.uid) && !social.isNeverPair(user.uid, p.uid));
           send(user, { t: 'searchResults', q, people });
+        })();
+        break;
+      }
+      case 'meetPref': {
+        // the paid filter. Gated here and nowhere else — the client's copy
+        // is a display of this decision, never the decision itself.
+        const want = m.meet;
+        if (want !== 'Everyone' && want !== 'Women' && want !== 'Men') break;
+        if (want !== 'Everyone' && !isPlus(user)) {
+          send(user, { t: 'err', code: 'needPlus' });
+          break;
+        }
+        user.meet = want;
+        if (db.dbEnabled) dbs.setMeet(user.uid, want);
+        send(user, { t: 'meetPref', meet: want, reach: filterReach(user) });
+        break;
+      }
+      case 'widenOnce': {
+        // "meet anyone this once" — in memory only, never written to the DB.
+        // A filter someone paid for is theirs until THEY change it.
+        user.meetRelaxed = true;
+        send(user, { t: 'meetPref', meet: user.meet, relaxed: true, reach: filterReach(user) });
+        if (user.state === 'queued') tryMatch();
+        break;
+      }
+      case 'likesMe': {
+        // who rated you Friend+ and is still waiting on you. Free users get
+        // the COUNT (that's the hook); Plus gets the faces.
+        if (!db.dbEnabled) { send(user, { t: 'err', code: 'noDb' }); break; }
+        void (async () => {
+          const uids = await dbs.likesMe(user.uid);
+          if (!isPlus(user)) {
+            send(user, { t: 'likesMe', locked: true, count: uids.length, people: [] });
+            return;
+          }
+          const cards = await dbs.cardsFor(uids);
+          const people = uids.flatMap((id) => {
+            const c = cards.get(id);
+            if (!c) return [];
+            return [{
+              uid: id, name: c.name, hue: c.hue,
+              thumbId: c.thumbId ?? c.photoId, title: c.title,
+              country: c.country, age: c.age,
+              online: !!store.userByUid(id),
+            }];
+          });
+          send(user, { t: 'likesMe', locked: false, count: people.length, people });
         })();
         break;
       }
