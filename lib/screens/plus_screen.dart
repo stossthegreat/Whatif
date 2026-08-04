@@ -71,19 +71,19 @@ class _PlusScreenState extends State<PlusScreen> {
     if (!mounted) return;
     setState(() => _busy = false);
     switch (r) {
-      case PurchaseResult.success:
+      case PlusResult.success:
         Buzz.commit();
         _toast('You’re Rivlr+ ✨');
         Navigator.of(context).maybePop();
-      case PurchaseResult.pending:
+      case PlusResult.pending:
         _toast('Payment taken — unlocking in a moment');
         Navigator.of(context).maybePop();
-      case PurchaseResult.cancelled:
+      case PlusResult.cancelled:
         break; // they changed their mind; saying anything would be nagging
-      case PurchaseResult.unavailable:
+      case PlusResult.unavailable:
         _toast('The store isn’t available right now');
-      case PurchaseResult.failed:
-      case PurchaseResult.nothingToRestore:
+      case PlusResult.failed:
+      case PlusResult.nothingToRestore:
         _toast('That didn’t go through — nothing was charged');
     }
   }
@@ -95,11 +95,11 @@ class _PlusScreenState extends State<PlusScreen> {
     if (!mounted) return;
     setState(() => _busy = false);
     switch (r) {
-      case PurchaseResult.success:
+      case PlusResult.success:
         Buzz.commit();
         _toast('Restored — welcome back ✨');
         Navigator.of(context).maybePop();
-      case PurchaseResult.nothingToRestore:
+      case PlusResult.nothingToRestore:
         _toast('No subscription found on this Apple ID');
       default:
         _toast('Couldn’t reach the store — try again');
