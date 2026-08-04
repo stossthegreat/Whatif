@@ -75,36 +75,36 @@ class Plus {
 
   /// Buy. Returns true only once OUR SERVER agrees the subscription is live.
   /// [cancelled] tells the paywall to stay quiet rather than show an error.
-  Future<PurchaseResult> buy(Package p) async {
-    if (!_ready) return PurchaseResult.unavailable;
+  Future<PlusResult> buy(Package p) async {
+    if (!_ready) return PlusResult.unavailable;
     try {
       Track.event('plus_purchase_start', {'package': p.identifier});
       await Purchases.purchasePackage(p);
       final live = await _confirmWithServer();
       Track.event(live ? 'plus_purchase_done' : 'plus_purchase_unconfirmed');
-      return live ? PurchaseResult.success : PurchaseResult.pending;
+      return live ? PlusResult.success : PlusResult.pending;
     } on PlatformException catch (e) {
       final code = PurchasesErrorHelper.getErrorCode(e);
       if (code == PurchasesErrorCode.purchaseCancelledError) {
-        return PurchaseResult.cancelled;
+        return PlusResult.cancelled;
       }
-      return PurchaseResult.failed;
+      return PlusResult.failed;
     } catch (_) {
-      return PurchaseResult.failed;
+      return PlusResult.failed;
     }
   }
 
   /// Apple requires this on every paywall — someone who reinstalls must be
   /// able to get back what they already paid for.
-  Future<PurchaseResult> restore() async {
-    if (!_ready) return PurchaseResult.unavailable;
+  Future<PlusResult> restore() async {
+    if (!_ready) return PlusResult.unavailable;
     try {
       await Purchases.restorePurchases();
       final live = await _confirmWithServer();
       Track.event('plus_restore', {'found': live ? 1 : 0});
-      return live ? PurchaseResult.success : PurchaseResult.nothingToRestore;
+      return live ? PlusResult.success : PlusResult.nothingToRestore;
     } catch (_) {
-      return PurchaseResult.failed;
+      return PlusResult.failed;
     }
   }
 
@@ -123,7 +123,7 @@ class Plus {
   }
 }
 
-enum PurchaseResult {
+enum PlusResult {
   success,
   cancelled,
   failed,
