@@ -9,6 +9,7 @@ import 'core/analytics.dart';
 import 'core/apple_auth.dart';
 import 'core/camera_service.dart';
 import 'core/device_id.dart';
+import 'core/iap.dart';
 import 'core/push.dart';
 import 'models/game.dart';
 import 'models/person.dart';
@@ -39,6 +40,7 @@ import 'screens/main_shell.dart';
 import 'screens/party_screen.dart';
 import 'screens/finding_screen.dart';
 import 'screens/live_screen.dart';
+import 'screens/plus_screen.dart';
 
 class RivlrApp extends StatelessWidget {
   const RivlrApp({super.key});
@@ -134,6 +136,11 @@ class _RootState extends State<_Root> {
       ChatStore.instance.attach(AppSession.instance.myUid);
       NetworkClient.instance.connect();
       _netSub = NetworkClient.instance.events.listen(_onNet);
+      // subscriptions: identifies this device as our uid with RevenueCat and
+      // picks up anything already bought on another device. No-ops entirely
+      // until a key lands in revenuecat_config.dart.
+      AppSession.instance.onUidAdopted = (uid) => unawaited(Plus.instance.relogin(uid));
+      unawaited(Plus.instance.start());
     }
     if (!mounted) return;
     _to(AppSession.instance.onboarded ? _Step.home : _Step.welcome);
@@ -312,6 +319,13 @@ class _RootState extends State<_Root> {
         // going live needs a real account — surface the sign-in at the exact
         // moment they wanted to play, which is when they're most willing
         if (m['code'] == 'needAccount') _needAccount();
+        // the same logic for the paid filter: the pitch lands where the want is
+        if (m['code'] == 'needPlus') {
+          final ctx = RivlrApp.navKey.currentContext;
+          if (ctx != null) {
+            PlusScreen.push(ctx, reason: 'Choosing who you meet is part of Rivlr+.');
+          }
+        }
       case 'cell':
         _onCell(m);
       case 'ended':

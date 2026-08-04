@@ -36,6 +36,9 @@ export async function initSocial(): Promise<void> {
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_thumb_id BIGINT',
     // your room code — minted once, yours forever (b61)
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS room_code TEXT',
+    // Rivlr+ entitlement (b63). NULL or past = free. The server is the only
+    // authority here; the client never asserts its own plan.
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS plus_until TIMESTAMPTZ',
   ];
   for (const q of alters) await run(q);
   await run(`CREATE UNIQUE INDEX IF NOT EXISTS users_apple_idx
@@ -46,6 +49,19 @@ export async function initSocial(): Promise<void> {
   await run(`CREATE INDEX IF NOT EXISTS users_name_lower
              ON users (lower(name) text_pattern_ops)`);
   await run('CREATE INDEX IF NOT EXISTS users_last_seen ON users (last_seen DESC)');
+
+  // Purchase audit trail. event_id is RevenueCat's — it doubles as the
+  // idempotency key, because webhooks retry and must never double-apply.
+  await run(`CREATE TABLE IF NOT EXISTS purchases (
+    event_id TEXT PRIMARY KEY,
+    uid TEXT NOT NULL,
+    product_id TEXT,
+    kind TEXT,
+    expires_at TIMESTAMPTZ,
+    raw JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  await run('CREATE INDEX IF NOT EXISTS purchases_uid ON purchases(uid, created_at DESC)');
 
   await run(`CREATE TABLE IF NOT EXISTS media (
     id BIGSERIAL PRIMARY KEY,
@@ -665,17 +681,76 @@ export async function discoverRoster(exclude: string[], limit: number): Promise<
   }));
 }
 
-/// The caller's own photo pointers — welcome uses this to heal stale clients.
-export async function userPhotoIds(uid: string):
-    Promise<{ photoId: number | null; thumbId: number | null } | null> {
+/// Everything about YOUR OWN account that welcome needs, in one round-trip:
+/// photo pointers (to heal a stale client), the paid entitlement, and the
+/// meet filter. The last two must come from here and nowhere else — a
+/// client can claim anything, and a reinstall would otherwise silently
+/// lose a filter someone paid for.
+export async function accountState(uid: string): Promise<{
+  photoId: number | null; thumbId: number | null;
+  plusUntil: Date | null; meet: string | null;
+} | null> {
   if (!dbEnabled) return null;
-  const r = await run('SELECT photo_media_id, photo_thumb_id FROM users WHERE uid=$1', [uid]);
+  const r = await run(
+    'SELECT photo_media_id, photo_thumb_id, plus_until, meet FROM users WHERE uid=$1', [uid]);
   const x = r?.rows?.[0];
   if (!x) return null;
   return {
     photoId: x.photo_media_id == null ? null : Number(x.photo_media_id),
     thumbId: x.photo_thumb_id == null ? null : Number(x.photo_thumb_id),
+    plusUntil: x.plus_until == null ? null : new Date(x.plus_until as string),
+    meet: (x.meet as string | null) ?? null,
   };
+}
+
+// ---- Rivlr+ entitlement ----------------------------------------------------
+
+/// The entitlement write. `until` null revokes (refund / expiry).
+export function setPlusUntil(uid: string, until: Date | null): void {
+  void run('UPDATE users SET plus_until=$2 WHERE uid=$1', [uid, until]);
+}
+
+/// The meet filter — a paid setting, so it persists like one.
+export function setMeet(uid: string, meet: string): void {
+  void run('UPDATE users SET meet=$2 WHERE uid=$1', [uid, meet]);
+}
+
+/// Record a purchase event. Returns false if we've already seen this event
+/// id — RevenueCat retries webhooks, and applying one twice is a bug.
+export async function recordPurchase(o: {
+  eventId: string; uid: string; productId: string | null;
+  kind: string | null; expiresAt: Date | null; raw: unknown;
+}): Promise<boolean> {
+  if (!dbEnabled) return false;
+  const r = await run(
+    `INSERT INTO purchases (event_id, uid, product_id, kind, expires_at, raw)
+     VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (event_id) DO NOTHING RETURNING event_id`,
+    [o.eventId, o.uid, o.productId, o.kind, o.expiresAt, JSON.stringify(o.raw ?? null)]);
+  return !!r?.rows?.length;
+}
+
+/// "Who wants to meet you again" — people who rated you Friend+ in the last
+/// 30 days that you haven't rated back and aren't already friends with. The
+/// ratings index is (target, rater, created_at DESC), so this is an index
+/// scan, not a table scan.
+export async function likesMe(uid: string): Promise<string[]> {
+  if (!dbEnabled) return [];
+  const r = await run(
+    `SELECT DISTINCT r.rater
+       FROM ratings r
+      WHERE r.target = $1
+        AND r.score >= 1
+        AND r.created_at > now() - interval '30 days'
+        AND NOT EXISTS (
+          SELECT 1 FROM ratings mine
+           WHERE mine.rater = $1 AND mine.target = r.rater)
+        AND NOT EXISTS (
+          SELECT 1 FROM friendships f
+           WHERE f.state = 'friends'
+             AND ((f.a = $1 AND f.b = r.rater) OR (f.a = r.rater AND f.b = $1)))
+      LIMIT 60`,
+    [uid]);
+  return (r?.rows ?? []).map((x) => x.rater as string);
 }
 
 export async function userCard(uid: string):

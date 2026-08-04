@@ -82,6 +82,24 @@ class Api {
       return const [];
     }
   }
+
+  /// Ask the server to re-check this account's subscription with RevenueCat
+  /// right now. Called straight after a purchase or a restore so access never
+  /// waits on a webhook. Returns true when the entitlement is live.
+  static Future<bool> syncPlus() async {
+    if (!ready) return false;
+    try {
+      final r = await http.post(
+        Uri.parse('$_base/api/iap/sync'),
+        headers: {'authorization': 'Bearer $_token'},
+      ).timeout(const Duration(seconds: 20));
+      if (r.statusCode != 200) return false;
+      final j = jsonDecode(r.body) as Map<String, dynamic>;
+      return j['plus'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
 }
 
 class Gif {

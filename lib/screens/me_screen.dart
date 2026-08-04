@@ -10,6 +10,7 @@ import 'chat_screen.dart' show AppNav;
 import 'chats_screen.dart';
 import 'friend_profile_screen.dart';
 import 'edit_profile_screen.dart';
+import 'likes_screen.dart';
 import 'moments_screen.dart';
 import 'settings_screen.dart';
 import 'friends_screen.dart';
@@ -196,6 +197,19 @@ class MeScreen extends StatelessWidget {
                             style: T.tiny.copyWith(color: C.tx2, fontSize: 13)),
                       ],
                       const SizedBox(height: 10),
+                      if (s.plus) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                          decoration: BoxDecoration(
+                            gradient: C.gradSigHot,
+                            borderRadius: BorderRadius.circular(R.chip),
+                            boxShadow: C.glowSig(blur: 14, spread: -5),
+                          ),
+                          child: Text('Rivlr+',
+                              style: T.display(13).copyWith(letterSpacing: 0.4)),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                         decoration: BoxDecoration(
@@ -250,6 +264,46 @@ class MeScreen extends StatelessWidget {
                         ),
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // who said yes to you — the strongest reason to open the app
+                Press(
+                  haptic: false,
+                  onTap: () { Buzz.tick(); LikesScreen.push(context); },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                    decoration: BoxDecoration(
+                      gradient: C.gradSig,
+                      borderRadius: BorderRadius.circular(R.card),
+                      boxShadow: C.glowSig(blur: 18, spread: -8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text('💜', style: TextStyle(fontSize: 20)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Who wants to meet you', style: T.display(17)),
+                              const SizedBox(height: 2),
+                              Text(
+                                s.plus
+                                    ? 'everyone who said yes to you'
+                                    : 'see who said yes — with Rivlr+',
+                                style: T.tiny.copyWith(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded, size: 22, color: Colors.white),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),

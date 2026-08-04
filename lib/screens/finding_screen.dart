@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
+import '../net/network_client.dart';
+import '../state/session.dart';
 import '../theme/tokens.dart';
+import '../widgets/glass.dart';
 
 /// Finding — the roulette. Not a fade: a slot-machine reel of flags, faces,
 /// games and emojis whips past a center reticle, motion-blurred, decelerating
@@ -32,11 +36,88 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
   int _lastCenter = -1;
   bool _matched = false;
 
+  // ---- the paid filter, and the honesty that has to come with it ----
+  StreamSubscription<Map<String, dynamic>>? _hintSub;
+  String _meet = 'Everyone';
+  int _reach = 0;
+  bool _offeredWiden = false;
+
   @override
   void initState() {
     super.initState();
     _c.addListener(_onTick);
     _spin();
+    _meet = AppSession.instance.meetPref;
+    _hintSub = NetworkClient.instance.events.listen((m) {
+      if (!mounted || m['t'] != 'queueHint') return;
+      setState(() {
+        _meet = (m['meet'] as String?) ?? 'Everyone';
+        _reach = ((m['reach'] as num?) ?? 0).toInt();
+      });
+      // A filter someone PAID for is never relaxed behind their back. After
+      // a long wait we ask — and they decide.
+      final waited = ((m['waitedMs'] as num?) ?? 0).toInt();
+      if (!_offeredWiden && _meet != 'Everyone' && waited > 25000) {
+        _offeredWiden = true;
+        _askToWiden();
+      }
+    });
+  }
+
+  String get _meetWord => _meet == 'Women' ? 'women' : 'men';
+
+  void _askToWiden() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isDismissible: true,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(12),
+        child: Glass(
+          radius: R.sheet,
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Quiet for $_meetWord right now', style: T.display(21)),
+              const SizedBox(height: 8),
+              Text(
+                _reach > 0
+                    ? '$_reach ${_reach == 1 ? 'person matches' : 'people match'} your filter and '
+                        'none are free this second. Keep waiting, or meet anyone this once?'
+                    : 'Nobody matching your filter is around right now. Keep '
+                        'waiting, or meet anyone this once?',
+                style: T.body.copyWith(fontSize: 14.5, height: 1.45),
+              ),
+              const SizedBox(height: 20),
+              Cta(
+                label: 'Meet anyone this once',
+                onTap: () {
+                  Buzz.commit();
+                  Navigator.pop(ctx);
+                  // one room only — the saved filter is untouched
+                  NetworkClient.instance.widenOnce();
+                },
+              ),
+              const SizedBox(height: 10),
+              Center(
+                child: Press(
+                  haptic: false,
+                  onTap: () { Buzz.tick(); Navigator.pop(ctx); },
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Text('Keep waiting for $_meetWord',
+                        style: T.body.copyWith(
+                            color: C.tx2, fontSize: 14, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _spin() {
@@ -84,6 +165,7 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
 
   @override
   void dispose() {
+    _hintSub?.cancel();
     _c.dispose();
     super.dispose();
   }
@@ -166,7 +248,35 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
                           child: Text('Matched!', style: T.display(34).copyWith(letterSpacing: 1, color: C.sig)),
                         ),
                       )
-                    : Text('finding…', style: T.display(16).copyWith(letterSpacing: 3, color: C.tx2)),
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('finding…',
+                              style: T.display(16).copyWith(letterSpacing: 3, color: C.tx2)),
+                          // a filter narrows the pool, so say by how much —
+                          // an honest number nobody rages at a spinner
+                          if (_meet != 'Everyone') ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: C.sig.withOpacity(0.16),
+                                borderRadius: BorderRadius.circular(R.chip),
+                                border: Border.all(color: C.sig.withOpacity(0.5)),
+                              ),
+                              child: Text(
+                                _reach > 0
+                                    ? '$_meetWord only · $_reach online'
+                                    : '$_meetWord only',
+                                style: T.tiny.copyWith(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
               ),
             ],
           );

@@ -6,6 +6,7 @@ import '../state/session.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import 'legal_screen.dart';
+import 'plus_screen.dart';
 
 /// Settings — profile summary, preferences, legal, and account.
 class SettingsScreen extends StatefulWidget {
@@ -67,6 +68,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (s.myVibes.isNotEmpty) s.myVibes.join(' · '),
                           s.signedIn ? 'signed in' : 'guest',
                         ].join('\n')),
+                  ]),
+                  const SizedBox(height: 20),
+                  _section('RIVLR+'),
+                  _card([
+                    _link(
+                      s.plus ? 'Who you meet · ${_meetLabel(s.meetPref)}' : 'Choose who you meet',
+                      () {
+                        Buzz.tick();
+                        if (s.plus) {
+                          _meetSheet();
+                        } else {
+                          PlusScreen.push(context, reason: 'Meet only women, or only men.');
+                        }
+                      },
+                      trailing: s.plus ? null : 'Rivlr+',
+                    ),
+                    _divider(),
+                    if (s.plus)
+                      _info('Subscription',
+                          'active — manage or cancel in your Apple ID settings')
+                    else
+                      _link('See what Rivlr+ unlocks',
+                          () { Buzz.tick(); PlusScreen.push(context); }),
                   ]),
                   const SizedBox(height: 20),
                   _section('PREFERENCES'),
@@ -138,7 +162,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _link('Delete account', () => _confirmDelete(context), color: C.live),
                   ]),
                   const SizedBox(height: 26),
-                  Center(child: Text('Rivlr · 1.0.0 (62)', style: T.tiny)),
+                  Center(child: Text('Rivlr · 1.0.0 (63)', style: T.tiny)),
                 ],
               ),
             ),
@@ -255,16 +279,111 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       );
 
-  Widget _link(String label, VoidCallback onTap, {Color color = C.tx}) => InkWell(
+  Widget _link(String label, VoidCallback onTap, {Color color = C.tx, String? trailing}) => InkWell(
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: Row(
             children: [
               Expanded(child: Text(label, style: T.body.copyWith(color: color, fontWeight: FontWeight.w600))),
+              if (trailing != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    gradient: C.gradSig,
+                    borderRadius: BorderRadius.circular(R.chip),
+                  ),
+                  child: Text(trailing,
+                      style: T.tiny.copyWith(
+                          color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+                ),
+                const SizedBox(width: 8),
+              ],
               if (color == C.tx) const Icon(Icons.chevron_right_rounded, size: 20, color: C.tx3),
             ],
           ),
         ),
       );
+
+  static String _meetLabel(String meet) => switch (meet) {
+        'Women' => 'women only',
+        'Men' => 'men only',
+        _ => 'everyone',
+      };
+
+  /// The paid filter picker. Honest about what it can and can't promise:
+  /// gender here is what each person selected about themselves.
+  void _meetSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(12),
+        child: Glass(
+          radius: R.sheet,
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 26),
+          child: AnimatedBuilder(
+            animation: AppSession.instance,
+            builder: (ctx2, _) {
+              final cur = AppSession.instance.meetPref;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('WHO YOU MEET', style: T.eyebrow),
+                  const SizedBox(height: 12),
+                  for (final o in const [
+                    ('Everyone', 'everyone', '🌍'),
+                    ('Women', 'women only', '♀︎'),
+                    ('Men', 'men only', '♂︎'),
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Press(
+                        haptic: false,
+                        onTap: () {
+                          Buzz.commit();
+                          NetworkClient.instance.meetPref(o.$1);
+                          Navigator.pop(ctx);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            gradient: cur == o.$1 ? C.gradSig : null,
+                            color: cur == o.$1 ? null : C.glass,
+                            borderRadius: BorderRadius.circular(R.btn),
+                            border: Border.all(
+                                color: cur == o.$1 ? const Color(0x47FFFFFF) : C.hair2),
+                          ),
+                          child: Row(
+                            children: [
+                              Text(o.$3, style: const TextStyle(fontSize: 17)),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(o.$2,
+                                    style: T.body.copyWith(
+                                        color: Colors.white, fontWeight: FontWeight.w700)),
+                              ),
+                              if (cur == o.$1)
+                                const Icon(Icons.check_rounded, size: 19, color: Colors.white),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Filtering means fewer people to match with, so busy hours '
+                    'work best. Gender is what each person selected about '
+                    'themselves — we don’t verify it.',
+                    style: T.tiny.copyWith(fontSize: 11.5, height: 1.45),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
 }

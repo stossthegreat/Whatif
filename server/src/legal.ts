@@ -188,8 +188,16 @@ Rivlr connects you into live video rooms with people you don't know (always one-
 3. YOUR ACCOUNT AND SECURITY
 Going live on camera requires signing in with Apple — this is what lets suspensions actually stick, and it is why the graph of friends and messages survives a reinstall. Your account (whether guest or Sign in with Apple) is yours alone: do not sell, transfer, or share it, and do not let anyone else use it. You may not choose a handle you have no right to use or one intended to impersonate another person. You are responsible for activity on your account. If we must resolve a dispute over who owns an account, our determination (which may include suspension or termination) is final. Tell us immediately at m2mb@info.com about any unauthorised use.
 
-4. FREE SERVICE; FUTURE PAID FEATURES
-Rivlr is currently free. If we ever introduce paid features or subscriptions, they will be governed by the applicable app store's payment terms and by Additional Terms posted at the time, including clear pricing, renewal, and cancellation rules, with any detrimental changes notified in advance.
+4. FREE SERVICE AND RIVLR+ SUBSCRIPTIONS
+Rivlr is free to use. Meeting people, messaging, rooms, and games cost nothing and always will.
+
+Rivlr+ is an optional paid subscription that unlocks: choosing which gender of people you are matched with; seeing the list of people who said they would meet you again; and priority position in the matching queue. Nothing about safety, moderation, or your ability to talk to the people you have already met is ever placed behind payment.
+
+Subscriptions are sold through Apple. The exact price and billing period are shown to you inside the app before you buy, in your own currency, and payment is charged to your Apple ID on confirmation. A subscription renews automatically for the same period at the same price unless you cancel at least 24 hours before the current period ends. Cancel any time in your Apple ID subscription settings; cancelling stops future renewals and you keep access until the paid period runs out. We do not charge you separately and we never store your card details — Apple handles all billing.
+
+Refunds are handled by Apple under their policies, not by us; we cannot issue or refuse them, though we will help you contact them. Except where the law requires otherwise, part-used periods are not refunded. If your subscription lapses or is refunded, paid features switch off and any filter you had set returns to meeting everyone — everything free about your account, including your friends and messages, is unaffected.
+
+We may change what Rivlr+ includes or what it costs. Price rises and material reductions take effect only for periods beginning after we have told you, and Apple will ask you to agree to a price increase before it is charged. If a paid feature depends on other people being online — the matching filter especially — we cannot promise anyone will be available at a given moment; the app shows you honest live numbers so you can judge for yourself.
 
 5. HOUSE RULES — ZERO TOLERANCE FOR OBJECTIONABLE CONTENT
 You agree that you will NOT, in any room, message, profile, or other content:

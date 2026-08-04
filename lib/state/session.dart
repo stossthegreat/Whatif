@@ -207,8 +207,16 @@ class AppSession extends ChangeNotifier {
     if (uid.isEmpty || uid == myUid) return;
     myUid = uid;
     _prefs?.setString('uid', uid);
+    // anything bought under the old id has to follow the account, or the
+    // purchase ends up filed against an abandoned user
+    onUidAdopted?.call(uid);
     notifyListeners();
   }
+
+  /// Set by app startup — re-identifies the purchase SDK after Apple sign-in
+  /// resolves us to a different canonical uid. (A plain callback keeps this
+  /// state class free of any dependency on the purchase layer.)
+  void Function(String uid)? onUidAdopted;
 
   /// Onboarding finished — remember it so we never show it again.
   void completeOnboarding() {
@@ -265,6 +273,24 @@ class AppSession extends ChangeNotifier {
   void setDiscoverable(bool v) {
     discoverable = v;
     _prefs?.setBool('discoverable', v);
+    notifyListeners();
+  }
+
+  // ---- Rivlr+ ----
+  /// NEVER persisted and never client-decided: the server tells us on every
+  /// connect and whenever RevenueCat says something changed. Storing this
+  /// locally would just be a lie a modified client could tell itself.
+  bool plus = false;
+  DateTime? plusUntil;
+
+  /// Who you want to meet — 'Everyone' | 'Women' | 'Men'. A paid setting, so
+  /// the server's copy is the real one; this mirrors it for the UI.
+  String meetPref = 'Everyone';
+
+  void setPlus({required bool active, DateTime? until, String? meet}) {
+    plus = active;
+    plusUntil = until;
+    if (meet != null) meetPref = meet;
     notifyListeners();
   }
 

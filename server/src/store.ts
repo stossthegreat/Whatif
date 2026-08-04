@@ -20,6 +20,11 @@ export interface User {
   deviceId?: string | null; // Keychain-backed device id — bans outlive reinstalls
   appleVerified?: boolean;  // proved a real Apple identity token, not a claim
   helloed?: boolean;     // real client spoke — reaper stands down
+  plusUntil?: Date | null;  // Rivlr+ paid-until, hydrated from the DB on hello
+  /// "meet anyone this once" — set when a filtered user chooses to widen for
+  /// a single room. Cleared the moment they land in one, so their paid
+  /// setting is never quietly changed underneath them.
+  meetRelaxed?: boolean;
   tz?: number;                 // client tz offset minutes (Night Owl badge etc.)
   friendUids?: Set<string>;    // hydrated on hello — for presence broadcasts
 }
