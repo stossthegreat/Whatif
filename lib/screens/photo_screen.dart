@@ -7,6 +7,7 @@ import '../state/session.dart';
 import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
 import '../widgets/glass.dart';
+import 'crop_screen.dart';
 import 'onboarding_shell.dart';
 
 /// Profile photo — genuinely optional. The identity orb is a real fallback,
@@ -27,11 +28,15 @@ class _PhotoScreenState extends State<PhotoScreen> {
     if (_uploading) return;
     Buzz.tick();
     try {
-      // full-res pick — the compression ladder handles sizing
+      // full-res pick — the cropper frames it, the ladder handles sizing
       final x = await ImagePicker().pickImage(source: ImageSource.gallery);
       if (x == null || !mounted) return;
+      // your photo lives in a circle everywhere — let them put their face
+      // in the middle of it instead of hoping the centre crop was kind
+      final framed = await CropScreen.push(context, x);
+      if (framed == null || !mounted) return;
       setState(() => _uploading = true);
-      final id = await uploadPickedImage(x, kind: 'avatar');
+      final id = await uploadFramedAvatar(framed);
       if (!mounted) return;
       setState(() {
         _uploading = false;

@@ -9,6 +9,7 @@ import '../state/session.dart';
 import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
 import '../widgets/glass.dart';
+import 'crop_screen.dart';
 
 /// Edit your identity — photo, bio, where you are, languages, what you're
 /// looking for, what you're into. Saves to the server (setProfile) and
@@ -106,8 +107,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       // full-res pick — the compression ladder owns sizing (any photo fits)
       final x = await ImagePicker().pickImage(source: ImageSource.gallery);
       if (x == null || !mounted) return;
+      // frame it in the circle it will actually live in
+      final framed = await CropScreen.push(context, x);
+      if (framed == null || !mounted) return;
       setState(() => _uploading = true);
-      final id = await uploadPickedImage(x, kind: 'avatar');
+      final id = await uploadFramedAvatar(framed);
       if (!mounted) return;
       setState(() {
         _uploading = false;
@@ -232,7 +236,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     children: [
                       Expanded(child: _field('CITY', _city, hint: 'London')),
                       const SizedBox(width: 10),
-                      Expanded(child: _field('COUNTRY', _country, hint: 'UK')),
+                      // two-letter, because that's what turns into a flag
+                      Expanded(child: _field('COUNTRY', _country, hint: 'GB')),
                     ],
                   ),
                   _field('PRONOUNS (OPTIONAL)', _pronouns, hint: 'they/them'),
