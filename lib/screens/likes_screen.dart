@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../net/network_client.dart';
+import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/person_card.dart';
+import 'chat_screen.dart';
 import 'plus_screen.dart';
 
 /// Who wants to meet you again — everyone who said yes to you and is still
@@ -133,27 +135,47 @@ class _LikesScreenState extends State<LikesScreen> {
       itemCount: _people.length,
       itemBuilder: (context, i) {
         final p = _people[i];
-        return PersonCard(
-          name: p.name,
-          hue: p.hue,
-          thumbId: p.thumbId,
-          title: p.title,
-          country: p.country,
-          age: p.age,
-          online: p.online,
-          onTap: () {
-            Buzz.tick();
-            NetworkClient.instance.friendRequest(p.uid);
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              behavior: SnackBarBehavior.floating,
-              backgroundColor: C.char2,
-              content: Text('Asked @${p.name} to be friends',
-                  style: T.body.copyWith(color: Colors.white)),
-            ));
+        return AnimatedBuilder(
+          animation: SocialState.instance,
+          builder: (context, _) {
+            final s = SocialState.instance;
+            final friend = s.isFriend(p.uid);
+            return PersonCard(
+              name: p.name,
+              hue: p.hue,
+              thumbId: p.thumbId,
+              title: p.title,
+              country: p.country,
+              age: p.age,
+              online: p.online,
+              isFriend: friend,
+              requested: s.requested(p.uid),
+              onHi: friend ? null : () => _add(p),
+              onMessage: friend
+                  ? () => ChatScreen.push(context,
+                      uid: p.uid, name: p.name, hue: p.hue)
+                  : null,
+              onTap: friend
+                  ? () => ChatScreen.push(context,
+                      uid: p.uid, name: p.name, hue: p.hue)
+                  : () => _add(p),
+            );
           },
         );
       },
     );
+  }
+
+  void _add(_Liker p) {
+    Buzz.commit();
+    NetworkClient.instance.friendRequest(p.uid);
+    SocialState.instance.noteRequested(p.uid);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: C.char2,
+      content: Text('Asked @${p.name} to be friends',
+          style: T.body.copyWith(color: Colors.white)),
+    ));
   }
 
   /// The hook: real faces, really blurred. Nothing fake behind the glass.

@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../net/network_client.dart';
+import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
 import '../widgets/glass.dart';
 import '../widgets/person_card.dart';
+import 'chat_screen.dart';
 
 /// EXPLORE — who's on right now, best matches first.
 ///
@@ -132,98 +134,52 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 },
                 child: _people.isEmpty
                     ? _empty(context)
-                    : LayoutBuilder(
-                        builder: (context, box) {
-                          // staggered editorial columns — the right lane runs
-                          // 26px lower, so the wall reads like a poster board,
-                          // not a uniform grid. Capped at 40 thumbnails, so
-                          // two plain Columns beat grid virtualization.
-                          final fullW = box.maxWidth - r.gutter * 2;
-                          final colW = (fullW - 12) / 2;
-                          final cardH = colW / 0.62;
-                          Widget card(int i) {
-                            final p = _people[i];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: TweenAnimationBuilder<double>(
-                                tween: Tween(begin: 0, end: 1),
-                                duration: Duration(milliseconds: 380 + (i % 8) * 45),
-                                curve: Curves.easeOutCubic,
-                                builder: (context, v, child) => Opacity(
-                                  opacity: v,
-                                  child: Transform.translate(
-                                      offset: Offset(0, 18 * (1 - v)), child: child),
+                    : AnimatedBuilder(
+                        // the card buttons read the friend graph, so they have
+                        // to redraw the moment an add lands — otherwise "Add"
+                        // sits there after you've already tapped it
+                        animation: SocialState.instance,
+                        builder: (context, _) => LayoutBuilder(
+                          builder: (context, box) {
+                            // one even grid, both lanes level and every card
+                            // the same height. The old staggered columns
+                            // offset one lane by 26px, which read as a
+                            // mistake rather than as an editorial choice.
+                            final fullW = box.maxWidth - r.gutter * 2;
+                            final colW = (fullW - 12) / 2;
+                            final cardH = colW / 0.70;
+                            // person[0] is the server's best match for YOU —
+                            // it gets the full-width billboard; the wall
+                            // starts from person[1]
+                            final rest = _people.skip(1).toList();
+                            return ListView(
+                              padding: EdgeInsets.fromLTRB(r.gutter, 2, r.gutter, 24),
+                              physics: const AlwaysScrollableScrollPhysics(
+                                  parent: BouncingScrollPhysics()),
+                              children: [
+                                SizedBox(
+                                  height: fullW * 0.78,
+                                  child: _card(_people.first, hero: true),
                                 ),
-                                child: SizedBox(
-                                  height: cardH,
-                                  child: PersonCard(
-                                    name: p.name,
-                                    hue: p.hue,
-                                    thumbId: p.thumbId,
-                                    title: p.title,
-                                    shared: p.shared,
-                                    busy: p.busy,
-                                    online: p.online,
-                                    country: p.country,
-                                    age: p.age,
-                                    onHi: () => _open(p),
-                                    onTap: () => _open(p),
+                                const SizedBox(height: 12),
+                                for (var row = 0; row * 2 < rest.length; row++)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: SizedBox(
+                                      height: cardH,
+                                      child: Row(
+                                        children: [
+                                          Expanded(child: _fadeIn(row * 2, rest)),
+                                          const SizedBox(width: 12),
+                                          Expanded(child: _fadeIn(row * 2 + 1, rest)),
+                                        ],
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
+                              ],
                             );
-                          }
-                          // person[0] is the server's best match for YOU —
-                          // it gets the full-width billboard; the poster
-                          // board starts from person[1]
-                          final top = _people.first;
-                          return ListView(
-                            padding: EdgeInsets.fromLTRB(r.gutter, 2, r.gutter, 24),
-                            physics: const AlwaysScrollableScrollPhysics(
-                                parent: BouncingScrollPhysics()),
-                            children: [
-                              SizedBox(
-                                height: fullW * 0.72,
-                                child: PersonCard(
-                                  name: top.name,
-                                  hue: top.hue,
-                                  thumbId: top.thumbId,
-                                  title: top.title,
-                                  shared: top.shared,
-                                  busy: top.busy,
-                                  online: top.online,
-                                  country: top.country,
-                                  age: top.age,
-                                  hero: true,
-                                  onHi: () => _open(top),
-                                  onTap: () => _open(top),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      children: [
-                                        for (var i = 1; i < _people.length; i += 2) card(i),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      children: [
-                                        const SizedBox(height: 26),
-                                        for (var i = 2; i < _people.length; i += 2) card(i),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          );
-                        },
+                          },
+                        ),
                       ),
               ),
             ),
@@ -231,6 +187,67 @@ class _ExploreScreenState extends State<ExploreScreen> {
         ),
       ),
     );
+  }
+
+  /// An odd tail leaves one empty half — a gap, never a stretched card.
+  Widget _fadeIn(int i, List<_Person> list) {
+    if (i >= list.length) return const SizedBox.shrink();
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 380 + (i % 8) * 45),
+      curve: Curves.easeOutCubic,
+      builder: (context, v, child) => Opacity(
+        opacity: v,
+        child: Transform.translate(offset: Offset(0, 18 * (1 - v)), child: child),
+      ),
+      child: _card(list[i]),
+    );
+  }
+
+  /// The card's own state comes from the friend graph, and so does what its
+  /// button does — they're read in the same breath so a button can never
+  /// promise something the server would refuse.
+  Widget _card(_Person p, {bool hero = false}) {
+    final s = SocialState.instance;
+    final friend = s.isFriend(p.uid);
+    final asked = s.requested(p.uid);
+    return PersonCard(
+      name: p.name,
+      hue: p.hue,
+      thumbId: p.thumbId,
+      title: p.title,
+      shared: p.shared,
+      busy: p.busy,
+      online: p.online,
+      country: p.country,
+      age: p.age,
+      hero: hero,
+      isFriend: friend,
+      requested: asked,
+      onHi: friend ? () => _open(p) : () => _add(p),
+      onMessage: friend
+          ? () {
+              Buzz.tick();
+              ChatScreen.push(context, uid: p.uid, name: p.name, hue: p.hue);
+            }
+          : null,
+      onTap: () => _open(p),
+    );
+  }
+
+  /// Add straight from the card — no sheet, no second tap. The button flips
+  /// to "Requested" because SocialState records the outgoing request.
+  void _add(_Person p) {
+    Track.event('explore_add');
+    Buzz.commit();
+    NetworkClient.instance.friendRequest(p.uid);
+    SocialState.instance.noteRequested(p.uid);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: C.char2,
+      content: Text('Asked @${p.name} to be friends',
+          style: T.body.copyWith(color: Colors.white)),
+    ));
   }
 
   /// Never a dead end — the empty state pushes straight back into the loop.
@@ -402,6 +419,7 @@ class _MeetSheetState extends State<_MeetSheet> {
                         Track.event('explore_add');
                         Buzz.commit();
                         NetworkClient.instance.friendRequest(p.uid);
+                        SocialState.instance.noteRequested(p.uid);
                         setState(() => _sent = true);
                       },
               )

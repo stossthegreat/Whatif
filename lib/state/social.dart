@@ -172,6 +172,7 @@ class SocialState extends ChangeNotifier {
           ..sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0));
         reqsIn = _list(m['reqsIn']).map(FriendInfo.fromMap).toList();
         reqsOut = _list(m['reqsOut']).map(FriendInfo.fromMap).toList();
+        _sentOut.clear();
         recent = _list(m['recent']).map(RecentMeet.fromMap).toList();
         notifyListeners();
       case 'friendOnline':
@@ -286,5 +287,17 @@ class SocialState extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool requested(String uid) => reqsOut.any((r) => r.uid == uid);
+  /// Outgoing requests we've fired but not yet seen confirmed. The next
+  /// snapshot is the truth and clears this — so a request the server refused
+  /// (blocked, gone) stops claiming to be pending instead of lying forever.
+  final Set<String> _sentOut = {};
+
+  void noteRequested(String uid) {
+    if (_sentOut.add(uid)) notifyListeners();
+  }
+
+  bool requested(String uid) =>
+      _sentOut.contains(uid) || reqsOut.any((r) => r.uid == uid);
+
+  bool isFriend(String uid) => friends.any((f) => f.uid == uid);
 }

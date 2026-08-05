@@ -51,6 +51,37 @@ Future<int?> uploadPickedImage(XFile x, {required String kind}) async {
   return id;
 }
 
+/// Upload an avatar the user has already framed in the cropper. The bytes
+/// are a square PNG captured from the screen, so there is nothing to
+/// re-crop — just compress to JPEG and register the thumbnail.
+Future<int?> uploadFramedAvatar(Uint8List framed) async {
+  try {
+    final full = await FlutterImageCompress.compressWithList(
+      framed, minWidth: 1024, minHeight: 1024, quality: 88,
+      format: CompressFormat.jpeg,
+    );
+    final id = await Api.uploadMedia(full.isEmpty ? framed : full, kind: 'avatar');
+    if (id == null) return null;
+    unawaited(_uploadFramedThumb(framed));
+    return id;
+  } catch (_) {
+    // last resort: ship the raw capture and let the server's honest error
+    // speak if it's too big
+    return Api.uploadMedia(framed, kind: 'avatar');
+  }
+}
+
+Future<void> _uploadFramedThumb(Uint8List framed) async {
+  try {
+    final thumb = await FlutterImageCompress.compressWithList(
+      framed, minWidth: 256, minHeight: 256, quality: 72,
+      format: CompressFormat.jpeg,
+    );
+    if (thumb.isEmpty) return;
+    await Api.uploadMedia(thumb, kind: 'thumb');
+  } catch (_) {/* the full avatar still works — thumbs are an optimisation */}
+}
+
 Future<void> _uploadThumb(XFile x) async {
   try {
     final thumb = await FlutterImageCompress.compressWithFile(
