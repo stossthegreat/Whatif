@@ -214,6 +214,11 @@ class NetworkClient {
   void setTier(String target, int tier) => send({'t': 'setTier', 'target': target, 'tier': tier});
   void pinChat(String target, bool on) => send({'t': 'pinChat', 'target': target, 'on': on});
   void friendsSnapshot() => send({'t': 'friends'});
+
+  /// Pull a friend into the room you're hosting. The server rings them if
+  /// they're connected and answers 'partyRingSent' either way, so we know
+  /// whether to fall back to a DM'd code.
+  void partyRing(String uid) => send({'t': 'partyRing', 'to': uid});
   void traitVote(String target, String trait) =>
       send({'t': 'traitVote', 'target': target, 'trait': trait});
 

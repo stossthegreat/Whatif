@@ -22,6 +22,7 @@ import 'state/social.dart';
 import 'theme/tokens.dart';
 import 'widgets/glass.dart';
 import 'widgets/incoming_call_overlay.dart';
+import 'widgets/room_knock_overlay.dart';
 import 'widgets/match_overlay.dart';
 import 'widgets/rating_overlay.dart';
 import 'screens/chat_screen.dart';
@@ -655,6 +656,21 @@ class _RootState extends State<_Root> {
                   _pendingCallVideo = call.video;
                   NetworkClient.instance.callAccept(call.callId);
                   SocialState.instance.clearIncomingCall();
+                },
+              );
+            }
+            // a friend holding a room open for you — same weight as a call,
+            // and equally never over a live room you're already in
+            final k = s.knock;
+            if (k != null && _step != _Step.live) {
+              return RoomKnockOverlay(
+                key: ValueKey('knock${k.code}${k.uid}'),
+                knock: k,
+                onJoin: () {
+                  SocialState.instance.clearKnock();
+                  _partyInviteUid = null;
+                  _partyCode = k.code;
+                  _to(_Step.party);
                 },
               );
             }

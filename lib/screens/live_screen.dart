@@ -1119,6 +1119,14 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                     Text('in this room', style: T.eyebrow.copyWith(fontSize: 12)),
                   ]),
                   const SizedBox(height: 14),
+                  // the room can empty out while this sheet is open — say so
+                  // rather than showing a blank list under a friendship pitch
+                  if (cell.people.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Text('nobody here yet — hang tight',
+                          style: T.body.copyWith(color: C.tx2, fontSize: 14.5)),
+                    ),
                   for (final p in cell.people)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
@@ -1736,46 +1744,52 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 14),
           ],
-          if (!_isCall) ...[
-            // WhatsApp-style people button — add whoever you're with as a
-            // friend right here, without waiting for the rating prompt.
+          // add / save / block are all about the person you're WITH. While
+          // you're alone waiting, they have no one to act on — showing them
+          // meant tapping 'add' opened an empty sheet that read as "you have
+          // no friends". Nobody here, no buttons.
+          if (cell.people.isNotEmpty) ...[
+            if (!_isCall) ...[
+              // WhatsApp-style people button — add whoever you're with as a
+              // friend right here, without waiting for the rating prompt.
+              _RailAction(
+                icon: Icons.person_add_alt_1_rounded,
+                iconColor: Colors.white,
+                label: 'add',
+                onTap: _openAddPeople,
+              ),
+              const SizedBox(height: 14),
+              _RailAction(
+                icon: Icons.star_rounded,
+                iconColor: const Color(0xFFFFD54A),
+                label: 'save',
+                onTap: () {
+                  if (cell.people.length == 1) {
+                    _save(cell.people.first);
+                  } else {
+                    _openAddPeople();
+                  }
+                },
+              ),
+              const SizedBox(height: 14),
+            ],
+            // block is deliberately the LOUDEST thing on the rail — safety is
+            // never buried in a menu
             _RailAction(
-              icon: Icons.person_add_alt_1_rounded,
+              icon: Icons.block_rounded,
               iconColor: Colors.white,
-              label: 'add',
-              onTap: _openAddPeople,
-            ),
-            const SizedBox(height: 14),
-            _RailAction(
-              icon: Icons.star_rounded,
-              iconColor: const Color(0xFFFFD54A),
-              label: 'save',
+              label: 'block',
+              size: 48,
+              bg: C.live,
               onTap: () {
                 if (cell.people.length == 1) {
-                  _save(cell.people.first);
-                } else if (cell.people.isNotEmpty) {
-                  _openAddPeople();
+                  _openReport(cell.people.first);
+                } else {
+                  _pickPersonSheet();
                 }
               },
             ),
-            const SizedBox(height: 14),
           ],
-          // block is deliberately the LOUDEST thing on the rail — safety is
-          // never buried in a menu
-          _RailAction(
-            icon: Icons.block_rounded,
-            iconColor: Colors.white,
-            label: 'block',
-            size: 48,
-            bg: C.live,
-            onTap: () {
-              if (cell.people.length == 1) {
-                _openReport(cell.people.first);
-              } else if (cell.people.isNotEmpty) {
-                _pickPersonSheet();
-              }
-            },
-          ),
         ],
       ),
     );

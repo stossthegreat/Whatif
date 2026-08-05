@@ -1059,6 +1059,40 @@ wss.on('connection', (ws, req) => {
         broadcastParty(p);
         break;
       }
+      // Ring a friend straight into the room you're hosting. This is the ONE
+      // way to pull someone in: they get a live knock and one Join button,
+      // instead of a DM'd code they have to notice, open and type. If they
+      // aren't connected we say so and the client falls back to the DM, so an
+      // invite is never silently lost.
+      case 'partyRing': {
+        const to = typeof m.to === 'string' ? m.to : '';
+        if (!to || to === user.uid) break;
+        const heldCode = partyByUser.get(id);
+        const p = heldCode ? parties.get(heldCode) : undefined;
+        if (!p || p.hostId !== id) break; // only the host rings
+        if (store.isBlocked(user.uid, to)) break;
+        if (p.members.length >= 8) {
+          send(user, { t: 'partyError', reason: 'That room is full' });
+          break;
+        }
+        void (async () => {
+          if ((await dbs.friendState(user.uid, to)) !== 'friends') {
+            return send(user, { t: 'err', code: 'notFriends' });
+          }
+          // re-read: the await gave the room time to change under us
+          const still = parties.get(p.code);
+          if (!still || still.hostId !== id) return;
+          const target = store.userByUid(to);
+          if (!target) return send(user, { t: 'partyRingSent', uid: to, live: false });
+          send(target, {
+            t: 'partyRing',
+            code: still.code,
+            from: { uid: user.uid, name: user.name, hue: user.hue },
+          });
+          send(user, { t: 'partyRingSent', uid: to, live: true });
+        })();
+        break;
+      }
       case 'leaveParty': leaveParty(id); break;
       case 'pickGame': {
         const cell = user.cellId ? store.cells.get(user.cellId) : undefined;

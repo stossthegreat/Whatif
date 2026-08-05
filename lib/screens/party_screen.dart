@@ -46,7 +46,9 @@ class _PartyScreenState extends State<PartyScreen> {
   String? _code;
   String? _hostId;
   bool _invited = false;
-  final Set<String> _invitedUids = {}; // friends already sent this room's code
+  final Set<String> _invitedUids = {}; // friends we've tapped this session
+  final Set<String> _rungUids = {}; // their screen lit up — they're deciding
+  final Set<String> _dmdUids = {}; // they were offline; the code is in their DMs
   List<_PartyMember> _members = const [];
   String? _error;
   bool _starting = false;
@@ -101,10 +103,13 @@ class _PartyScreenState extends State<PartyScreen> {
       case 'party':
         // chat-invite flow: the moment we have a code, DM it to the friend
         final newCode = m['code'] as String?;
+        // arrived here from a chat's "invite to room" — same single mechanism
+        // as tapping the rail, so there's one way in from everywhere
         final invitee = widget.inviteUid;
         if (invitee != null && newCode != null && newCode != _code && !_invited) {
           _invited = true;
-          NetworkClient.instance.dm(invitee, 'invite', newCode);
+          NetworkClient.instance.partyRing(invitee);
+          _invitedUids.add(invitee);
         }
         setState(() {
           _error = null;
@@ -122,6 +127,19 @@ class _PartyScreenState extends State<PartyScreen> {
           _guestCode = _isGuest ? _code : null;
         });
         Buzz.tick();
+      // the ring landed — or it didn't, because they aren't connected. An
+      // invite is never allowed to just evaporate, so the offline case falls
+      // straight back to the DM'd code.
+      case 'partyRingSent':
+        final ringed = m['uid'] as String?;
+        final code = _code;
+        if (ringed == null) return;
+        if (m['live'] == true) {
+          setState(() => _rungUids.add(ringed));
+        } else {
+          if (code != null) NetworkClient.instance.dm(ringed, 'invite', code);
+          setState(() => _dmdUids.add(ringed));
+        }
       case 'partyError':
         setState(() => _error = (m['reason'] as String?) ?? 'That didn’t work');
         Buzz.impact();
@@ -130,9 +148,20 @@ class _PartyScreenState extends State<PartyScreen> {
     }
   }
 
-  /// One friend in the invite rail. Tap → the room code lands in their DMs as
-  /// an invite bubble (one tap to join on their side). Rooms hold 8, so up
-  /// to 7 invites.
+  /// One friend in the invite rail. Tap → if they're on, their screen lights
+  /// up with a Join button right now; if they're not, the code lands in their
+  /// DMs so the invite still reaches them. Either way it's one tap here and
+  /// one tap there. Rooms hold 8, so up to 7 invites.
+  /// Say exactly where the invite got to. 'sent ✓' for someone whose screen
+  /// is lit up right now would be a lie in the other direction.
+  String _chipLabel(FriendInfo f) {
+    if (_members.any((m) => m.uid == f.uid)) return 'here ✓';
+    if (_rungUids.contains(f.uid)) return 'ringing…';
+    if (_dmdUids.contains(f.uid)) return 'sent ✓';
+    if (_invitedUids.contains(f.uid)) return '…';
+    return '@${f.name}';
+  }
+
   Widget _inviteChip(FriendInfo f) {
     final sent = _invitedUids.contains(f.uid);
     return Press(
@@ -144,7 +173,7 @@ class _PartyScreenState extends State<PartyScreen> {
           return;
         }
         Buzz.commit();
-        NetworkClient.instance.dm(f.uid, 'invite', _code!);
+        NetworkClient.instance.partyRing(f.uid);
         setState(() {
           _error = null;
           _invitedUids.add(f.uid);
@@ -176,7 +205,7 @@ class _PartyScreenState extends State<PartyScreen> {
             ),
             const SizedBox(height: 5),
             Text(
-              sent ? 'sent ✓' : '@${f.name}',
+              _chipLabel(f),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: T.tiny.copyWith(
@@ -357,24 +386,36 @@ class _PartyScreenState extends State<PartyScreen> {
                       AnimatedBuilder(
                         animation: SocialState.instance,
                         builder: (context, _) {
-                          final friends = SocialState.instance.friends;
-                          if (friends.isEmpty) return const SizedBox.shrink();
+                          // people you can actually pull in RIGHT NOW come
+                          // first — a rail sorted by nothing made you hunt
+                          final friends = [...SocialState.instance.friends]
+                            ..sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0));
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const SizedBox(height: 22),
-                              Text('TAP A FRIEND TO INVITE · UP TO 3',
+                              Text(
+                                  friends.isEmpty
+                                      ? 'NOBODY TO INVITE YET'
+                                      : 'TAP A FRIEND TO PULL THEM IN',
                                   style: T.eyebrow.copyWith(color: C.tx3, fontSize: 10.5)),
                               const SizedBox(height: 10),
-                              SizedBox(
-                                height: 76,
-                                child: ListView(
-                                  scrollDirection: Axis.horizontal,
-                                  children: [
-                                    for (final f in friends) _inviteChip(f),
-                                  ],
+                              if (friends.isEmpty)
+                                Text(
+                                  'Add people in Explore or after a room — then '
+                                  'they land here, one tap away.',
+                                  style: T.tiny.copyWith(fontSize: 12, height: 1.4),
+                                )
+                              else
+                                SizedBox(
+                                  height: 76,
+                                  child: ListView(
+                                    scrollDirection: Axis.horizontal,
+                                    children: [
+                                      for (final f in friends) _inviteChip(f),
+                                    ],
+                                  ),
                                 ),
-                              ),
                             ],
                           );
                         },
