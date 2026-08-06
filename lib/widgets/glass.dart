@@ -136,6 +136,66 @@ class _PressState extends State<Press> with SingleTickerProviderStateMixin {
 /// The call-to-action. The primary key wears the signature gradient with a
 /// soft glow — one unmistakable button per screen. `quiet: true` keeps the
 /// old white key for the rare spot where the gradient would shout twice.
+/// One action, frosted.
+///
+/// The house action shape, shared by the Explore cards and the profiles so
+/// the two can't drift apart. Frosted glass by default — a saturated slab
+/// reads as an advert pasted onto the page, which is exactly how the old
+/// gradient buttons looked. Colour is spent on ONE thing: [live] means the
+/// action reaches someone who is on right now.
+class ActionPill extends StatelessWidget {
+  const ActionPill({
+    super.key,
+    required this.label,
+    this.icon,
+    this.onTap,
+    this.muted = false,
+    this.live = false,
+    this.height = 34,
+  });
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onTap;
+  final bool muted;
+  final bool live;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final on = onTap != null && !muted;
+    final fg = live && on ? Colors.black : (muted ? C.tx2 : Colors.white);
+    final body = Container(
+      height: height,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: live && on ? C.acid : const Color(0x33FFFFFF),
+        borderRadius: BorderRadius.circular(R.chip),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: height * 0.38, color: fg),
+            const SizedBox(width: 6),
+          ],
+          Flexible(
+            child: Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: T.body.copyWith(
+                    color: fg,
+                    fontSize: height * 0.37,
+                    fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+    if (!on) return Opacity(opacity: 0.75, child: body);
+    return Press(haptic: false, scale: 0.96, onTap: onTap, child: body);
+  }
+}
+
 class Cta extends StatelessWidget {
   const Cta({super.key, required this.label, this.onTap, this.height = 60, this.quiet = false});
   final String label;

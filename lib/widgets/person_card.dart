@@ -217,18 +217,18 @@ class PersonCard extends StatelessWidget {
   /// the room — and neither ever offers something the server would refuse.
   List<Widget> _actions() {
     final left = requested
-        ? const _Pill(label: 'Requested', muted: true)
+        ? const ActionPill(label: 'Requested', muted: true)
         : isFriend
-            ? _Pill(label: 'Message', icon: Icons.chat_bubble_rounded, onTap: onMessage)
-            : _Pill(label: 'Add', icon: Icons.person_add_alt_1_rounded, onTap: onAdd);
+            ? ActionPill(label: 'Message', icon: Icons.chat_bubble_rounded, onTap: onMessage)
+            : ActionPill(label: 'Add', icon: Icons.person_add_alt_1_rounded, onTap: onAdd);
 
     final right = busy
-        ? const _Pill(label: 'In a room', muted: true)
+        ? const ActionPill(label: 'In a room', muted: true)
         : _live
             // a video icon, because that is literally what this does — rings
             // them into a room, not sends a text
-            ? _Pill(label: 'Say hi', icon: Icons.videocam_rounded, live: true, onTap: onHi)
-            : const _Pill(label: 'Away', muted: true);
+            ? ActionPill(label: 'Say hi', icon: Icons.videocam_rounded, live: true, onTap: onHi)
+            : const ActionPill(label: 'Away', muted: true);
 
     return [
       Expanded(child: left),
@@ -330,55 +330,5 @@ class _StatusPill extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-/// One action. Frosted by default so it belongs to the photo; acid only when
-/// it's a live action that will genuinely reach someone.
-class _Pill extends StatelessWidget {
-  const _Pill({
-    required this.label,
-    this.icon,
-    this.onTap,
-    this.muted = false,
-    this.live = false,
-  });
-  final String label;
-  final IconData? icon;
-  final VoidCallback? onTap;
-  final bool muted;
-  final bool live;
-
-  @override
-  Widget build(BuildContext context) {
-    final on = onTap != null && !muted;
-    final fg = live && on ? Colors.black : (muted ? C.tx2 : Colors.white);
-    final body = Container(
-      height: 34,
-      alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        color: live && on ? C.acid : const Color(0x33FFFFFF),
-        borderRadius: BorderRadius.circular(R.chip),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 13, color: fg),
-            const SizedBox(width: 5),
-          ],
-          Flexible(
-            child: Text(label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: T.body.copyWith(
-                    color: fg, fontSize: 12.5, fontWeight: FontWeight.w800)),
-          ),
-        ],
-      ),
-    );
-    if (!on) return Opacity(opacity: 0.75, child: body);
-    return Press(haptic: false, scale: 0.96, onTap: onTap, child: body);
   }
 }

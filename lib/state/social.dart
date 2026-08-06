@@ -300,7 +300,10 @@ class SocialState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void request(String uid) => NetworkClient.instance.friendRequest(uid);
+  void request(String uid) {
+    NetworkClient.instance.friendRequest(uid);
+    noteRequested(uid); // every surface reading the graph flips at once
+  }
   void accept(String uid) => NetworkClient.instance.friendAccept(uid);
   void decline(String uid) => NetworkClient.instance.friendDecline(uid);
   void unfriend(String uid) {
