@@ -3,6 +3,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 import 'network_client.dart';
 
+/// One signaling frame, held until there's a peer connection to give it to.
+class _Signal {
+  _Signal(this.from, this.d, this.at);
+  final String from;
+  final Map<String, dynamic> d;
+  final DateTime at;
+}
+
 /// Direct phone-to-phone video for 1:1 rooms — the Omegle architecture. The
 /// server only relays signaling ({t:'rtc'}); media never touches anything we
 /// pay for. STUN-only on purpose: the ~15% of networks that can't connect
@@ -32,6 +40,17 @@ class P2PService {
   Timer? _deadline;
   final List<Map<String, dynamic>> _iceQueue = [];
   bool _remoteDescSet = false;
+
+  /// Signals that arrived before the peer connection existed.
+  ///
+  /// Both phones get the room frame at the same instant, but each then has to
+  /// release the Home camera and open a fresh capture — hundreds of
+  /// milliseconds, sometimes seconds on a cold lens or a permission prompt.
+  /// Whoever wins that race sends their offer into a peer that isn't built
+  /// yet. Dropping it (as this did) meant the answer never came, both sides
+  /// burned the 4s deadline and the room fell back to LiveKit — the exact
+  /// "sometimes you see them, sometimes you don't". Held here instead.
+  final List<_Signal> _pending = [];
 
   /// Set per-room by the caller: invoked ONCE if P2P can't (or stops) carrying
   /// the room — the fallback joins LiveKit exactly as before P2P existed.
@@ -104,13 +123,29 @@ class P2PService {
       for (final t in local.getTracks()) {
         await pc.addTrack(t, local);
       }
-      pc.onTrack = (e) {
+      pc.onTrack = (e) async {
         if (session != _session) return;
         if (e.streams.isNotEmpty) {
           remoteRenderer.srcObject = e.streams[0];
-          remoteReady = true;
-          _bump();
+        } else {
+          // some SDP paths deliver the track without a stream — wrap it
+          // ourselves rather than showing nothing
+          try {
+            final s = await rtc.createLocalMediaStream('remote');
+            await s.addTrack(e.track);
+            if (session != _session) return;
+            remoteRenderer.srcObject = s;
+          } catch (_) {
+            return;
+          }
         }
+        // We have somewhere to PUT their video — that's all this means.
+        // onTrack fires when the remote description is applied, which is
+        // before any media has actually flowed, so the fallback deadline has
+        // to keep running: cancelling it here would strand someone on a
+        // connection that never completes, with no LiveKit to catch them.
+        remoteReady = true;
+        _bump();
       };
       pc.onIceCandidate = (c) {
         if (session != _session || c.candidate == null) return;
@@ -128,6 +163,20 @@ class P2PService {
           _fail();
         }
       };
+      // onConnectionState is not reliably delivered on every iOS/webrtc
+      // combination. ICE reaching connected/completed means media has a path,
+      // which is the thing we actually care about — without this a working
+      // call could sit at active:false and get killed by its own deadline.
+      pc.onIceConnectionState = (s) {
+        if (session != _session) return;
+        if (s == rtc.RTCIceConnectionState.RTCIceConnectionStateConnected ||
+            s == rtc.RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+          attempting = false;
+          active = true;
+          _deadline?.cancel();
+          _bump();
+        }
+      };
 
       if (offerer) {
         final offer = await pc.createOffer({});
@@ -137,9 +186,13 @@ class P2PService {
             .rtcSignal(peerId, {'kind': 'offer', 'sdp': offer.sdp, 'type': offer.type});
       }
 
+      // anything that beat us here gets handled now, in arrival order
+      await _drainPending(session);
+      if (session != _session) return;
+
       // the patience window — direct or we go back to LiveKit
       _deadline?.cancel();
-      _deadline = Timer(const Duration(seconds: 4), () {
+      _deadline = Timer(const Duration(seconds: 6), () {
         if (session == _session && !active) _fail();
       });
     } catch (_) {
@@ -149,11 +202,44 @@ class P2PService {
 
   /// Incoming {t:'rtc'} signaling from the peer (routed by app.dart).
   Future<void> onSignal(String from, Map<String, dynamic> d) async {
-    final session = _session;
+    if (_pc == null) {
+      // _peerId is null until attempt() gets going, and the offer can beat
+      // even that — so hold anything plausible and let the drain decide.
+      _pending.add(_Signal(from, d, DateTime.now()));
+      if (_pending.length > 32) _pending.removeAt(0);
+      return;
+    }
+    if (from != _peerId) return;
+    await _handle(from, d, _session);
+  }
+
+  /// Replay what arrived early. Only this room's peer survives the filter, and
+  /// only recently — a signal from a room we've already left is not evidence
+  /// about the room we're in now.
+  Future<void> _drainPending(int session) async {
+    final peer = _peerId;
+    final now = DateTime.now();
+    final ready = peer == null
+        ? const <_Signal>[]
+        : _pending
+            .where((s) => s.from == peer && now.difference(s.at).inSeconds < 15)
+            .toList();
+    _pending.clear();
+    for (final s in ready) {
+      if (session != _session) return;
+      await _handle(s.from, s.d, session);
+    }
+  }
+
+  Future<void> _handle(String from, Map<String, dynamic> d, int session) async {
     final pc = _pc;
-    if (pc == null || from != _peerId) return;
+    if (pc == null || session != _session) return;
     try {
       switch (d['kind']) {
+        // they've given up on direct and moved to LiveKit — follow them there
+        // now rather than waiting out a deadline for a peer that's gone
+        case 'bail':
+          _fail();
         case 'offer':
           await pc.setRemoteDescription(
               rtc.RTCSessionDescription(d['sdp'] as String?, d['type'] as String?));
@@ -202,9 +288,20 @@ class P2PService {
 
   void _fail() {
     final cb = onFailed;
+    // Tell them we're going before we forget who they are. Otherwise the peer
+    // sits watching a connection that no longer has anyone on the other end
+    // until its own deadline expires — one side on LiveKit, one side on P2P,
+    // and neither seeing the other for six seconds.
+    final peer = _peerId;
+    final announce = !_failedFired && peer != null;
     _cleanup();
     if (!_failedFired) {
       _failedFired = true;
+      if (announce) {
+        try {
+          NetworkClient.instance.rtcSignal(peer!, {'kind': 'bail'});
+        } catch (_) {}
+      }
       cb?.call(); // → LiveKit, exactly as before P2P existed
     }
     _bump();

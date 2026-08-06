@@ -795,7 +795,15 @@ setInterval(() => {
 // ---- http + ws -------------------------------------------------------------
 const app = express();
 app.get('/', (_req, res) => res.json({ ok: true, service: 'rivlr', live: LIVE_BASELINE + store.onlineCount }));
-app.get('/health', (_req, res) => res.json({ ok: true }));
+// Booleans only — never a key, never a URL. Without this there is no way to
+// tell a "direct connection failed on this network" from a "there is no
+// fallback configured", and those need completely different fixes.
+app.get('/health', (_req, res) => res.json({
+  ok: true,
+  db: db.dbEnabled,
+  p2p: P2P_ENABLED,
+  livekit: LIVEKIT_URL.length > 0,
+}));
 // public legal pages — these URLs go in App Store Connect / Play Console
 app.get('/privacy', (_req, res) => res.type('html').send(legal.page('Privacy Policy', legal.privacy)));
 app.get('/terms', (_req, res) => res.type('html').send(legal.page('Terms of Service', legal.terms)));

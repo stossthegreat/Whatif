@@ -152,6 +152,13 @@ const ROOM_CODE_CHARS = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
 
 export async function roomCodeFor(uid: string): Promise<string | null> {
   if (!dbEnabled) return null;
+  // A brand-new account can press Groups before the hello upsert has landed.
+  // Without this the UPDATE below matched no row, every retry failed, and the
+  // caller fell back to a throwaway code — one the DB doesn't own, so the
+  // friend who typed it got "that code doesn't exist", and the host's
+  // "permanent" code changed on the next reconnect. Every column but uid has
+  // a default, so claiming the row here is safe and idempotent.
+  await run('INSERT INTO users (uid) VALUES ($1) ON CONFLICT (uid) DO NOTHING', [uid]);
   const cur = await run('SELECT room_code FROM users WHERE uid=$1', [uid]);
   const have = cur?.rows?.[0]?.room_code as string | undefined;
   if (have) return have;

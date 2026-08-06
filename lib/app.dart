@@ -409,6 +409,22 @@ class _RootState extends State<_Root> {
       final peerId = cell.people.first.id!;
       final myId = NetworkClient.instance.myId!;
       P2PService.instance.onFailed = () {
+        // Direct didn't work — some networks simply won't allow it. LiveKit
+        // carries the room instead. If LiveKit isn't configured there is
+        // nothing left to fall back TO, and a silent black rectangle is the
+        // worst possible way to say so.
+        if (url.isEmpty) {
+          final ctx = RivlrApp.navKey.currentContext;
+          if (ctx != null) {
+            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: C.char2,
+              content: Text('⚠️ couldn’t connect video on this network',
+                  style: T.body.copyWith(color: Colors.white)),
+            ));
+          }
+          return;
+        }
         RtcService.instance.join(url, token); // the room continues on LiveKit
       };
       P2PService.instance.attempt(

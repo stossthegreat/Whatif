@@ -1541,9 +1541,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       saved: AppSession.instance.isSaved(p.sparkKey),
       // P2P carries the (single) remote face when active; LiveKit otherwise.
       // Remote P2P is NEVER mirrored (see the doctrine in video_view.dart).
+      // If we HAVE their picture, show their picture. Gating this on the
+      // connection-state flag alone meant a P2P room with the remote track
+      // already flowing could render the empty LiveKit view instead — black
+      // screen, working call.
       videoChild: !widget.live
           ? null
-          : P2PService.instance.active
+          : P2PService.instance.remoteReady || P2PService.instance.active
               ? P2PVideoView(renderer: P2PService.instance.remoteRenderer)
               : VideoView(track: RtcService.instance.trackFor(p.id)),
       connecting: widget.live &&
