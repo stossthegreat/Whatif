@@ -184,17 +184,27 @@ export async function ownerOfCode(code: string): Promise<string | null> {
 }
 
 export function upsertUser(u: {
-  uid: string; name: string; hue: number; gender?: string; meet?: string; vibes?: string[];
+  uid: string; name: string; hue: number; gender?: string; meet?: string;
+  vibes?: string[]; age?: number | null;
 }): void {
+  // age travels on every hello but used to be dropped here — it was written
+  // ONLY by Edit Profile. So the app showed your real age (derived from your
+  // date of birth) while every Explore card showed whatever stale number the
+  // database happened to be holding. COALESCE so a client that doesn't send
+  // one can never wipe a good value.
+  const age = typeof u.age === 'number' && u.age >= 18 && u.age <= 99
+      ? Math.trunc(u.age) : null;
   void run(
-    `INSERT INTO users (uid, name, hue, gender, meet, vibes, last_seen)
-     VALUES ($1,$2,$3,$4,$5,$6, now())
+    `INSERT INTO users (uid, name, hue, gender, meet, vibes, age, last_seen)
+     VALUES ($1,$2,$3,$4,$5,$6,$7, now())
      ON CONFLICT (uid) DO UPDATE SET
        name = EXCLUDED.name, hue = EXCLUDED.hue,
        gender = COALESCE(EXCLUDED.gender, users.gender),
        meet = COALESCE(EXCLUDED.meet, users.meet),
+       age = COALESCE(EXCLUDED.age, users.age),
        vibes = EXCLUDED.vibes, last_seen = now()`,
-    [u.uid, u.name, u.hue, u.gender ?? null, u.meet ?? null, JSON.stringify(u.vibes ?? [])],
+    [u.uid, u.name, u.hue, u.gender ?? null, u.meet ?? null,
+     JSON.stringify(u.vibes ?? []), age],
   );
 }
 

@@ -150,6 +150,7 @@ class _LikesScreenState extends State<LikesScreen> {
               online: p.online,
               isFriend: friend,
               requested: s.requested(p.uid),
+              onAdd: () => _add(p),
               onHi: friend ? null : () => _add(p),
               onMessage: friend
                   ? () => ChatScreen.push(context,

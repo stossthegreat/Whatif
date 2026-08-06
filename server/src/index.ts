@@ -984,7 +984,8 @@ wss.on('connection', (ws, req) => {
         // don't let a lapsed subscription clobber the stored filter — if they
         // resubscribe, the preference they paid for is still there
         db.upsertUser({ uid: user.uid, name: user.name, hue: user.hue,
-          gender: user.gender, meet: acct?.meet ?? user.meet, vibes });
+          gender: user.gender, meet: acct?.meet ?? user.meet, vibes,
+          age: typeof m.age === 'number' ? m.age : null });
         if (appleLink && db.dbEnabled) dbs.linkApple(user.uid, appleLink);
         void db.loadSocial(user.uid).then((d) => {
           if (!d) return;

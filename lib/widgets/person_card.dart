@@ -34,13 +34,13 @@ const _emoji = TextStyle(
   decoration: TextDecoration.none,
 );
 
-/// One person in the Explore grid — a full-bleed poster of a face with the
-/// two actions that matter underneath it.
+/// One person: their face, their name, and the two things you can do about it.
 ///
-/// The photo fills the card as a plain rectangle. (It used to be drawn with
-/// the circular Avatar widget stretched to fit, which left visible oval
-/// edges and dark corners — the single biggest reason the wall looked
-/// unfinished.)
+/// The actions are two equal frosted pills sitting ON the photo — the shape
+/// every good social app has converged on, because a heavy coloured slab
+/// reads as an advert and frosted glass reads as part of the picture. Colour
+/// is spent on exactly one thing: acid means they are live RIGHT NOW and the
+/// button will actually reach them.
 class PersonCard extends StatelessWidget {
   const PersonCard({
     super.key,
@@ -54,6 +54,7 @@ class PersonCard extends StatelessWidget {
     this.age,
     this.onHi,
     this.onMessage,
+    this.onAdd,
     this.hero = false,
     this.online = true,
     this.isFriend = false,
@@ -70,25 +71,27 @@ class PersonCard extends StatelessWidget {
   final String? country;
   final int? age;
 
-  /// The primary action. What it MEANS depends on the state the call site
-  /// passed in: for a stranger it adds them, for a friend who's free it
-  /// rings them. The call site branches on the same booleans, so the label
-  /// and the effect can never drift apart.
+  /// The live action — ring them into a room. Only reaches someone who is
+  /// online and not already busy.
   final VoidCallback? onHi;
 
-  /// Only offered once you're actually friends — the server refuses DMs
-  /// between strangers, so showing it earlier would be a button that lies.
+  /// Open the thread. Offered only to friends: the server refuses DMs between
+  /// strangers, so anywhere else this would be a button that lies.
   final VoidCallback? onMessage;
+
+  /// Send the friend request.
+  final VoidCallback? onAdd;
 
   /// The full-width billboard treatment for the #1 ranked person.
   final bool hero;
 
-  /// Away people can't be rung; the action becomes "Add".
   final bool online;
   final bool isFriend;
   final bool requested;
 
   final VoidCallback onTap;
+
+  bool get _live => online && !busy;
 
   Color get _tint {
     final safe = ((hue % 360) + 360) % 360;
@@ -100,6 +103,7 @@ class PersonCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final flag = flagEmoji(country);
     final id = thumbId;
+    final chip = shared.isNotEmpty ? shared.first : (title ?? '');
     return Press(
       haptic: false,
       scale: 0.98,
@@ -109,15 +113,13 @@ class PersonCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: C.char2,
           borderRadius: BorderRadius.circular(R.card),
-          border: Border.all(color: C.hair2),
           boxShadow: [
-            BoxShadow(color: _tint.withOpacity(0.22), blurRadius: 18, spreadRadius: -10),
+            BoxShadow(color: _tint.withOpacity(0.18), blurRadius: 18, spreadRadius: -12),
           ],
         ),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // ---- the face: a plain rectangular fill, no circles involved
             if (id != null && Api.ready)
               Image.network(
                 Api.mediaUrl(id),
@@ -129,26 +131,25 @@ class PersonCard extends StatelessWidget {
             else
               _Placeholder(name: name, tint: _tint),
 
-            // ---- one legibility wash, bottom-weighted
+            // one legibility wash, weighted to where the text actually is
             const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Color(0x40000000), Color(0x00000000), Color(0xF2000000)],
-                  stops: [0.0, 0.42, 1.0],
+                  colors: [Color(0x33000000), Color(0x00000000), Color(0xD9000000)],
+                  stops: [0.0, 0.38, 1.0],
                 ),
               ),
             ),
             if (busy)
               const Positioned.fill(
-                child: DecoratedBox(decoration: BoxDecoration(color: Color(0x73000000))),
+                child: DecoratedBox(decoration: BoxDecoration(color: Color(0x66000000))),
               ),
 
-            // ---- status, small and quiet
             Positioned(
-              left: 10,
-              top: 10,
+              left: 9,
+              top: 9,
               child: Row(
                 children: [
                   _StatusPill(online: online, busy: busy),
@@ -172,66 +173,37 @@ class PersonCard extends StatelessWidget {
               ),
             ),
 
-            // ---- name, facts, actions
             Positioned(
-              left: 12,
-              right: 12,
-              bottom: 12,
+              left: 10,
+              right: 10,
+              bottom: 10,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // name, age and flag read as ONE line — "menace89, 18 🇬🇧"
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
                       Flexible(
-                        child: Text(name,
+                        child: Text(age == null ? name : '$name, $age',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: T.display(hero ? 26 : 19)),
+                            style: T.display(hero ? 25 : 18)),
                       ),
-                      if (age != null) ...[
-                        const SizedBox(width: 6),
-                        Text('$age',
-                            style: T.body.copyWith(
-                                color: Colors.white,
-                                fontSize: hero ? 17 : 14,
-                                fontWeight: FontWeight.w700)),
-                      ],
                       if (flag.isNotEmpty) ...[
                         const SizedBox(width: 6),
-                        Text(flag, style: _emoji.copyWith(fontSize: hero ? 15 : 13)),
+                        Text(flag, style: _emoji.copyWith(fontSize: hero ? 15 : 12.5)),
                       ],
                     ],
                   ),
-                  if (shared.isNotEmpty) ...[
-                    const SizedBox(height: 5),
-                    Text('both like ${shared.first}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: T.tiny.copyWith(
-                            color: C.acid, fontSize: 11.5, fontWeight: FontWeight.w800)),
-                  ] else if (title != null && title!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(title!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: T.tiny.copyWith(color: C.tx2, fontSize: 11.5)),
+                  if (chip.isNotEmpty) ...[
+                    const SizedBox(height: 7),
+                    _Chip(label: chip, accent: shared.isNotEmpty),
                   ],
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(child: _primary()),
-                      if (isFriend && onMessage != null) ...[
-                        const SizedBox(width: 8),
-                        _IconAction(
-                          icon: Icons.chat_bubble_rounded,
-                          onTap: onMessage!,
-                        ),
-                      ],
-                    ],
-                  ),
+                  const SizedBox(height: 9),
+                  Row(children: _actions()),
                 ],
               ),
             ),
@@ -241,26 +213,33 @@ class PersonCard extends StatelessWidget {
     );
   }
 
-  /// One clear action that always tells the truth about what happens next:
-  /// add a stranger, ring a friend who's actually free, and never offer a
-  /// message to someone the server would refuse to deliver to.
-  Widget _primary() {
-    if (requested) return const _FlatAction(label: 'Requested', muted: true);
-    if (isFriend) {
-      final free = online && !busy;
-      return _FlatAction(
-        label: free ? 'Say hi' : 'Friends',
-        muted: !free,
-        onTap: free ? onHi : null,
-      );
-    }
-    if (busy) return const _FlatAction(label: 'In a room', muted: true);
-    return _FlatAction(label: 'Add', onTap: onHi);
+  /// Two pills, always. The left one is the relationship, the right one is
+  /// the room — and neither ever offers something the server would refuse.
+  List<Widget> _actions() {
+    final left = requested
+        ? const _Pill(label: 'Requested', muted: true)
+        : isFriend
+            ? _Pill(label: 'Message', icon: Icons.chat_bubble_rounded, onTap: onMessage)
+            : _Pill(label: 'Add', icon: Icons.person_add_alt_1_rounded, onTap: onAdd);
+
+    final right = busy
+        ? const _Pill(label: 'In a room', muted: true)
+        : _live
+            // a video icon, because that is literally what this does — rings
+            // them into a room, not sends a text
+            ? _Pill(label: 'Say hi', icon: Icons.videocam_rounded, live: true, onTap: onHi)
+            : const _Pill(label: 'Away', muted: true);
+
+    return [
+      Expanded(child: left),
+      const SizedBox(width: 7),
+      Expanded(child: right),
+    ];
   }
 }
 
-/// No photo yet — their letter on their own colour. Reads as designed
-/// rather than as a missing image.
+/// No photo yet — their letter on their own colour, kept quiet enough that a
+/// wall of them still looks composed rather than broken.
 class _Placeholder extends StatelessWidget {
   const _Placeholder({required this.name, required this.tint});
   final String name;
@@ -278,12 +257,39 @@ class _Placeholder extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [tint, C.char2],
+          colors: [tint.withOpacity(0.85), C.char2],
         ),
       ),
       child: Center(
         child: Text(letter,
-            style: T.display(54).copyWith(color: Colors.white.withOpacity(0.30))),
+            style: T.display(46).copyWith(color: Colors.white.withOpacity(0.16))),
+      ),
+    );
+  }
+}
+
+/// A fact about them, frosted onto the photo.
+class _Chip extends StatelessWidget {
+  const _Chip({required this.label, this.accent = false});
+  final String label;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0x2EFFFFFF),
+        borderRadius: BorderRadius.circular(R.chip),
+      ),
+      child: Text(
+        accent ? 'both like $label' : label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: T.tiny.copyWith(
+            color: accent ? C.acid : Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.w800),
       ),
     );
   }
@@ -316,7 +322,7 @@ class _StatusPill extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 5),
-          Text(!online ? 'away' : (busy ? 'in a room' : 'free'),
+          Text(!online ? 'away' : (busy ? 'in a room' : 'live'),
               style: T.tiny.copyWith(
                   color: live ? Colors.white : C.tx2,
                   fontSize: 10,
@@ -327,55 +333,52 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
-/// The card's main button — full-width, flat, quiet until pressed.
-class _FlatAction extends StatelessWidget {
-  const _FlatAction({required this.label, this.onTap, this.muted = false});
+/// One action. Frosted by default so it belongs to the photo; acid only when
+/// it's a live action that will genuinely reach someone.
+class _Pill extends StatelessWidget {
+  const _Pill({
+    required this.label,
+    this.icon,
+    this.onTap,
+    this.muted = false,
+    this.live = false,
+  });
   final String label;
+  final IconData? icon;
   final VoidCallback? onTap;
   final bool muted;
+  final bool live;
 
   @override
   Widget build(BuildContext context) {
+    final on = onTap != null && !muted;
+    final fg = live && on ? Colors.black : (muted ? C.tx2 : Colors.white);
     final body = Container(
       height: 34,
       alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
-        gradient: muted ? null : C.gradSig,
-        color: muted ? const Color(0x59000000) : null,
+        color: live && on ? C.acid : const Color(0x33FFFFFF),
         borderRadius: BorderRadius.circular(R.chip),
-        border: Border.all(color: muted ? C.hair2 : const Color(0x33FFFFFF)),
       ),
-      child: Text(label,
-          style: T.body.copyWith(
-              color: muted ? C.tx2 : Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w800)),
-    );
-    if (onTap == null) return body;
-    return Press(haptic: false, onTap: onTap, child: body);
-  }
-}
-
-class _IconAction extends StatelessWidget {
-  const _IconAction({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Press(
-      haptic: false,
-      onTap: onTap,
-      child: Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          color: const Color(0x59000000),
-          borderRadius: BorderRadius.circular(R.chip),
-          border: Border.all(color: C.hair2),
-        ),
-        child: Icon(icon, size: 15, color: Colors.white),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 13, color: fg),
+            const SizedBox(width: 5),
+          ],
+          Flexible(
+            child: Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: T.body.copyWith(
+                    color: fg, fontSize: 12.5, fontWeight: FontWeight.w800)),
+          ),
+        ],
       ),
     );
+    if (!on) return Opacity(opacity: 0.75, child: body);
+    return Press(haptic: false, scale: 0.96, onTap: onTap, child: body);
   }
 }
