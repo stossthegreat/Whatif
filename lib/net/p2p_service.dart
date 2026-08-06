@@ -302,7 +302,12 @@ class P2PService {
           NetworkClient.instance.rtcSignal(peer!, {'kind': 'bail'});
         } catch (_) {}
       }
-      cb?.call(); // → LiveKit, exactly as before P2P existed
+      // LiveKit cannot open the camera until ours is genuinely closed — iOS
+      // refuses to run two capture sessions. Handing straight over meant the
+      // fallback opened onto a camera we were still holding and came up with
+      // nothing, which is why video that used to work every time started
+      // working only sometimes.
+      _released.then((_) => cb?.call());
     }
     _bump();
   }
@@ -316,8 +321,13 @@ class P2PService {
   Future<void> leave() async {
     _session++;
     _cleanup();
+    await _released;
     _bump();
   }
+
+  /// Completes when the capture session is actually gone. Everything that
+  /// wants the camera next has to wait on this.
+  Future<void> _released = Future<void>.value();
 
   void _cleanup() {
     _deadline?.cancel();
@@ -330,26 +340,38 @@ class P2PService {
     _peerId = null;
     final pc = _pc;
     _pc = null;
-    if (pc != null) {
-      try {
-        pc.close();
-      } catch (_) {}
-    }
     final local = _local;
     _local = null;
-    if (local != null) {
-      for (final t in local.getTracks()) {
-        try {
-          t.stop();
-        } catch (_) {}
-      }
-      try {
-        local.dispose();
-      } catch (_) {}
-    }
+    // detach the renderers FIRST — a renderer still pointed at the stream
+    // keeps the capture session alive no matter what we do to the tracks
     try {
       localRenderer.srcObject = null;
       remoteRenderer.srcObject = null;
     } catch (_) {}
+    _released = _release(pc, local);
+  }
+
+  /// Close the connection and hand the camera back, and don't pretend it
+  /// happened until it has. These are all Futures; firing them and moving on
+  /// was the bug.
+  static Future<void> _release(rtc.RTCPeerConnection? pc, rtc.MediaStream? local) async {
+    if (pc != null) {
+      try {
+        await pc.close();
+      } catch (_) {}
+    }
+    if (local != null) {
+      for (final t in local.getTracks()) {
+        try {
+          await t.stop();
+        } catch (_) {}
+      }
+      try {
+        await local.dispose();
+      } catch (_) {}
+    }
+    // stop() returning is not the same as the OS having torn the session
+    // down. A short settle beats a fallback that opens onto a busy camera.
+    await Future<void>.delayed(const Duration(milliseconds: 250));
   }
 }
