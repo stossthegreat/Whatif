@@ -381,36 +381,9 @@ class MeScreen extends StatelessWidget {
                     );
                   },
                 ),
-                const SizedBox(height: 24),
-
-                // moments (BeReal-memories style — inside the profile)
-                _SectionHead(
-                  title: 'moments',
-                  trailing: s.moments.isEmpty ? null : 'see all',
-                  onTrailing: s.moments.isEmpty ? null : () => MomentsScreen.push(context),
-                ),
-                const SizedBox(height: 10),
-                if (s.moments.isEmpty)
-                  Text('Every big reveal becomes a card here, ready to share.', style: T.tiny)
-                else
-                  SizedBox(
-                    height: 150,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: s.moments.length.clamp(0, 8),
-                      separatorBuilder: (_, __) => const SizedBox(width: 10),
-                      itemBuilder: (context, i) {
-                        final m = s.moments[i];
-                        return Press(
-                          onTap: () {
-                            Buzz.tap();
-                            ShareCardScreen.push(context, m);
-                          },
-                          child: _MomentMini(m),
-                        );
-                      },
-                    ),
-                  ),
+                // Moments used to appear twice on this screen — the block
+                // under your photo AND a strip down here. One profile, one
+                // way in: the block above owns it.
               ],
             );
           },
@@ -543,49 +516,6 @@ class _PersonRow extends StatelessWidget {
               Text('LIVE', style: T.tiny.copyWith(color: C.live, fontWeight: FontWeight.w900, letterSpacing: 1)),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _MomentMini extends StatelessWidget {
-  const _MomentMini(this.m);
-  final Moment m;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 128,
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter, end: Alignment.bottomCenter,
-          colors: [Color(0xFF17091F), Color(0xFF0A0B10)],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: C.hair2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(m.game.toUpperCase(),
-              style: T.eyebrow.copyWith(color: C.sig, fontSize: 8.5, letterSpacing: 1.4)),
-          const SizedBox(height: 8),
-          Expanded(
-            child: Text(
-              m.result,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12, height: 1.25),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(children: [
-            Text('😂 ${m.laughs}', style: T.tiny.copyWith(fontSize: 10, color: C.tx2, fontWeight: FontWeight.w800)),
-            const Spacer(),
-            Text(m.ago, style: T.tiny.copyWith(fontSize: 10)),
-          ]),
-        ],
       ),
     );
   }

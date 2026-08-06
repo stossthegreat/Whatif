@@ -22,6 +22,7 @@ import 'state/social.dart';
 import 'theme/tokens.dart';
 import 'widgets/glass.dart';
 import 'widgets/incoming_call_overlay.dart';
+import 'widgets/room_knock_overlay.dart';
 import 'widgets/match_overlay.dart';
 import 'widgets/rating_overlay.dart';
 import 'screens/chat_screen.dart';
@@ -408,6 +409,22 @@ class _RootState extends State<_Root> {
       final peerId = cell.people.first.id!;
       final myId = NetworkClient.instance.myId!;
       P2PService.instance.onFailed = () {
+        // Direct didn't work — some networks simply won't allow it. LiveKit
+        // carries the room instead. If LiveKit isn't configured there is
+        // nothing left to fall back TO, and a silent black rectangle is the
+        // worst possible way to say so.
+        if (url.isEmpty) {
+          final ctx = RivlrApp.navKey.currentContext;
+          if (ctx != null) {
+            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: C.char2,
+              content: Text('⚠️ couldn’t connect video on this network',
+                  style: T.body.copyWith(color: Colors.white)),
+            ));
+          }
+          return;
+        }
         RtcService.instance.join(url, token); // the room continues on LiveKit
       };
       P2PService.instance.attempt(
@@ -655,6 +672,21 @@ class _RootState extends State<_Root> {
                   _pendingCallVideo = call.video;
                   NetworkClient.instance.callAccept(call.callId);
                   SocialState.instance.clearIncomingCall();
+                },
+              );
+            }
+            // a friend holding a room open for you — same weight as a call,
+            // and equally never over a live room you're already in
+            final k = s.knock;
+            if (k != null && _step != _Step.live) {
+              return RoomKnockOverlay(
+                key: ValueKey('knock${k.code}${k.uid}'),
+                knock: k,
+                onJoin: () {
+                  SocialState.instance.clearKnock();
+                  _partyInviteUid = null;
+                  _partyCode = k.code;
+                  _to(_Step.party);
                 },
               );
             }

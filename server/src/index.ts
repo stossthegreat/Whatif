@@ -795,7 +795,15 @@ setInterval(() => {
 // ---- http + ws -------------------------------------------------------------
 const app = express();
 app.get('/', (_req, res) => res.json({ ok: true, service: 'rivlr', live: LIVE_BASELINE + store.onlineCount }));
-app.get('/health', (_req, res) => res.json({ ok: true }));
+// Booleans only — never a key, never a URL. Without this there is no way to
+// tell a "direct connection failed on this network" from a "there is no
+// fallback configured", and those need completely different fixes.
+app.get('/health', (_req, res) => res.json({
+  ok: true,
+  db: db.dbEnabled,
+  p2p: P2P_ENABLED,
+  livekit: LIVEKIT_URL.length > 0,
+}));
 // public legal pages — these URLs go in App Store Connect / Play Console
 app.get('/privacy', (_req, res) => res.type('html').send(legal.page('Privacy Policy', legal.privacy)));
 app.get('/terms', (_req, res) => res.type('html').send(legal.page('Terms of Service', legal.terms)));
@@ -1057,6 +1065,40 @@ wss.on('connection', (ws, req) => {
         p.members.push(id);
         partyByUser.set(id, code);
         broadcastParty(p);
+        break;
+      }
+      // Ring a friend straight into the room you're hosting. This is the ONE
+      // way to pull someone in: they get a live knock and one Join button,
+      // instead of a DM'd code they have to notice, open and type. If they
+      // aren't connected we say so and the client falls back to the DM, so an
+      // invite is never silently lost.
+      case 'partyRing': {
+        const to = typeof m.to === 'string' ? m.to : '';
+        if (!to || to === user.uid) break;
+        const heldCode = partyByUser.get(id);
+        const p = heldCode ? parties.get(heldCode) : undefined;
+        if (!p || p.hostId !== id) break; // only the host rings
+        if (store.isBlocked(user.uid, to)) break;
+        if (p.members.length >= 8) {
+          send(user, { t: 'partyError', reason: 'That room is full' });
+          break;
+        }
+        void (async () => {
+          if ((await dbs.friendState(user.uid, to)) !== 'friends') {
+            return send(user, { t: 'err', code: 'notFriends' });
+          }
+          // re-read: the await gave the room time to change under us
+          const still = parties.get(p.code);
+          if (!still || still.hostId !== id) return;
+          const target = store.userByUid(to);
+          if (!target) return send(user, { t: 'partyRingSent', uid: to, live: false });
+          send(target, {
+            t: 'partyRing',
+            code: still.code,
+            from: { uid: user.uid, name: user.name, hue: user.hue },
+          });
+          send(user, { t: 'partyRingSent', uid: to, live: true });
+        })();
         break;
       }
       case 'leaveParty': leaveParty(id); break;

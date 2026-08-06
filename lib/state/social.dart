@@ -90,6 +90,16 @@ class IncomingCall {
   final bool video;
 }
 
+/// A friend is holding a room open and has pulled you towards it. One tap
+/// joins — no code to read, type, or even notice.
+class RoomKnock {
+  RoomKnock({required this.code, required this.uid, required this.name, required this.hue});
+  final String code;
+  final String uid;
+  final String name;
+  final double hue;
+}
+
 /// One line of friend activity for the Home feed.
 class FeedItem {
   FeedItem({required this.kind, required this.uid, required this.name, required this.x, required this.at});
@@ -119,6 +129,7 @@ class SocialState extends ChangeNotifier {
   final List<RatePromptItem> pendingRates = [];
   final List<FriendInfo> celebrations = []; // matched / accepted, queued FIFO
   IncomingCall? incomingCall;
+  RoomKnock? knock; // a friend's room, one tap away
   final List<FeedItem> feed = []; // rolling friend activity (max 12, in-memory)
   String? eventKey;               // active seasonal event
   String? eventName;
@@ -214,6 +225,18 @@ class SocialState extends ChangeNotifier {
           video: m['video'] == true,
         );
         notifyListeners();
+      case 'partyRing':
+        final who = ((m['from'] as Map?) ?? const {}).cast<String, dynamic>();
+        final code = (m['code'] as String?) ?? '';
+        if (code.isNotEmpty) {
+          knock = RoomKnock(
+            code: code,
+            uid: (who['uid'] as String?) ?? '',
+            name: (who['name'] as String?) ?? 'someone',
+            hue: ((who['hue'] as num?) ?? 210).toDouble(),
+          );
+          notifyListeners();
+        }
       case 'callState':
         final st = m['state'] as String?;
         if (st == 'cancelled' || st == 'timeout') {
@@ -245,6 +268,11 @@ class SocialState extends ChangeNotifier {
 
   void clearIncomingCall() {
     incomingCall = null;
+    notifyListeners();
+  }
+
+  void clearKnock() {
+    knock = null;
     notifyListeners();
   }
 

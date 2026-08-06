@@ -90,7 +90,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 children: [
                   Text('Explore', style: T.display(32)),
                   const Spacer(),
-                  if (_people.isNotEmpty)
+                  // ONLY people actually on right now. Explore lists everyone,
+                  // online or not, so counting the list was counting profiles
+                  // — three cards became "3 ON NOW" whether or not a single
+                  // one of them was awake.
+                  if (_people.any((p) => p.online))
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
@@ -110,7 +114,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          Text('${_people.length} ON NOW',
+                          Text('${_people.where((p) => p.online).length} ON NOW',
                               style: T.tiny.copyWith(
                                   color: Colors.white, fontWeight: FontWeight.w800)),
                         ],

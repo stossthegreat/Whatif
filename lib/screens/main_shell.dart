@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
+import '../net/network_client.dart';
 import '../state/chat.dart';
 import '../state/social.dart';
 import '../theme/tokens.dart';
@@ -38,6 +39,12 @@ class _MainShellState extends State<MainShell> {
     if (i == _tab) return;
     Buzz.tick();
     setState(() => _tab = i);
+    // The tabs live in an IndexedStack, so each one's initState runs ONCE, at
+    // app start — possibly before the socket is even up. Explore's buttons and
+    // the Friends lane both read the friend graph, so without this they show
+    // whatever was true when the app launched: the "sometimes it knows my
+    // friends, sometimes it doesn't" bug.
+    if (i == 1 || i == 2) NetworkClient.instance.friendsSnapshot();
   }
 
   @override
