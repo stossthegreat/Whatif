@@ -162,7 +162,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _link('Delete account', () => _confirmDelete(context), color: C.live),
                   ]),
                   const SizedBox(height: 26),
-                  Center(child: Text('Rivlr · 1.0.0 (67)', style: T.tiny)),
+                  Center(child: Text('Rivlr · 1.0.0 (70)', style: T.tiny)),
                 ],
               ),
             ),

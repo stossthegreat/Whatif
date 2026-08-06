@@ -136,67 +136,11 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  // actions
-                  Row(
-                    children: [
-                      if (friendState == 'friends') ...[
-                        Expanded(
-                          child: Cta(label: 'Message', onTap: () {
-                            Buzz.commit();
-                            ChatScreen.push(context,
-                                uid: widget.uid, name: widget.name, hue: widget.hue);
-                          }),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _ghostBtn('Invite to room', () {
-                            Buzz.commit();
-                            Navigator.of(context).popUntil((r) => r.isFirst);
-                            AppNav.hostPartyFor?.call(widget.uid);
-                          }),
-                        ),
-                      ] else if (friendState == 'pendingOut')
-                        Expanded(child: _ghostBtn('Request sent ✓', null))
-                      else if (friendState == 'pendingIn')
-                        Expanded(
-                          child: Cta(label: 'Accept friend request', onTap: () {
-                            Buzz.commit();
-                            SocialState.instance.accept(widget.uid);
-                            NetworkClient.instance.profile(widget.uid);
-                          }),
-                        )
-                      else
-                        Expanded(
-                          child: Cta(label: 'Add friend', onTap: () {
-                            Buzz.commit();
-                            SocialState.instance.request(widget.uid);
-                            NetworkClient.instance.profile(widget.uid);
-                          }),
-                        ),
-                    ],
-                  ),
-                  if (friendState == 'friends') ...[
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _ghostBtn('📞 Voice call', () {
-                            Buzz.commit();
-                            Navigator.of(context).popUntil((r) => r.isFirst);
-                            AppNav.startCall?.call(widget.uid, false);
-                          }),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _ghostBtn('📹 Video call', () {
-                            Buzz.commit();
-                            Navigator.of(context).popUntil((r) => r.isFirst);
-                            AppNav.startCall?.call(widget.uid, true);
-                          }),
-                        ),
-                      ],
-                    ),
-                  ],
+                  // The same frosted pills the Explore cards use — one shape
+                  // for "do something about this person", wherever you meet
+                  // them. Four stacked gradient slabs read as an advert; this
+                  // reads as a profile.
+                  ..._actions(context, friendState),
                   const SizedBox(height: 26),
                   // personality — votes from people who actually met them
                   Text('PERSONALITY', style: T.eyebrow),
@@ -391,24 +335,95 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
     );
   }
 
-  Widget _ghostBtn(String label, VoidCallback? onTap) {
-    return Press(
-      haptic: false,
-      onTap: onTap,
-      child: Opacity(
-        opacity: onTap == null ? 0.5 : 1,
-        child: Container(
-          height: 54,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: C.hair2),
-          ),
-          child: Text(label,
-              style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+  /// What you can do about this person, in the order you'd want it, and never
+  /// an action the server would refuse. Strangers get one honest button;
+  /// friends get the four that actually work.
+  List<Widget> _actions(BuildContext context, String friendState) {
+    void home() => Navigator.of(context).popUntil((r) => r.isFirst);
+
+    if (friendState == 'pendingOut') {
+      return const [ActionPill(label: 'Requested', muted: true, height: 46)];
+    }
+    if (friendState == 'pendingIn') {
+      return [
+        ActionPill(
+          label: 'Accept friend request',
+          icon: Icons.person_add_alt_1_rounded,
+          live: true,
+          height: 46,
+          onTap: () {
+            Buzz.commit();
+            SocialState.instance.accept(widget.uid);
+            NetworkClient.instance.profile(widget.uid);
+          },
         ),
+      ];
+    }
+    if (friendState != 'friends') {
+      return [
+        ActionPill(
+          label: 'Add friend',
+          icon: Icons.person_add_alt_1_rounded,
+          live: true,
+          height: 46,
+          onTap: () {
+            Buzz.commit();
+            SocialState.instance.request(widget.uid);
+            NetworkClient.instance.profile(widget.uid);
+          },
+        ),
+      ];
+    }
+    return [
+      Row(
+        children: [
+          Expanded(
+            child: ActionPill(
+              label: 'Message',
+              icon: Icons.chat_bubble_rounded,
+              height: 46,
+              onTap: () {
+                Buzz.commit();
+                ChatScreen.push(context,
+                    uid: widget.uid, name: widget.name, hue: widget.hue);
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ActionPill(
+              label: 'Video',
+              icon: Icons.videocam_rounded,
+              live: true,
+              height: 46,
+              onTap: () { Buzz.commit(); home(); AppNav.startCall?.call(widget.uid, true); },
+            ),
+          ),
+        ],
       ),
-    );
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          Expanded(
+            child: ActionPill(
+              label: 'Voice',
+              icon: Icons.call_rounded,
+              height: 46,
+              onTap: () { Buzz.commit(); home(); AppNav.startCall?.call(widget.uid, false); },
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ActionPill(
+              label: 'Invite to room',
+              icon: Icons.group_rounded,
+              height: 46,
+              onTap: () { Buzz.commit(); home(); AppNav.hostPartyFor?.call(widget.uid); },
+            ),
+          ),
+        ],
+      ),
+    ];
   }
 
   Widget _statRow(List<(String, String, String)> items) {

@@ -36,7 +36,12 @@ const LIVE_BASELINE = Number(process.env.LIVE_BASELINE || 0);
 // P2P: 1:1 stranger rooms carry video phone-to-phone (server only signals);
 // LiveKit is the automatic fallback and still carries groups + calls.
 // Kill-switch: set P2P=false on Railway and redeploy.
-const P2P_ENABLED = (process.env.P2P ?? 'true') === 'true';
+/// Direct phone-to-phone video. OFF by default: LiveKit carried every room
+/// reliably before P2P existed, and P2P turned that into "sometimes". A path
+/// that works every time beats a free one that works most of the time — the
+/// saving is worth nothing if people can't see each other. Set P2P=true to
+/// turn it back on once it has been proven on real devices.
+const P2P_ENABLED = process.env.P2P === 'true';
 // Sign-in gate for going live. Off by default so a misconfigured deploy can
 // never lock every user out; Railway sets REQUIRE_ACCOUNT=true.
 const REQUIRE_ACCOUNT = (process.env.REQUIRE_ACCOUNT ?? 'false') === 'true';
@@ -979,7 +984,8 @@ wss.on('connection', (ws, req) => {
         // don't let a lapsed subscription clobber the stored filter — if they
         // resubscribe, the preference they paid for is still there
         db.upsertUser({ uid: user.uid, name: user.name, hue: user.hue,
-          gender: user.gender, meet: acct?.meet ?? user.meet, vibes });
+          gender: user.gender, meet: acct?.meet ?? user.meet, vibes,
+          age: typeof m.age === 'number' ? m.age : null });
         if (appleLink && db.dbEnabled) dbs.linkApple(user.uid, appleLink);
         void db.loadSocial(user.uid).then((d) => {
           if (!d) return;

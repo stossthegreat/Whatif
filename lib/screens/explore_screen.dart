@@ -152,20 +152,27 @@ class _ExploreScreenState extends State<ExploreScreen> {
                             final fullW = box.maxWidth - r.gutter * 2;
                             final colW = (fullW - 12) / 2;
                             final cardH = colW / 0.70;
-                            // person[0] is the server's best match for YOU —
-                            // it gets the full-width billboard; the wall
-                            // starts from person[1]
-                            final rest = _people.skip(1).toList();
+                            // person[0] is the server's best match for YOU and
+                            // gets the billboard — but ONLY with a photo to
+                            // put in it. A full-width card with no picture is
+                            // just a big empty rectangle, which made the whole
+                            // wall look broken.
+                            final top = _people.first.thumbId != null
+                                ? _people.first : null;
+                            final rest =
+                                (top == null ? _people : _people.skip(1)).toList();
                             return ListView(
                               padding: EdgeInsets.fromLTRB(r.gutter, 2, r.gutter, 24),
                               physics: const AlwaysScrollableScrollPhysics(
                                   parent: BouncingScrollPhysics()),
                               children: [
-                                SizedBox(
-                                  height: fullW * 0.78,
-                                  child: _card(_people.first, hero: true),
-                                ),
-                                const SizedBox(height: 12),
+                                if (top != null) ...[
+                                  SizedBox(
+                                    height: fullW * 0.78,
+                                    child: _card(top, hero: true),
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
                                 for (var row = 0; row * 2 < rest.length; row++)
                                   Padding(
                                     padding: const EdgeInsets.only(bottom: 12),
@@ -228,7 +235,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
       hero: hero,
       isFriend: friend,
       requested: asked,
-      onHi: friend ? () => _open(p) : () => _add(p),
+      onAdd: () => _add(p),
+      onHi: () => _open(p),
       onMessage: friend
           ? () {
               Buzz.tick();
@@ -353,6 +361,9 @@ class _MeetSheetState extends State<_MeetSheet> {
   @override
   Widget build(BuildContext context) {
     final p = widget.person;
+    final social = SocialState.instance;
+    final friend = social.isFriend(p.uid);
+    final asked = !friend && social.requested(p.uid);
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Glass(
@@ -412,7 +423,20 @@ class _MeetSheetState extends State<_MeetSheet> {
               ),
             ],
             const SizedBox(height: 22),
-            if (!p.online)
+            // Already friends — offering "Add friend" again was the sheet
+            // ignoring the friend graph the card behind it was reading from.
+            if (friend)
+              Cta(
+                label: 'Message',
+                onTap: () {
+                  Buzz.tick();
+                  Navigator.of(context).maybePop();
+                  ChatScreen.push(context, uid: p.uid, name: p.name, hue: p.hue);
+                },
+              )
+            else if (asked)
+              Cta(label: 'Requested ✓', onTap: null)
+            else if (!p.online)
               // away people can't be rung — but they CAN become friends, and
               // then you catch them live later. Never a dead end.
               Cta(
@@ -443,13 +467,19 @@ class _MeetSheetState extends State<_MeetSheet> {
               ),
             const SizedBox(height: 12),
             Text(
-              !p.online
-                  ? (_sent
-                      ? 'When they accept, they’ll be in your people.'
-                      : 'They’re away — add them and catch them live later.')
-                  : _sent
-                      ? 'We’ll drop you both into a room the moment they say yes.'
-                      : 'They get a ring and choose whether to accept.',
+              friend
+                  ? (p.online
+                      ? 'You’re already friends — they’re on right now.'
+                      : 'You’re already friends. They’ll show up when they’re on.')
+                  : asked
+                      ? 'Request sent — it’s waiting for them.'
+                      : !p.online
+                          ? (_sent
+                              ? 'When they accept, they’ll be in your people.'
+                              : 'They’re away — add them and catch them live later.')
+                          : _sent
+                              ? 'We’ll drop you both into a room the moment they say yes.'
+                              : 'They get a ring and choose whether to accept.',
               textAlign: TextAlign.center,
               style: T.tiny.copyWith(fontSize: 12, height: 1.4),
             ),
