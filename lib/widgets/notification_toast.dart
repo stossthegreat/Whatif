@@ -64,60 +64,84 @@ class _NotificationToastState extends State<NotificationToast> {
                 widget.onTap();
               },
               child: Container(
-                padding: const EdgeInsets.fromLTRB(12, 12, 16, 12),
                 decoration: BoxDecoration(
-                  color: const Color(0xF2140A1E),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: C.hair2),
                   boxShadow: [
-                    BoxShadow(color: Color(0x66000000), blurRadius: 24, offset: Offset(0, 8)),
+                    const BoxShadow(color: Color(0x66000000), blurRadius: 24, offset: Offset(0, 8)),
                     BoxShadow(color: C.sigGlow, blurRadius: 30, spreadRadius: -14),
                   ],
                 ),
-                child: Row(
-                  children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Avatar(hue: t.hue, photoId: t.photoId, size: 42),
-                        Positioned(
-                          right: -3,
-                          bottom: -3,
-                          child: Container(
-                            width: 20,
-                            height: 20,
-                            alignment: Alignment.center,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: C.sig,
-                              border: Border.fromBorderSide(BorderSide(color: Color(0xFF140A1E), width: 2)),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Stack(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 16, 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xF2140A1E),
+                          border: Border.all(color: C.hair2),
+                        ),
+                        child: Row(
+                          children: [
+                            Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Avatar(hue: t.hue, photoId: t.photoId, size: 42),
+                                Positioned(
+                                  right: -3,
+                                  bottom: -3,
+                                  child: Container(
+                                    width: 20,
+                                    height: 20,
+                                    alignment: Alignment.center,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: C.sig,
+                                      border: Border.fromBorderSide(BorderSide(color: Color(0xFF140A1E), width: 2)),
+                                    ),
+                                    child: Icon(t.icon, size: 11, color: Colors.white),
+                                  ),
+                                ),
+                              ],
                             ),
-                            child: Icon(t.icon, size: 11, color: Colors.white),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(t.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14.5)),
+                                  const SizedBox(height: 2),
+                                  Text(t.subtitle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: T.tiny.copyWith(color: C.tx2, fontSize: 12.5)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(Icons.chevron_right_rounded, size: 18, color: C.tx3),
+                          ],
+                        ),
+                      ),
+                      // specular hairline — the same gloss trick Glass and the
+                      // notification cards use, ties the toast to the same family
+                      Positioned(
+                        top: 0,
+                        left: 10,
+                        right: 10,
+                        child: Container(
+                          height: 1,
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(colors: [Color(0x00FFFFFF), C.spec, Color(0x00FFFFFF)]),
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(t.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14.5)),
-                          const SizedBox(height: 2),
-                          Text(t.subtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: T.tiny.copyWith(color: C.tx2, fontSize: 12.5)),
-                        ],
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(Icons.chevron_right_rounded, size: 18, color: C.tx3),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
