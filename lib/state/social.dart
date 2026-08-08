@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../net/network_client.dart';
+import 'notify.dart';
 
 /// A person on your side of the graph — friend, request, or celebration.
 class FriendInfo {
@@ -193,6 +194,27 @@ class SocialState extends ChangeNotifier {
           friends[i].online = m['on'] == true;
           notifyListeners();
         }
+      case 'friendRequested':
+        // the server has always sent this — nothing here ever read it, so a
+        // fresh request was invisible until the next full 'friends' snapshot
+        // happened to arrive. Real bug, fixed alongside the toast system.
+        final from = ((m['from'] as Map?) ?? const {}).cast<String, dynamic>();
+        final uid = (from['uid'] as String?) ?? '';
+        final name = (from['name'] as String?) ?? 'someone';
+        final hue = ((from['hue'] as num?) ?? 210).toDouble();
+        if (uid.isEmpty) break;
+        if (!reqsIn.any((r) => r.uid == uid)) {
+          reqsIn.insert(0, FriendInfo(uid: uid, name: name, hue: hue));
+        }
+        Notify.instance.push(AppToast(
+          kind: ToastKind.friendRequest,
+          title: '@$name wants to be friends',
+          subtitle: 'tap to view their profile',
+          uid: uid,
+          name: name,
+          hue: hue,
+        ));
+        notifyListeners();
       case 'ratePrompt':
         final cell = (m['cell'] as String?) ?? '';
         for (final p in _list(m['people'])) {

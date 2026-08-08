@@ -7,6 +7,7 @@ import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
 import '../widgets/glass.dart';
+import '../widgets/notification_bell.dart';
 import '../widgets/person_card.dart';
 import 'chat_screen.dart';
 
@@ -120,6 +121,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
                         ],
                       ),
                     ),
+                  const SizedBox(width: 8),
+                  const NotificationBell(size: 34, iconSize: 17),
                 ],
               ),
             ),

@@ -120,6 +120,20 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     ['🌀', 'CHAOS — the rules just changed'],
   ];
 
+  // Impostor — server-driven only (real secret roles need real other
+  // people). 'night' | 'discuss' | null; null hides the overlay so the
+  // normal point-vote UI shows through once the vote round starts.
+  bool _impostorAmI = false;
+  String? _impostorPhase;
+
+  // Who Am I — server-driven only, same reasoning as Impostor. No round, no
+  // vote: just a reveal-to-the-room, a timed ask window, then a reveal-to-
+  // the-target. 'ask' | 'reveal' | null.
+  String? _whoAmIPhase;
+  bool _whoAmIMine = false; // true = I'm the one who doesn't know
+  String? _whoAmICategory;
+  String? _whoAmIIdentity; // null while I'm the target and it's still 'ask'
+
   // a room is a session — several rounds, then the ceremony, then the wheel
   int _round = 0;
   bool _stamp = true; // the room-name stamp on arrival
@@ -150,6 +164,26 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   String get _targetName =>
       _target >= cell.people.length ? 'you' : '@${cell.people[_target].name}';
+
+  /// Wavelength: the round's target IS the clue-giver — they see the hidden
+  /// zone and speak one clue; everyone else guesses. Same "you" sentinel as
+  /// every other target-based kind (spin, {target} prompts).
+  bool get _amClueGiver => _target >= cell.people.length;
+
+  /// Whisper Challenge rides the `thumbs` kind (same as Word Collide) but
+  /// needs an asymmetric role split those don't: the round's target is the
+  /// mouther (sees the phrase, judges the guess), everyone else can't hear
+  /// anything by design and just watches lips.
+  bool get _isWhisperRound => game.kind == GameKind.thumbs && game.name == 'Whisper Challenge';
+
+  /// Judge Says rides `same` (tap-one-of-N, same wire shape as any option
+  /// kind) for the voting half — the round's target is the judge and
+  /// doesn't vote. What's genuinely new is the second half: after the vote
+  /// closes, only the judge gets asked (via _judgeAsked) to crown one.
+  bool get _isJudgeRound => game.kind == GameKind.same && game.name == 'Judge Says';
+  bool get _amJudge => _isJudgeRound && _amClueGiver;
+  bool _judgeAsked = false;
+  int? _judgeWinnerIdx;
 
   /// Fill prompt variables — the same prompt lands on a different victim
   /// every single time it's played.
@@ -233,6 +267,20 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         _onPeerJoined(m);
       case 'peerLeft':
         _onPeerLeft(m);
+      case 'impostorRole':
+        _onImpostorRole(m);
+      case 'impostorPhase':
+        _onImpostorPhase(m);
+      case 'impostorReveal':
+        _onImpostorReveal(m);
+      case 'whoAmIRole':
+        _onWhoAmIRole(m);
+      case 'whoAmIReveal':
+        _onWhoAmIReveal(m);
+      case 'judgeAsk':
+        _onJudgeAsk(m);
+      case 'judgeSaysResult':
+        _onJudgeSaysResult(m);
     }
   }
 
@@ -280,6 +328,112 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _toast('@${gone.name} left the room');
   }
 
+  // ---- Impostor: secret role + phase banners — the vote itself rides the
+  // normal point-round machinery (_onRoundMsg/_onResultMsg), so these three
+  // only ever touch the overlay, never the game loop.
+  void _onImpostorRole(Map<String, dynamic> m) {
+    if (!mounted) return;
+    final role = m['role'] as String?;
+    setState(() {
+      _impostorAmI = role == 'impostor';
+      _impostorPhase = 'night';
+    });
+    Buzz.impact();
+    Track.event('impostor_role', {'role': role ?? ''});
+  }
+
+  void _onImpostorPhase(Map<String, dynamic> m) {
+    if (!mounted) return;
+    setState(() => _impostorPhase = m['phase'] as String?);
+    if (_impostorPhase == 'discuss') {
+      Buzz.tick();
+      Sfx.pip();
+    }
+  }
+
+  void _onImpostorReveal(Map<String, dynamic> m) {
+    if (!mounted) return;
+    final impostorIdx = _idxOf(m['impostorId'] as String?);
+    final correct = m['correct'] == true;
+    final impostorName = impostorIdx == null
+        ? 'someone'
+        : (impostorIdx >= cell.people.length ? 'YOU 😳' : '@${cell.people[impostorIdx].name}');
+    setState(() {
+      // lands a beat after the normal "the room pointed at X" reveal — two
+      // distinct beats, the vote result then the verdict.
+      _result = correct
+          ? 'CORRECT 🎯 the impostor was $impostorName'
+          : 'WRONG 😵 the impostor was actually $impostorName';
+      _impostorAmI = false;
+      _impostorPhase = null;
+    });
+    Buzz.commit();
+    Sfx.fanfare();
+  }
+
+  // ---- Who Am I: no round, no vote — just two reveals and a timer. -----
+  void _onWhoAmIRole(Map<String, dynamic> m) {
+    if (!mounted) return;
+    setState(() {
+      _whoAmIMine = m['mine'] == true;
+      _whoAmICategory = m['category'] as String?;
+      _whoAmIIdentity = _whoAmIMine ? null : m['identity'] as String?;
+      _whoAmIPhase = 'ask';
+    });
+    Buzz.impact();
+    Track.event('who_am_i_role', {'mine': _whoAmIMine ? 1 : 0});
+  }
+
+  void _onWhoAmIReveal(Map<String, dynamic> m) {
+    if (!mounted) return;
+    setState(() {
+      _whoAmIIdentity = m['identity'] as String?;
+      _whoAmIPhase = 'reveal';
+    });
+    Buzz.commit();
+    Sfx.fanfare();
+    Timer(const Duration(seconds: 5), () {
+      if (mounted && _whoAmIPhase == 'reveal') setState(() => _whoAmIPhase = null);
+    });
+  }
+
+  // ---- Judge Says: vote closes normally (_onResultMsg), then only the
+  // judge is asked to crown one. Individualized — only the judge's client
+  // ever receives 'judgeAsk', so no extra role check is needed here.
+  void _onJudgeAsk(Map<String, dynamic> m) {
+    if (!mounted || !_isJudgeRound) return;
+    setState(() {
+      _judgeAsked = true;
+      // _onResultMsg already flipped this true for everyone when the vote
+      // closed — un-flip it just for the judge so their pick buttons
+      // render again through the normal _inputs() path.
+      _answered = false;
+      _selected = null;
+    });
+    Buzz.impact();
+    Sfx.pip();
+  }
+
+  void _onJudgeSaysResult(Map<String, dynamic> m) {
+    if (!mounted || !_isJudgeRound) return;
+    final winnerIdx = (m['winnerIdx'] as num?)?.toInt();
+    final winnerPersonIdx = _idxOf(m['winnerId'] as String?);
+    final who = winnerPersonIdx == null
+        ? null
+        : (winnerPersonIdx >= cell.people.length ? 'you' : '@${cell.people[winnerPersonIdx].name}');
+    final option = (winnerIdx != null && winnerIdx + 1 < _prompt.length) ? _prompt[winnerIdx + 1] : null;
+    setState(() {
+      _judgeWinnerIdx = winnerIdx;
+      _answered = true;
+      _result = option != null
+          ? (who != null ? '🏆 "$option" wins — $who' : '🏆 "$option" wins')
+          : '🏆 the judge has crowned a winner';
+    });
+    Buzz.commit();
+    Sfx.fanfare();
+    _toReveal();
+  }
+
   void _onRoundMsg(Map<String, dynamic> m) {
     if (!_serverDriven || _phase == _Phase.wheel) return;
     final idx = (m['idx'] as num?)?.toInt();
@@ -313,6 +467,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _split = const [];
       _result = '';
       _voteCounts = {};
+      // any new round — including the Impostor vote itself — clears the
+      // night/discuss banner so the real game underneath shows through
+      _impostorPhase = null;
+      _judgeAsked = false;
+      _judgeWinnerIdx = null;
     });
     if (_beat == 1) {
       Track.event('game_started', {
@@ -364,7 +523,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           _result = 'quick hands — the room felt that';
         case GameKind.thumbs:
           final g = (m['guilty'] as num?)?.toInt() ?? 0;
-          _result = g == 0 ? 'not one guilty soul 😇 (cap)' : '$g in the room ${g == 1 ? 'is' : 'are'} guilty 👀';
+          _result = _isWhisperRound
+              ? (g > 0 ? 'they got it 🎧 nailed the lip-read' : 'nope 😂 not even close')
+              : g == 0
+                  ? 'not one guilty soul 😇 (cap)'
+                  : '$g in the room ${g == 1 ? 'is' : 'are'} guilty 👀';
         case GameKind.poll:
         case GameKind.wouldRather:
           final counts = ((m['counts'] as List?) ?? const []).map((e) => (e as num).toInt()).toList();
@@ -377,6 +540,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             _result = 'the room split $a / ${100 - a}';
           }
         case GameKind.same:
+          if (_isJudgeRound) {
+            // the vote just closed — the round isn't over, the judge still
+            // has to crown one. Nothing to show yet; _onJudgeAsk/
+            // _onJudgeSaysResult own the reveal from here.
+            _result = _amJudge ? 'crown the funniest…' : 'the judge is deciding…';
+            break;
+          }
           final counts = ((m['counts'] as List?) ?? const []).map((e) => (e as num).toInt()).toList();
           final matches = _selected != null && _selected! < counts.length
               ? (counts[_selected!] - 1).clamp(0, 99)
@@ -391,8 +561,23 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           } else {
             _result = 'they fooled you 😵 slippery';
           }
+        case GameKind.wavelength:
+          final target = (m['lieIdx'] as num?)?.toInt() ?? cell.rounds[_round].lieIdx;
+          if (_selected == null || target == null) {
+            _result = 'no guess landed — the wavelength stays a mystery';
+          } else {
+            final dist = (_selected! - target).abs();
+            _result = dist == 0
+                ? 'bullseye 🎯 exact match'
+                : dist == 1
+                    ? 'so close — one zone off'
+                    : 'not quite — $dist zones off';
+          }
       }
     });
+    // Judge Says isn't done when the vote closes — the judge still has to
+    // pick. _onJudgeSaysResult calls _toReveal() once that verdict lands.
+    if (_isJudgeRound) return;
     _toReveal();
   }
 
@@ -641,6 +826,22 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       for (final s in SeqDef.ten)
         if (!duoRoom || s.duo) s,
     ]..sort((a, b) => order.indexOf(a.vibe).compareTo(order.indexOf(b.vibe)));
+    // Impostor and Who Am I both need real secret roles on real other
+    // phones — server-driven only, and both need a crowd (3+) to work.
+    if (_serverDriven && !duoRoom) {
+      games.add(const SeqDef(
+        name: 'Impostor', icon: '🕵️', hint: 'one of you is lying — find them',
+        vibe: 'wild', duo: false, beats: [],
+      ));
+      games.add(const SeqDef(
+        name: 'Who Am I', icon: '❔', hint: 'everyone else knows. you don’t.',
+        vibe: 'wild', duo: false, beats: [],
+      ));
+      games.add(const SeqDef(
+        name: 'Judge Says', icon: '⚖️', hint: 'everyone answers — one judge crowns the funniest',
+        vibe: 'wild', duo: false, beats: [],
+      ));
+    }
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -706,6 +907,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       GameKind.spin => 18,
       GameKind.freeze => 11,
       GameKind.rapidFire => 13,
+      GameKind.wavelength => 20, // one spoken clue + a guess needs a beat longer than a tap-poll
       _ => 13, // tap-answer kinds — answer, then chat
     };
     final beatSecs = cell.rounds[_round].secs;
@@ -752,6 +954,10 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         _resolveRapid();
       case GameKind.spin:
         _resolveSpin();
+      case GameKind.wavelength:
+        // the clue-giver never answers (they already know it) — only a
+        // silent guesser times out, so autoResolve is always the guesser's.
+        _resolveWavelength(2); // "right down the middle" — the safe fallback
     }
   }
 
@@ -1029,6 +1235,20 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     Timer(const Duration(milliseconds: 650), _toReveal);
   }
 
+  /// Judge Says: the judge's pick, sent AFTER the vote already closed —
+  /// this is never the normal 'answer' message, it's its own round-trip.
+  /// Judge Says is server-driven only (gated in the picker), so there's no
+  /// local-fallback branch to write here.
+  void _resolveJudgePick(int choice) {
+    if (_answered) return;
+    Buzz.commit();
+    setState(() {
+      _selected = choice;
+      _answered = true;
+    });
+    NetworkClient.instance.judgePick(_round, choice);
+  }
+
   void _resolveTwoTruths(int choice) {
     if (_answered) return;
     if (_serverDriven) {
@@ -1044,6 +1264,33 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     setState(() {
       _selected = choice;
       _result = correct ? 'you read them 😏 nailed the lie' : 'they fooled you 😵 slippery';
+    });
+    Timer(const Duration(milliseconds: 650), _toReveal);
+  }
+
+  /// Wavelength: the guesser taps a zone; distance from the hidden target
+  /// (lieIdx) is the whole reveal. The clue-giver never calls this — their
+  /// UI has no buttons to tap.
+  void _resolveWavelength(int choice) {
+    if (_answered) return;
+    if (_serverDriven) {
+      _answered = true;
+      Buzz.commit();
+      setState(() => _selected = choice);
+      NetworkClient.instance.answer(_round, choice);
+      return;
+    }
+    _answered = true;
+    Buzz.commit();
+    final lie = cell.rounds[_round].lieIdx;
+    final dist = lie != null ? (choice - lie).abs() : _r.nextInt(3);
+    setState(() {
+      _selected = choice;
+      _result = dist == 0
+          ? 'bullseye 🎯 exact match'
+          : dist == 1
+              ? 'so close — one zone off'
+              : 'not quite — $dist zones off';
     });
     Timer(const Duration(milliseconds: 650), _toReveal);
   }
@@ -1444,6 +1691,17 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             ),
           // 5 · Chaos Card — full-screen interruption
           if (_chaos != null) _ChaosOverlay(emoji: _chaos![0], text: _chaos![1]),
+          // 5b · Impostor — night reveal, then the discuss banner
+          if (_impostorPhase != null)
+            _ImpostorOverlay(amI: _impostorAmI, phase: _impostorPhase!),
+          // 5c · Who Am I — role reveal, then the final identity reveal
+          if (_whoAmIPhase != null)
+            _WhoAmIOverlay(
+              mine: _whoAmIMine,
+              phase: _whoAmIPhase!,
+              category: _whoAmICategory,
+              identity: _whoAmIIdentity,
+            ),
           // 6 · the ceremony
           if (_phase == _Phase.awards) _awardsOverlay(),
           // 7 · the wheel — revive or next, the wheel decides
@@ -1913,8 +2171,14 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             AnimatedSwitcher(
               duration: M.quick,
               child: Text(
-                // spin games keep the prompt hidden until the bottle lands
-                game.kind == GameKind.spin && !_bottleDone ? 'Spin the Bottle 🍾' : _fill(_prompt.first),
+                // spin games keep the prompt hidden until the bottle lands;
+                // Whisper Challenge hides the phrase from everyone but the
+                // mouther — the whole game is that the guesser can't see it
+                game.kind == GameKind.spin && !_bottleDone
+                    ? 'Spin the Bottle 🍾'
+                    : (_isWhisperRound && !_amClueGiver)
+                        ? '🎧 loud music — read their lips, guess out loud'
+                        : _fill(_prompt.first),
                 key: ValueKey('$_round·$_bottleDone'),
                 style: T.big.copyWith(fontSize: 24, height: 1.12, shadows: const [
                   Shadow(color: Color(0xCC000000), blurRadius: 12),
@@ -1970,7 +2234,19 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           _optBtn(_prompt[2], 1),
         ];
       case GameKind.thumbs:
+        if (_isWhisperRound && !_amClueGiver) {
+          // the guesser has nothing to tap — they're guessing out loud,
+          // audible to the mouther normally; only the mouther judges it
+          return [
+            Text('waiting on their verdict…', style: T.sub.copyWith(color: Colors.white70)),
+          ];
+        }
         return [
+          if (_isWhisperRound)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text('did they get it?', style: T.sub.copyWith(color: Colors.white70)),
+            ),
           Row(children: [
             _thumb('👍', true),
             const SizedBox(width: 10),
@@ -1978,6 +2254,21 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           ]),
         ];
       case GameKind.same:
+        if (_amJudge && !_judgeAsked) {
+          // the vote's still open — the judge has nothing to do yet
+          return [Text('waiting for the room to answer…', style: T.sub.copyWith(color: Colors.white70))];
+        }
+        return [
+          if (_amJudge)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text('crown the funniest 👑', style: T.sub.copyWith(color: Colors.white70)),
+            ),
+          for (var i = 1; i < _prompt.length; i++) ...[
+            _optBtn(_prompt[i], i - 1),
+            if (i < _prompt.length - 1) const SizedBox(height: 8),
+          ],
+        ];
       case GameKind.twoTruths:
         return [
           for (var i = 1; i < _prompt.length; i++) ...[
@@ -1999,6 +2290,36 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               style: T.sub.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
             ),
           ]),
+        ];
+      case GameKind.wavelength:
+        // clue-giver sees the hidden zone and speaks ONE clue — they never
+        // tap. Everyone else gets the normal option buttons to guess.
+        if (_amClueGiver) {
+          final lie = cell.rounds[_round].lieIdx;
+          final zone = (lie != null && lie + 1 < _prompt.length) ? _prompt[lie + 1] : null;
+          return [
+            if (zone != null)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                decoration: BoxDecoration(
+                  color: C.sig.withOpacity(0.22),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: C.sig),
+                ),
+                child: Text('It’s here: $zone',
+                    style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+              ),
+            const SizedBox(height: 8),
+            Text('Give ONE spoken clue — never say the word itself',
+                style: T.sub.copyWith(color: Colors.white70)),
+          ];
+        }
+        return [
+          for (var i = 1; i < _prompt.length; i++) ...[
+            _optBtn(_prompt[i], i - 1),
+            if (i < _prompt.length - 1) const SizedBox(height: 8),
+          ],
         ];
     }
   }
@@ -2034,11 +2355,17 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                 case GameKind.wouldRather:
                   _resolveSplit(index);
                 case GameKind.same:
-                  _resolveSame(index);
+                  if (_amJudge) {
+                    _resolveJudgePick(index);
+                  } else {
+                    _resolveSame(index);
+                  }
                 case GameKind.twoTruths:
                   _resolveTwoTruths(index);
                 case GameKind.rapidFire:
                   _resolveRapid();
+                case GameKind.wavelength:
+                  _resolveWavelength(index);
                 default:
                   break;
               }
@@ -2460,6 +2787,146 @@ class _ChaosOverlay extends StatelessWidget {
   }
 }
 
+/// Impostor's night/discuss banner — same glass-card language as
+/// _ChaosOverlay on purpose (it's the same "read this, then it clears"
+/// shape), swapped content: your secret role, then the discuss countdown.
+class _ImpostorOverlay extends StatelessWidget {
+  const _ImpostorOverlay({required this.amI, required this.phase});
+  final bool amI;
+  final String phase;
+
+  @override
+  Widget build(BuildContext context) {
+    final String emoji;
+    final String title;
+    final String sub;
+    if (phase == 'discuss') {
+      emoji = '💬';
+      title = 'Talk it out';
+      sub = 'One of you isn’t who they say. Who’s lying about their identity?';
+    } else if (amI) {
+      emoji = '🕵️';
+      title = 'You are the Impostor';
+      sub = 'Blend in — you vote too, same as everyone else';
+    } else {
+      emoji = '👀';
+      title = 'You are Crew';
+      sub = 'One of you isn’t who they say. Watch closely.';
+    }
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: const Color(0xB3000000),
+          alignment: Alignment.center,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.7, end: 1),
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutBack,
+            builder: (context, v, child) =>
+                Opacity(opacity: v.clamp(0, 1), child: Transform.scale(scale: v, child: child)),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 34),
+              padding: const EdgeInsets.fromLTRB(26, 30, 26, 30),
+              decoration: BoxDecoration(
+                color: const Color(0xF2140A1E),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: C.sig, width: 1.5),
+                boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 60, spreadRadius: -10)],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('🕵️ IMPOSTOR ROUND',
+                      style: T.eyebrow.copyWith(color: C.live, letterSpacing: 3, fontSize: 12)),
+                  const SizedBox(height: 18),
+                  Text(emoji, style: const TextStyle(fontSize: 58)),
+                  const SizedBox(height: 16),
+                  Text(title, textAlign: TextAlign.center, style: T.big.copyWith(fontSize: 24, height: 1.15)),
+                  const SizedBox(height: 10),
+                  Text(sub,
+                      textAlign: TextAlign.center,
+                      style: T.body.copyWith(color: Colors.white70, fontSize: 14.5, height: 1.4)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Who Am I's banner — the inverse of _ImpostorOverlay's split: everyone
+/// but the target already knows and just watches; the target sees nothing
+/// until the final reveal. Same glass-card language as the other two.
+class _WhoAmIOverlay extends StatelessWidget {
+  const _WhoAmIOverlay({required this.mine, required this.phase, this.category, this.identity});
+  final bool mine;
+  final String phase;
+  final String? category;
+  final String? identity;
+
+  @override
+  Widget build(BuildContext context) {
+    final String emoji;
+    final String title;
+    final String sub;
+    if (phase == 'reveal') {
+      emoji = '🎭';
+      title = 'You were: ${identity ?? '???'}';
+      sub = 'Reveal time — how many questions did it take?';
+    } else if (mine) {
+      emoji = '❔';
+      title = 'You don’t know who you are';
+      sub = '${category ?? 'Someone'} — ask the room yes/no questions out loud';
+    } else {
+      emoji = '👀';
+      title = 'They are: ${identity ?? '???'}';
+      sub = 'Don’t say it — just answer their questions';
+    }
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: const Color(0xB3000000),
+          alignment: Alignment.center,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.7, end: 1),
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutBack,
+            builder: (context, v, child) =>
+                Opacity(opacity: v.clamp(0, 1), child: Transform.scale(scale: v, child: child)),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 34),
+              padding: const EdgeInsets.fromLTRB(26, 30, 26, 30),
+              decoration: BoxDecoration(
+                color: const Color(0xF2140A1E),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: C.sig, width: 1.5),
+                boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 60, spreadRadius: -10)],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('❔ WHO AM I',
+                      style: T.eyebrow.copyWith(color: C.live, letterSpacing: 3, fontSize: 12)),
+                  const SizedBox(height: 18),
+                  Text(emoji, style: const TextStyle(fontSize: 58)),
+                  const SizedBox(height: 16),
+                  Text(title, textAlign: TextAlign.center, style: T.big.copyWith(fontSize: 24, height: 1.15)),
+                  const SizedBox(height: 10),
+                  Text(sub,
+                      textAlign: TextAlign.center,
+                      style: T.body.copyWith(color: Colors.white70, fontSize: 14.5, height: 1.4)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// One of THE TEN in the picker — a living emoji tile, the name, the recipe,
 /// and a beat count. Slides in with a tiny stagger.
 class _GameRow extends StatefulWidget {
@@ -2570,7 +3037,7 @@ class _GameRowState extends State<_GameRow> with SingleTickerProviderStateMixin 
                 ),
               ),
               const SizedBox(width: 10),
-              Text('${g.beats.length} rounds',
+              Text(g.beats.isEmpty ? 'social deduction' : '${g.beats.length} rounds',
                   style: T.tiny.copyWith(color: C.tx3, fontSize: 10.5)),
               const SizedBox(width: 6),
               const Icon(Icons.chevron_right_rounded, size: 18, color: C.tx3),

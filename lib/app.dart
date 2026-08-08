@@ -17,6 +17,7 @@ import 'net/network_client.dart';
 import 'net/p2p_service.dart';
 import 'net/rtc_service.dart';
 import 'state/chat.dart';
+import 'state/notify.dart';
 import 'state/session.dart';
 import 'state/social.dart';
 import 'theme/tokens.dart';
@@ -24,8 +25,10 @@ import 'widgets/glass.dart';
 import 'widgets/incoming_call_overlay.dart';
 import 'widgets/room_knock_overlay.dart';
 import 'widgets/match_overlay.dart';
+import 'widgets/notification_toast.dart';
 import 'widgets/rating_overlay.dart';
 import 'screens/chat_screen.dart';
+import 'screens/friend_profile_screen.dart';
 import 'screens/friends_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/signin_screen.dart';
@@ -707,6 +710,38 @@ class _RootState extends State<_Root> {
               );
             }
             return const SizedBox.shrink();
+          },
+        ),
+        // ---- notification toasts: a small top banner, never blocking, never
+        // over a live room. Independent of the block above — a friend
+        // request/message can pop in even while a call/match overlay is
+        // showing, since they occupy different parts of the screen.
+        AnimatedBuilder(
+          animation: Notify.instance,
+          builder: (context, _) {
+            final t = Notify.instance.current;
+            if (t == null || _step == _Step.live) return const SizedBox.shrink();
+            return NotificationToast(
+              key: ValueKey('toast${t.kind}${t.uid}${t.title}'),
+              toast: t,
+              onDismiss: () => Notify.instance.pop(),
+              onTap: () {
+                Notify.instance.pop();
+                switch (t.kind) {
+                  case ToastKind.friendRequest:
+                    FriendProfileScreen.push(context, uid: t.uid, name: t.name, hue: t.hue);
+                  case ToastKind.message:
+                    ChatScreen.push(context, uid: t.uid, name: t.name, hue: t.hue);
+                  case ToastKind.roomInvite:
+                    final code = t.extra;
+                    if (code != null && code.isNotEmpty) {
+                      _partyInviteUid = null;
+                      _partyCode = code;
+                      _to(_Step.party);
+                    }
+                }
+              },
+            );
           },
         ),
       ],

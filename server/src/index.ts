@@ -10,7 +10,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'crypto';
-import { rollGame, SEQ_PACK, seqByName, type GameKind, type SeqDef } from './games.js';
+import { rollGame, SEQ_PACK, seqByName, PACK, type GameKind, type SeqDef } from './games.js';
 import { store, type User, type Meet, type Cell, type RoundWire } from './store.js';
 import { mintToken, LIVEKIT_URL } from './livekit.js';
 import * as db from './db.js';
@@ -254,6 +254,7 @@ const ROUND_SECS: Record<string, number> = {
   spin: 18,      // bottle + the target performs
   freeze: 11,
   rapidFire: 13,
+  wavelength: 20, // one spoken clue + a guess needs a beat longer than a tap-poll
 };
 const secsFor = (kind: string) => ROUND_SECS[kind] ?? 13; // tap-answer kinds
 
@@ -309,7 +310,7 @@ function rollSession(strangers: number): RoundWire[] {
     rounds.push({
       kind: r.game.kind, name: r.game.name, hint: r.game.hint, prompt: r.prompt,
       targetId: null, // filled per-cell (needs member ids)
-      lieIdx: r.game.kind === 'twoTruths'
+      lieIdx: r.game.kind === 'twoTruths' || r.game.kind === 'wavelength'
         ? Math.floor(Math.random() * Math.max(1, r.prompt.length - 1))
         : undefined,
     });
@@ -338,14 +339,18 @@ function startPickedGame(cell: Cell, name?: string) {
   cell.seqBeats = seq.beats.map((b) => {
     const prompt = [...b.pool[Math.floor(Math.random() * b.pool.length)]];
     const head = prompt.shift()!;
-    for (let i = prompt.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [prompt[i], prompt[j]] = [prompt[j], prompt[i]];
+    // same order-sensitive exception as rollGame: twoTruths' "first/second/
+    // third" and wavelength's spectrum both need to stay in place.
+    if (b.kind !== 'twoTruths' && b.kind !== 'wavelength') {
+      for (let i = prompt.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [prompt[i], prompt[j]] = [prompt[j], prompt[i]];
+      }
     }
     return {
       kind: b.kind, name: seq.name, hint: seq.hint, prompt: [head, ...prompt],
       targetId: pick(cell.members),
-      lieIdx: b.kind === 'twoTruths'
+      lieIdx: b.kind === 'twoTruths' || b.kind === 'wavelength'
         ? Math.floor(Math.random() * Math.max(1, prompt.length)) : undefined,
       secs: b.secs,
     } as RoundWire & { secs?: number };
@@ -372,6 +377,181 @@ function startBeat(cell: Cell) {
     const c = store.cells.get(cell.id);
     if (c && c.roundIdx === idx) endRound(c);
   }, secs * 1000);
+}
+
+// ---- Impostor ---------------------------------------------------------
+// Mafia/Werewolf's skeleton, Among Us's pacing: one secret role, a silent
+// night, an open discussion, then a vote — real lie-detection with your
+// actual face and voice as the only tools. The vote itself is NOT new
+// machinery: it's a normal 'point' round (tap a face), so endRound's
+// existing point branch does all the tallying. The only new pieces are the
+// secret role (sent per-member, never broadcast) and the two timed phases
+// before the vote opens.
+const IMPOSTOR_NIGHT_MS = 10_000;
+const IMPOSTOR_DISCUSS_MS = 50_000;
+const IMPOSTOR_VOTE_SECS = 20;
+
+function startImpostor(cell: Cell): void {
+  if (cell.inRound) return;
+  // needs a real crowd — the "night" has nothing to hide behind at 2
+  if (cell.members.length < 3) { startPickedGame(cell); return; }
+
+  const impostorId = pick(cell.members);
+  cell.impostorId = impostorId;
+  cell.inRound = true; // blocks other picks until the sequence resolves
+
+  const nightEndsAt = Date.now() + IMPOSTOR_NIGHT_MS;
+  for (const mid of cell.members) {
+    const u = store.users.get(mid);
+    if (u) send(u, { t: 'impostorRole', role: mid === impostorId ? 'impostor' : 'crew', endsAt: nightEndsAt });
+  }
+
+  later(cell.id, IMPOSTOR_NIGHT_MS, (c) => {
+    const discussEndsAt = Date.now() + IMPOSTOR_DISCUSS_MS;
+    broadcastCell(c.id, { t: 'impostorPhase', phase: 'discuss', endsAt: discussEndsAt });
+    later(c.id, IMPOSTOR_DISCUSS_MS, (c2) => startImpostorVote(c2));
+  });
+}
+
+function startImpostorVote(cell: Cell): void {
+  // a member could have left mid-sequence — the round still runs, endRound's
+  // normal fallback (`winner ??= pick(members)`) covers an empty tally
+  const wire: RoundWire = {
+    kind: 'point', name: 'Impostor', hint: 'one of you isn’t who they say — point at the impostor',
+    prompt: ['Point at who you think is lying about their identity'],
+    targetId: null,
+  };
+  const idx = cell.roundIdx + 1;
+  cell.roundIdx = idx;
+  if (idx < cell.rounds.length) cell.rounds[idx] = wire; else cell.rounds.push(wire);
+  cell.answers = new Map();
+  cell.inRound = true;
+
+  const endsAt = Date.now() + IMPOSTOR_VOTE_SECS * 1000;
+  broadcastCell(cell.id, { t: 'round', idx, endsAt, game: wire, beat: 1, beats: 1 });
+  if (cell.roundTimer) clearTimeout(cell.roundTimer);
+  cell.roundTimer = setTimeout(() => {
+    const c = store.cells.get(cell.id);
+    if (c && c.roundIdx === idx) endRound(c);
+  }, IMPOSTOR_VOTE_SECS * 1000);
+}
+
+// ---- Who Am I ----------------------------------------------------------
+// Celebrity Heads' shape, not Twenty's: the whole ROOM feeds the target,
+// not one asker. Deliberately simple — the questioning is real voice, not
+// an app mechanic (same call as Impostor's discuss phase and Twenty's
+// yes/no), so this needed no answer-tallying at all: reveal to the room,
+// timed ask window, reveal to the target. No new GameKind, no round.
+const WHO_AM_I_ASK_MS = 45_000;
+const WHO_AM_I_POOL: [string, ...string[]][] = [
+  ['Celebrities', 'Beyoncé', 'Dwayne Johnson', 'Taylor Swift', 'Gordon Ramsay', 'Lady Gaga', 'Bob Ross'],
+  ['Disney & Movie Characters', 'Shrek', 'Elsa', 'Darth Vader', 'Mickey Mouse', 'Spider-Man', 'Yoda'],
+  ['Jobs', 'Astronaut', 'Detective', 'Chef', 'Pilot', 'Surgeon', 'Lifeguard'],
+  ['Animals', 'Platypus', 'Kangaroo', 'Penguin', 'Sloth', 'Narwhal', 'Peacock'],
+];
+
+function startWhoAmI(cell: Cell): void {
+  if (cell.inRound) return;
+  // the whole trick is a crowd that knows and one person who doesn't
+  if (cell.members.length < 3) { startPickedGame(cell); return; }
+
+  const target = pick(cell.members);
+  const [category, ...names] = pick(WHO_AM_I_POOL);
+  const identity = pick(names);
+  cell.inRound = true;
+
+  for (const mid of cell.members) {
+    const u = store.users.get(mid);
+    if (!u) continue;
+    send(u, mid === target
+      ? { t: 'whoAmIRole', mine: true, category, endsAt: Date.now() + WHO_AM_I_ASK_MS }
+      : { t: 'whoAmIRole', mine: false, category, identity, endsAt: Date.now() + WHO_AM_I_ASK_MS });
+  }
+
+  later(cell.id, WHO_AM_I_ASK_MS, (c) => {
+    broadcastCell(c.id, { t: 'whoAmIReveal', identity });
+    c.inRound = false;
+    c.gamesPlayed += 1;
+    for (const mid of c.members) {
+      const uid = c.meta.get(mid)?.uid;
+      if (uid) social.onGameComplete(uid);
+    }
+    if (c.gamesPlayed % 3 === 0) {
+      later(c.id, 3000, (c2) => sendAwards(c2));
+    } else {
+      later(c.id, 3000, (c2) => broadcastCell(c2.id, { t: 'talk' }));
+    }
+  });
+}
+
+// ---- Judge Says ---------------------------------------------------------
+// Cards Against Humanity's real shape. The vote half is NOT new machinery
+// — it's a normal 'same' round (tap one of the pre-written options), so
+// endRound's existing option-tally branch does all the counting. What's
+// new: the round's target is the judge and never votes, and the round
+// isn't actually over when the vote closes — the judge still has to crown
+// one, via a distinct judgePick round-trip (see the 'judgePick' message
+// handler and the hook inside endRound below).
+const JUDGE_SAYS_VOTE_SECS = 20;
+
+function startJudgeSays(cell: Cell): void {
+  if (cell.inRound) return;
+  // needs real competition among voters to be worth judging
+  if (cell.members.length < 3) { startPickedGame(cell); return; }
+  const game = PACK.find((g) => g.name === 'Judge Says');
+  if (!game) { startPickedGame(cell); return; }
+
+  const judgeId = pick(cell.members);
+  const prompt = pick(game.prompts);
+  const wire: RoundWire = { kind: 'same', name: game.name, hint: game.hint, prompt, targetId: judgeId };
+
+  cell.judgeSaysId = judgeId;
+  const idx = cell.roundIdx + 1;
+  cell.roundIdx = idx;
+  if (idx < cell.rounds.length) cell.rounds[idx] = wire; else cell.rounds.push(wire);
+  cell.answers = new Map();
+  cell.inRound = true;
+
+  const endsAt = Date.now() + JUDGE_SAYS_VOTE_SECS * 1000;
+  broadcastCell(cell.id, { t: 'round', idx, endsAt, game: wire, beat: 1, beats: 1 });
+  if (cell.roundTimer) clearTimeout(cell.roundTimer);
+  cell.roundTimer = setTimeout(() => {
+    const c = store.cells.get(cell.id);
+    if (c && c.roundIdx === idx) endRound(c);
+  }, JUDGE_SAYS_VOTE_SECS * 1000);
+}
+
+/// Everything that happens once a round is TRULY finished — more beats,
+/// the ceremony, or back to the hang. Its own function because Judge Says
+/// needs to skip it once (right when the vote closes) and call it again
+/// later, once the judge actually picks.
+function finishRound(cell: Cell): void {
+  // more beats in this game? quick flip, straight into the next beat
+  if (cell.seqBeats && cell.seqPos < cell.seqBeats.length - 1) {
+    cell.seqPos += 1;
+    later(cell.id, 2000, (c) => startBeat(c));
+    return;
+  }
+
+  // game complete — the reveal breathes, then back to the hang. Every 3rd
+  // game earns a ceremony. Roulette rooms roll the next game automatically.
+  cell.seqBeats = undefined;
+  cell.gamesPlayed += 1;
+  for (const mid of cell.members) {
+    const uid = cell.meta.get(mid)?.uid;
+    if (uid) social.onGameComplete(uid);
+  }
+  if (cell.gamesPlayed % 3 === 0) {
+    later(cell.id, 3500, (c) => sendAwards(c));
+    if (cell.mode === 'roulette') {
+      later(cell.id, 12000, (c) => { if (!c.inRound) startPickedGame(c); });
+    }
+  } else {
+    later(cell.id, 3500, (c) => broadcastCell(c.id, { t: 'talk' }));
+    if (cell.mode === 'roulette') {
+      later(cell.id, 8000, (c) => { if (!c.inRound) startPickedGame(c); });
+    }
+  }
 }
 
 function endRound(cell: Cell) {
@@ -417,32 +597,36 @@ function endRound(cell: Cell) {
   cell.inRound = false;
   broadcastCell(cell.id, msg);
 
-  // more beats in this game? quick flip, straight into the next beat
-  if (cell.seqBeats && cell.seqPos < cell.seqBeats.length - 1) {
-    cell.seqPos += 1;
-    later(cell.id, 2000, (c) => startBeat(c));
-    return;
+  // this point round was secretly an Impostor accusation — reveal the
+  // truth a beat after the normal "the room pointed at X" lands, so the
+  // vote result and the verdict read as two distinct beats, not one. The
+  // client's own reveal countdown runs ~1.3s before it even shows the vote
+  // result, so this waits past that before overwriting it with the verdict.
+  if (kind === 'point' && cell.impostorId) {
+    const accusedId = typeof msg.winnerId === 'string' ? msg.winnerId : null;
+    const impostorId = cell.impostorId;
+    cell.impostorId = undefined;
+    later(cell.id, 2600, (c) => {
+      broadcastCell(c.id, { t: 'impostorReveal', impostorId, accusedId, correct: accusedId === impostorId });
+    });
   }
 
-  // game complete — the reveal breathes, then back to the hang. Every 3rd
-  // game earns a ceremony. Roulette rooms roll the next game automatically.
-  cell.seqBeats = undefined;
-  cell.gamesPlayed += 1;
-  for (const mid of cell.members) {
-    const uid = cell.meta.get(mid)?.uid;
-    if (uid) social.onGameComplete(uid);
-  }
-  if (cell.gamesPlayed % 3 === 0) {
-    later(cell.id, 3500, (c) => sendAwards(c));
-    if (cell.mode === 'roulette') {
-      later(cell.id, 12000, (c) => { if (!c.inRound) startPickedGame(c); });
+  // this 'same' round was secretly Judge Says — the vote just closed, but
+  // the round isn't over: the judge still has to crown one. Ask them (they
+  // already have the options from the round's own prompt) and PAUSE —
+  // finishRound runs from the 'judgePick' handler instead, once they pick.
+  if (kind === 'same' && cell.judgeSaysId) {
+    const judgeId = cell.judgeSaysId;
+    const judge = store.users.get(judgeId);
+    if (judge) {
+      cell.inRound = true; // still mid-sequence — re-lock after the false above
+      later(cell.id, 1200, () => send(judge, { t: 'judgeAsk', round: idx }));
+      return;
     }
-  } else {
-    later(cell.id, 3500, (c) => broadcastCell(c.id, { t: 'talk' }));
-    if (cell.mode === 'roulette') {
-      later(cell.id, 8000, (c) => { if (!c.inRound) startPickedGame(c); });
-    }
+    cell.judgeSaysId = undefined; // judge vanished — fall through as normal
   }
+
+  finishRound(cell);
 }
 
 function sendAwards(cell: Cell) {
@@ -1112,7 +1296,10 @@ wss.on('connection', (ws, req) => {
         const cell = user.cellId ? store.cells.get(user.cellId) : undefined;
         // roulette rooms don't take requests — the wheel of fate runs them
         if (cell && cell.mode !== 'roulette') {
-          startPickedGame(cell, typeof m.name === 'string' ? m.name : undefined);
+          if (m.name === 'Impostor') startImpostor(cell);
+          else if (m.name === 'Who Am I') startWhoAmI(cell);
+          else if (m.name === 'Judge Says') startJudgeSays(cell);
+          else startPickedGame(cell, typeof m.name === 'string' ? m.name : undefined);
         }
         break;
       }
@@ -1133,8 +1320,11 @@ wss.on('connection', (ws, req) => {
         const cell = store.cells.get(user.cellId);
         if (cell && (m.round == null || m.round === cell.roundIdx)) {
           cell.answers.set(id, m.v);
-          // everyone's in — a quick beat to see it, then flip early
-          if (cell.answers.size >= cell.members.length && cell.roundTimer) {
+          // everyone's in — a quick beat to see it, then flip early. Judge
+          // Says' judge never submits an answer (they vote later, on a
+          // separate round-trip), so they don't count toward "everyone".
+          const need = cell.members.length - (cell.judgeSaysId ? 1 : 0);
+          if (cell.answers.size >= need && cell.roundTimer) {
             clearTimeout(cell.roundTimer);
             const idx = cell.roundIdx;
             cell.roundTimer = setTimeout(() => {
@@ -1143,6 +1333,32 @@ wss.on('connection', (ws, req) => {
             }, 2000);
           }
         }
+        break;
+      }
+      case 'judgePick': {
+        // only the judge can end a Judge Says round, and only for the round
+        // they were actually asked about — a stale/spoofed pick is a no-op
+        if (!user.cellId) break;
+        const cell = store.cells.get(user.cellId);
+        if (!cell || cell.judgeSaysId !== id) break;
+        const jIdx = typeof m.round === 'number' ? m.round : cell.roundIdx;
+        const round = cell.rounds[jIdx];
+        if (!round || round.name !== 'Judge Says') break;
+        const choice = typeof m.choice === 'number' ? Math.trunc(m.choice) : -1;
+        const nOpts = Math.max(0, round.prompt.length - 1);
+        if (choice < 0 || choice >= nOpts) break;
+
+        // who submitted the winning option, if determinable (first found on a tie)
+        let winnerId: string | null = null;
+        for (const [mid, v] of cell.answers) if (v === choice) { winnerId = mid; break; }
+        cell.judgeSaysId = undefined;
+        if (winnerId) {
+          cell.lastWinnerId = winnerId;
+          const uid = cell.meta.get(winnerId)?.uid;
+          if (uid) social.onPointWin(uid); // Storyteller badge fuel, same as a point-round win
+        }
+        broadcastCell(cell.id, { t: 'judgeSaysResult', round: jIdx, winnerIdx: choice, winnerId });
+        finishRound(cell);
         break;
       }
       case 'react':

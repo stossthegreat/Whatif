@@ -11,6 +11,7 @@ import '../state/session.dart';
 import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
+import '../widgets/notification_bell.dart';
 import '../widgets/portal_ring.dart';
 import '../widgets/self_view.dart';
 import 'settings_screen.dart';
@@ -150,6 +151,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       const Wordmark(size: 32),
                       const Spacer(),
                       const _LivePill(),
+                      const SizedBox(width: 8),
+                      const NotificationBell(size: 34, iconSize: 17),
                       const SizedBox(width: 8),
                       _RoundBtn(
                         icon: Icons.settings_rounded,
