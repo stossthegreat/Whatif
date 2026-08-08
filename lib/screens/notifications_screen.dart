@@ -124,58 +124,139 @@ class NotificationsScreen extends StatelessWidget {
       );
 }
 
+/// The shared card shell every notification row sits inside — real depth
+/// (gradient, not a flat tint), a specular top hairline (the same trick
+/// Glass uses, without BackdropFilter's per-row GPU cost in a long scroll),
+/// a soft lift shadow, and a coloured accent bar that says what kind of
+/// thing this is before you've even read it.
+class _NotifCard extends StatelessWidget {
+  const _NotifCard({required this.accent, required this.onTap, required this.child, this.glow = false});
+  final Color accent;
+  final VoidCallback onTap;
+  final Widget child;
+  final bool glow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Press(
+        haptic: false,
+        scale: 0.98,
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.card),
+            boxShadow: [
+              const BoxShadow(color: Color(0x66000000), blurRadius: 18, offset: Offset(0, 8)),
+              if (glow) BoxShadow(color: accent.withOpacity(0.35), blurRadius: 26, spreadRadius: -14),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(R.card),
+            child: Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [accent.withOpacity(0.16), C.char2.withOpacity(0.55)],
+                    ),
+                    border: Border.all(color: C.hair2),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 3,
+                        height: 40,
+                        margin: const EdgeInsets.only(right: 12),
+                        decoration: BoxDecoration(
+                          color: accent,
+                          borderRadius: const BorderRadius.all(Radius.circular(100)),
+                          boxShadow: [BoxShadow(color: accent.withOpacity(0.7), blurRadius: 8, spreadRadius: -1)],
+                        ),
+                      ),
+                      Expanded(child: child),
+                    ],
+                  ),
+                ),
+                // specular hairline — Glass's gloss trick, no blur needed
+                Positioned(
+                  top: 0,
+                  left: R.card * 0.5,
+                  right: R.card * 0.5,
+                  child: Container(
+                    height: 1,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(colors: [Color(0x00FFFFFF), C.spec, Color(0x00FFFFFF)]),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RequestRow extends StatelessWidget {
   const _RequestRow({required this.friend});
   final FriendInfo friend;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Press(
-        haptic: false,
-        onTap: () {
-          Buzz.tick();
-          FriendProfileScreen.push(context, uid: friend.uid, name: friend.name, hue: friend.hue);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          decoration: BoxDecoration(color: C.sig.withOpacity(0.06), borderRadius: BorderRadius.circular(16)),
-          child: Row(
-            children: [
-              Avatar(hue: friend.hue, photoId: friend.photoId, size: 46),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('@${friend.name}', style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15.5)),
-                    const SizedBox(height: 2),
-                    Text('wants to be friends', style: T.tiny.copyWith(color: C.tx3, fontSize: 12.5)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Press(
-                onTap: () { Buzz.commit(); SocialState.instance.decline(friend.uid); },
-                child: Container(
-                  width: 34, height: 34,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0x33FF3B5C)),
-                  child: const Icon(Icons.close_rounded, size: 17, color: C.live),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Press(
-                onTap: () { Buzz.commit(); SocialState.instance.accept(friend.uid); },
-                child: Container(
-                  width: 34, height: 34,
-                  decoration: const BoxDecoration(shape: BoxShape.circle, gradient: C.gradSig),
-                  child: const Icon(Icons.check_rounded, size: 18, color: Colors.white),
-                ),
-              ),
-            ],
+    return _NotifCard(
+      accent: C.sig,
+      glow: true,
+      onTap: () {
+        Buzz.tick();
+        FriendProfileScreen.push(context, uid: friend.uid, name: friend.name, hue: friend.hue);
+      },
+      child: Row(
+        children: [
+          Avatar(hue: friend.hue, photoId: friend.photoId, size: 48, ring: C.sig),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('@${friend.name}', style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15.5)),
+                const SizedBox(height: 3),
+                Row(children: [
+                  const Icon(Icons.person_add_alt_1_rounded, size: 12, color: C.sig),
+                  const SizedBox(width: 4),
+                  Text('wants to be friends', style: T.tiny.copyWith(color: C.sig, fontSize: 12.5, fontWeight: FontWeight.w700)),
+                ]),
+              ],
+            ),
           ),
-        ),
+          const SizedBox(width: 8),
+          Press(
+            onTap: () { Buzz.commit(); SocialState.instance.decline(friend.uid); },
+            child: Container(
+              width: 36, height: 36,
+              decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0x33FF3B5C)),
+              child: const Icon(Icons.close_rounded, size: 18, color: C.live),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Press(
+            onTap: () { Buzz.commit(); SocialState.instance.accept(friend.uid); },
+            child: Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: C.gradSig,
+                boxShadow: C.glowSig(blur: 14, spread: -5),
+              ),
+              child: const Icon(Icons.check_rounded, size: 19, color: Colors.white),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -187,41 +268,39 @@ class _MessageRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Press(
-        haptic: false,
-        onTap: () {
-          Buzz.tick();
-          ChatScreen.push(context, uid: chat.uid, name: chat.name, hue: chat.hue);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          decoration: BoxDecoration(color: C.sig.withOpacity(0.06), borderRadius: BorderRadius.circular(16)),
-          child: Row(
-            children: [
-              Avatar(hue: chat.hue, photoId: chat.photoId, size: 46, live: chat.online),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('@${chat.name}', style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15.5)),
-                    const SizedBox(height: 2),
-                    Text(chat.preview, maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: T.tiny.copyWith(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: const BoxDecoration(color: C.acid, borderRadius: BorderRadius.all(Radius.circular(100))),
-                child: Text('${chat.unread}',
-                    style: const TextStyle(fontSize: 11, color: Colors.black, fontWeight: FontWeight.w800)),
-              ),
-            ],
+    return _NotifCard(
+      accent: C.acid,
+      onTap: () {
+        Buzz.tick();
+        ChatScreen.push(context, uid: chat.uid, name: chat.name, hue: chat.hue);
+      },
+      child: Row(
+        children: [
+          Avatar(hue: chat.hue, photoId: chat.photoId, size: 48, live: chat.online),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('@${chat.name}', style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15.5)),
+                const SizedBox(height: 3),
+                Text(chat.preview, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: T.tiny.copyWith(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600)),
+              ],
+            ),
           ),
-        ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: C.acid,
+              borderRadius: const BorderRadius.all(Radius.circular(100)),
+              boxShadow: [BoxShadow(color: C.acidGlow, blurRadius: 10, spreadRadius: -2)],
+            ),
+            child: Text('${chat.unread}',
+                style: const TextStyle(fontSize: 11.5, color: Colors.black, fontWeight: FontWeight.w800)),
+          ),
+        ],
       ),
     );
   }
@@ -253,32 +332,29 @@ class _ActivityRow extends StatelessWidget {
     final hue = known.isEmpty ? 210.0 : known.first.hue;
     final photoId = known.isEmpty ? null : known.first.photoId;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Press(
-        haptic: false,
-        onTap: () {
-          Buzz.tick();
-          FriendProfileScreen.push(context, uid: item.uid, name: item.name, hue: hue);
-        },
-        child: Row(
-          children: [
-            Avatar(hue: hue, photoId: photoId, size: 38),
-            const SizedBox(width: 12),
-            Icon(_icon, size: 14, color: C.tx3),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text.rich(
-                TextSpan(children: [
-                  TextSpan(text: '@${item.name} ', style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
-                  TextSpan(text: _line, style: T.tiny.copyWith(color: C.tx3, fontSize: 13)),
-                ]),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
+    return _NotifCard(
+      accent: C.blue,
+      onTap: () {
+        Buzz.tick();
+        FriendProfileScreen.push(context, uid: item.uid, name: item.name, hue: hue);
+      },
+      child: Row(
+        children: [
+          Avatar(hue: hue, photoId: photoId, size: 38),
+          const SizedBox(width: 12),
+          Icon(_icon, size: 14, color: C.tx3),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(text: '@${item.name} ', style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                TextSpan(text: _line, style: T.tiny.copyWith(color: C.tx3, fontSize: 13)),
+              ]),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
