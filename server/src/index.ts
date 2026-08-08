@@ -153,6 +153,11 @@ async function joinCell(cell: Cell, u: User) {
     game: cell.rounds[0], rounds: cell.rounds, golden: cell.golden,
     luckyId: cell.luckyId, mode: cell.mode });
   notifyLive(u);
+  // a lonely roulette room was holding its fire (solo rooms don't play) —
+  // now that there are two real people, light it up after a hello-beat
+  if (cell.mode === 'roulette' && cell.members.length === 2 && !cell.inRound) {
+    later(cell.id, 4000, (c) => { if (!c.inRound) startPickedGame(c); });
+  }
 }
 function dequeue(id: string) {
   const i = store.queue.indexOf(id);
@@ -328,6 +333,11 @@ function assignTargets(rounds: RoundWire[], members: string[]) {
 /// name, or the dice (or roulette mode) picked it. Beats auto-chain.
 function startPickedGame(cell: Cell, name?: string) {
   if (cell.inRound) return; // one game at a time
+  // Solo rooms don't play. Every game here is social — a vote round alone
+  // renders "tap a face to vote" over zero faces, and a confession alone
+  // is a man agreeing with himself. The room waits; joinCell starts the
+  // first game the moment a real person walks in.
+  if (cell.members.length < 2) return;
   // Duo rooms (the most common shape) only ever get duo-suited games —
   // "point at the person who…" copy is a group sport. A group-only name
   // picked in a duo falls back into the duo pool instead of erroring.
@@ -733,6 +743,7 @@ async function formCell(memberIds: string[], modeOverride?: 'call') {
     const chaosCount = 1 + Math.floor(Math.random() * 2);
     for (let i = 0; i < chaosCount; i++) {
       later(cellId, 15000 + Math.floor(Math.random() * 90000), (c) => {
+        if (c.members.length < 2) return; // chaos needs witnesses
         const [e, x] = pickChaos(c.members.length);
         broadcastCell(c.id, { t: 'chaos', e, x });
       });
