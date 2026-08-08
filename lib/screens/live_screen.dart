@@ -2790,29 +2790,27 @@ class _ChaosOverlay extends StatelessWidget {
 /// Impostor's night/discuss banner — same glass-card language as
 /// _ChaosOverlay on purpose (it's the same "read this, then it clears"
 /// shape), swapped content: your secret role, then the discuss countdown.
-class _ImpostorOverlay extends StatelessWidget {
-  const _ImpostorOverlay({required this.amI, required this.phase});
-  final bool amI;
-  final String phase;
+/// The shared modal shell for Impostor/Who Am I's full-screen beats — same
+/// family as _NotifCard's elevated-card language (specular gloss hairline,
+/// two-layer shadow, a colour that actually means something), scaled up to
+/// the centered-modal shape _ChaosOverlay/_MatchOverlay already use, so nine
+/// months from now this doesn't read as three different design eras.
+class _RoundCardOverlay extends StatelessWidget {
+  const _RoundCardOverlay({
+    required this.eyebrow,
+    required this.emoji,
+    required this.title,
+    required this.sub,
+    required this.accent,
+  });
+  final String eyebrow;
+  final String emoji;
+  final String title;
+  final String sub;
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
-    final String emoji;
-    final String title;
-    final String sub;
-    if (phase == 'discuss') {
-      emoji = '💬';
-      title = 'Talk it out';
-      sub = 'One of you isn’t who they say. Who’s lying about their identity?';
-    } else if (amI) {
-      emoji = '🕵️';
-      title = 'You are the Impostor';
-      sub = 'Blend in — you vote too, same as everyone else';
-    } else {
-      emoji = '👀';
-      title = 'You are Crew';
-      sub = 'One of you isn’t who they say. Watch closely.';
-    }
     return Positioned.fill(
       child: IgnorePointer(
         child: Container(
@@ -2826,27 +2824,66 @@ class _ImpostorOverlay extends StatelessWidget {
                 Opacity(opacity: v.clamp(0, 1), child: Transform.scale(scale: v, child: child)),
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 34),
-              padding: const EdgeInsets.fromLTRB(26, 30, 26, 30),
               decoration: BoxDecoration(
-                color: const Color(0xF2140A1E),
                 borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: C.sig, width: 1.5),
-                boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 60, spreadRadius: -10)],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('🕵️ IMPOSTOR ROUND',
-                      style: T.eyebrow.copyWith(color: C.live, letterSpacing: 3, fontSize: 12)),
-                  const SizedBox(height: 18),
-                  Text(emoji, style: const TextStyle(fontSize: 58)),
-                  const SizedBox(height: 16),
-                  Text(title, textAlign: TextAlign.center, style: T.big.copyWith(fontSize: 24, height: 1.15)),
-                  const SizedBox(height: 10),
-                  Text(sub,
-                      textAlign: TextAlign.center,
-                      style: T.body.copyWith(color: Colors.white70, fontSize: 14.5, height: 1.4)),
+                boxShadow: [
+                  const BoxShadow(color: Color(0x80000000), blurRadius: 40, offset: Offset(0, 16)),
+                  BoxShadow(color: accent.withOpacity(0.45), blurRadius: 60, spreadRadius: -10),
                 ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(30),
+                child: Stack(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(26, 30, 26, 30),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [accent.withOpacity(0.22), const Color(0xF2140A1E)],
+                        ),
+                        border: Border.all(color: accent.withOpacity(0.6), width: 1.5),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(eyebrow, style: T.eyebrow.copyWith(color: accent, letterSpacing: 3, fontSize: 12)),
+                          const SizedBox(height: 18),
+                          // the emoji medallion — a soft glow ring behind it
+                          // instead of a bare floating glyph
+                          Container(
+                            width: 84,
+                            height: 84,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(colors: [accent.withOpacity(0.25), Colors.transparent]),
+                            ),
+                            child: Text(emoji, style: const TextStyle(fontSize: 52)),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(title, textAlign: TextAlign.center, style: T.big.copyWith(fontSize: 24, height: 1.15)),
+                          const SizedBox(height: 10),
+                          Text(sub,
+                              textAlign: TextAlign.center,
+                              style: T.body.copyWith(color: Colors.white70, fontSize: 14.5, height: 1.4)),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      left: 30 * 0.5,
+                      right: 30 * 0.5,
+                      child: Container(
+                        height: 1,
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(colors: [Color(0x00FFFFFF), C.spec, Color(0x00FFFFFF)]),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -2856,9 +2893,47 @@ class _ImpostorOverlay extends StatelessWidget {
   }
 }
 
+class _ImpostorOverlay extends StatelessWidget {
+  const _ImpostorOverlay({required this.amI, required this.phase});
+  final bool amI;
+  final String phase;
+
+  @override
+  Widget build(BuildContext context) {
+    // colour carries meaning: red = you're secretly it, purple = you're not,
+    // blue = the neutral discuss beat — matches the brand's own rule that
+    // blue is reserved for occasional, non-routine moments
+    if (phase == 'discuss') {
+      return const _RoundCardOverlay(
+        eyebrow: '🕵️ IMPOSTOR ROUND',
+        emoji: '💬',
+        title: 'Talk it out',
+        sub: 'One of you isn’t who they say. Who’s lying about their identity?',
+        accent: C.blue,
+      );
+    }
+    if (amI) {
+      return const _RoundCardOverlay(
+        eyebrow: '🕵️ IMPOSTOR ROUND',
+        emoji: '🕵️',
+        title: 'You are the Impostor',
+        sub: 'Blend in — you vote too, same as everyone else',
+        accent: C.live,
+      );
+    }
+    return const _RoundCardOverlay(
+      eyebrow: '🕵️ IMPOSTOR ROUND',
+      emoji: '👀',
+      title: 'You are Crew',
+      sub: 'One of you isn’t who they say. Watch closely.',
+      accent: C.sig,
+    );
+  }
+}
+
 /// Who Am I's banner — the inverse of _ImpostorOverlay's split: everyone
 /// but the target already knows and just watches; the target sees nothing
-/// until the final reveal. Same glass-card language as the other two.
+/// until the final reveal. Same elevated-card language as the other two.
 class _WhoAmIOverlay extends StatelessWidget {
   const _WhoAmIOverlay({required this.mine, required this.phase, this.category, this.identity});
   final bool mine;
@@ -2868,61 +2943,30 @@ class _WhoAmIOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String emoji;
-    final String title;
-    final String sub;
     if (phase == 'reveal') {
-      emoji = '🎭';
-      title = 'You were: ${identity ?? '???'}';
-      sub = 'Reveal time — how many questions did it take?';
-    } else if (mine) {
-      emoji = '❔';
-      title = 'You don’t know who you are';
-      sub = '${category ?? 'Someone'} — ask the room yes/no questions out loud';
-    } else {
-      emoji = '👀';
-      title = 'They are: ${identity ?? '???'}';
-      sub = 'Don’t say it — just answer their questions';
+      return _RoundCardOverlay(
+        eyebrow: '❔ WHO AM I',
+        emoji: '🎭',
+        title: 'You were: ${identity ?? '???'}',
+        sub: 'Reveal time — how many questions did it take?',
+        accent: C.acid,
+      );
     }
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: Container(
-          color: const Color(0xB3000000),
-          alignment: Alignment.center,
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.7, end: 1),
-            duration: const Duration(milliseconds: 320),
-            curve: Curves.easeOutBack,
-            builder: (context, v, child) =>
-                Opacity(opacity: v.clamp(0, 1), child: Transform.scale(scale: v, child: child)),
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 34),
-              padding: const EdgeInsets.fromLTRB(26, 30, 26, 30),
-              decoration: BoxDecoration(
-                color: const Color(0xF2140A1E),
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: C.sig, width: 1.5),
-                boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 60, spreadRadius: -10)],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('❔ WHO AM I',
-                      style: T.eyebrow.copyWith(color: C.live, letterSpacing: 3, fontSize: 12)),
-                  const SizedBox(height: 18),
-                  Text(emoji, style: const TextStyle(fontSize: 58)),
-                  const SizedBox(height: 16),
-                  Text(title, textAlign: TextAlign.center, style: T.big.copyWith(fontSize: 24, height: 1.15)),
-                  const SizedBox(height: 10),
-                  Text(sub,
-                      textAlign: TextAlign.center,
-                      style: T.body.copyWith(color: Colors.white70, fontSize: 14.5, height: 1.4)),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+    if (mine) {
+      return _RoundCardOverlay(
+        eyebrow: '❔ WHO AM I',
+        emoji: '❔',
+        title: 'You don’t know who you are',
+        sub: '${category ?? 'Someone'} — ask the room yes/no questions out loud',
+        accent: C.live,
+      );
+    }
+    return _RoundCardOverlay(
+      eyebrow: '❔ WHO AM I',
+      emoji: '👀',
+      title: 'They are: ${identity ?? '???'}',
+      sub: 'Don’t say it — just answer their questions',
+      accent: C.sig,
     );
   }
 }
