@@ -333,17 +333,26 @@ function assignTargets(rounds: RoundWire[], members: string[]) {
 /// name, or the dice (or roulette mode) picked it. Beats auto-chain.
 function startPickedGame(cell: Cell, name?: string) {
   if (cell.inRound) return; // one game at a time
-  // Solo rooms don't play. Every game here is social — a vote round alone
-  // renders "tap a face to vote" over zero faces, and a confession alone
-  // is a man agreeing with himself. The room waits; joinCell starts the
-  // first game the moment a real person walks in.
-  if (cell.members.length < 2) return;
   // Duo rooms (the most common shape) only ever get duo-suited games —
   // "point at the person who…" copy is a group sport. A group-only name
   // picked in a duo falls back into the duo pool instead of erroring.
-  const pool = cell.members.length <= 2 ? SEQ_PACK.filter((s) => s.duo) : SEQ_PACK;
+  let pool: SeqDef[] = cell.members.length <= 2 ? SEQ_PACK.filter((s) => s.duo) : SEQ_PACK;
+  // SOLO = PRACTICE MODE. Build 72 hard-blocked solo rooms (a vote round
+  // alone renders "tap a face to vote" over zero faces) — but total silence
+  // was worse: pressing a game and getting NOTHING reads as a dead app, and
+  // solo is exactly how the app gets tested and demoed. So solo rooms play
+  // the same games minus only the beats that need another face on screen
+  // (point crowns, bottle spins). Face pulls, hot takes, confessions and
+  // impossible choices all work with one person and a camera.
+  if (cell.members.length < 2) {
+    pool = pool
+      .map((s) => ({ ...s, beats: s.beats.filter((b) => b.kind !== 'point' && b.kind !== 'spin') }))
+      .filter((s) => s.beats.length > 0);
+  }
+  if (!pool.length) return;
+  // match by NAME, not identity — the solo map above clones the defs
   const named = name ? seqByName(name) : undefined;
-  const seq: SeqDef = (named && pool.includes(named) ? named : undefined) ?? pick(pool);
+  const seq: SeqDef = (named ? pool.find((s) => s.name === named.name) : undefined) ?? pick(pool);
 
   // roll one prompt per beat now, so the whole chain is decided up front
   cell.seqBeats = seq.beats.map((b) => {

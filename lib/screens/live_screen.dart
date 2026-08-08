@@ -822,13 +822,20 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     // duo rooms only see duo-suited games — group-phrased prompts ("point
     // at the person who…") are meaningless with one other face on screen
     final duoRoom = cell.people.length == 1;
+    // solo = practice mode: the server strips point/spin beats (they need
+    // another face), so only list games that still have beats left after
+    // that — a game that would start as nothing must not be offered
+    final soloRoom = cell.people.isEmpty && widget.live;
     final games = [
       for (final s in SeqDef.ten)
-        if (!duoRoom || s.duo) s,
+        if ((!duoRoom || s.duo) &&
+            (!soloRoom ||
+                s.beats.any((b) => b.kind != GameKind.point && b.kind != GameKind.spin)))
+          s,
     ]..sort((a, b) => order.indexOf(a.vibe).compareTo(order.indexOf(b.vibe)));
     // Impostor and Who Am I both need real secret roles on real other
     // phones — server-driven only, and both need a crowd (3+) to work.
-    if (_serverDriven && !duoRoom) {
+    if (_serverDriven && cell.people.length >= 2) {
       games.add(const SeqDef(
         name: 'Impostor', icon: '🕵️', hint: 'one of you is lying — find them',
         vibe: 'wild', duo: false, beats: [],
@@ -862,9 +869,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               Text('PICK A GAME', style: T.eyebrow.copyWith(letterSpacing: 3, fontSize: 11)),
               const SizedBox(height: 4),
               Text(
-                  cell.people.length == 1
-                      ? 'every one is a few rounds back to back · more games with 3+ people'
-                      : 'every one is a few rounds back to back',
+                  cell.people.isEmpty && widget.live
+                      ? 'practice rounds while it’s just you — the full pack unlocks when someone drops in'
+                      : cell.people.length == 1
+                          ? 'every one is a few rounds back to back · more games with 3+ people'
+                          : 'every one is a few rounds back to back',
                   style: T.tiny),
               const SizedBox(height: 8),
               Flexible(
