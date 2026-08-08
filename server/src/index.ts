@@ -254,6 +254,7 @@ const ROUND_SECS: Record<string, number> = {
   spin: 18,      // bottle + the target performs
   freeze: 11,
   rapidFire: 13,
+  wavelength: 20, // one spoken clue + a guess needs a beat longer than a tap-poll
 };
 const secsFor = (kind: string) => ROUND_SECS[kind] ?? 13; // tap-answer kinds
 
@@ -309,7 +310,7 @@ function rollSession(strangers: number): RoundWire[] {
     rounds.push({
       kind: r.game.kind, name: r.game.name, hint: r.game.hint, prompt: r.prompt,
       targetId: null, // filled per-cell (needs member ids)
-      lieIdx: r.game.kind === 'twoTruths'
+      lieIdx: r.game.kind === 'twoTruths' || r.game.kind === 'wavelength'
         ? Math.floor(Math.random() * Math.max(1, r.prompt.length - 1))
         : undefined,
     });
@@ -338,14 +339,18 @@ function startPickedGame(cell: Cell, name?: string) {
   cell.seqBeats = seq.beats.map((b) => {
     const prompt = [...b.pool[Math.floor(Math.random() * b.pool.length)]];
     const head = prompt.shift()!;
-    for (let i = prompt.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [prompt[i], prompt[j]] = [prompt[j], prompt[i]];
+    // same order-sensitive exception as rollGame: twoTruths' "first/second/
+    // third" and wavelength's spectrum both need to stay in place.
+    if (b.kind !== 'twoTruths' && b.kind !== 'wavelength') {
+      for (let i = prompt.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [prompt[i], prompt[j]] = [prompt[j], prompt[i]];
+      }
     }
     return {
       kind: b.kind, name: seq.name, hint: seq.hint, prompt: [head, ...prompt],
       targetId: pick(cell.members),
-      lieIdx: b.kind === 'twoTruths'
+      lieIdx: b.kind === 'twoTruths' || b.kind === 'wavelength'
         ? Math.floor(Math.random() * Math.max(1, prompt.length)) : undefined,
       secs: b.secs,
     } as RoundWire & { secs?: number };

@@ -3,7 +3,12 @@
 // and the matchmaker avoids repeating the last kind, so cells never feel samey.
 
 export type GameKind =
-  | 'point' | 'poll' | 'wouldRather' | 'thumbs' | 'same' | 'freeze' | 'twoTruths' | 'rapidFire' | 'spin';
+  | 'point' | 'poll' | 'wouldRather' | 'thumbs' | 'same' | 'freeze' | 'twoTruths' | 'rapidFire' | 'spin'
+  // wavelength: one member (targetId) sees a hidden spot on a spectrum
+  // (lieIdx), gives one spoken clue, the other picks the zone they think it's
+  // in — reuses the same option-tally + lieIdx wire shape as twoTruths, so
+  // endRound needs zero new branches.
+  | 'wavelength';
 
 export interface GameDef {
   kind: GameKind;
@@ -115,6 +120,28 @@ export const PACK: GameDef[] = [
   { kind: 'twoTruths', name: 'Spot The Lie', vibe: 'spark', hint: 'say 2 truths + 1 lie, out loud — they guess which',
     minStrangers: 1, maxStrangers: 2, prompts: [
       ['Which one was the lie?', 'The first thing they said', 'The second thing they said', 'The third thing they said'],
+    ] },
+  // Word Collide — the real improv game "Mind Meld." Entirely spoken, so it
+  // reuses `thumbs` as-is: 👍 = we melded, 👎 = go again. No typing, no new
+  // wire shape needed — self-reported, exactly like the real game is.
+  { kind: 'thumbs', name: 'Word Collide', vibe: 'warm', hint: '3-2-1, say a word together — did you meld?',
+    minStrangers: 1, maxStrangers: 2, prompts: [
+      ['3…2…1 — say a word. Same beat. GO'],
+      ['Didn’t meld? Say a word that bridges your last two. Go again.'],
+      ['Keep going until you say the SAME word at the same time — that’s the meld.'],
+    ] },
+  // Wavelength — "the best party game since Codenames." One member
+  // (targetId) sees the hidden zone (lieIdx) and gives ONE spoken clue word;
+  // the other guesses which zone it's in. Options stay in spectrum order —
+  // rollGame/startPickedGame both skip the shuffle for this kind, on purpose.
+  { kind: 'wavelength', name: 'Wavelength', vibe: 'wild', hint: 'one clue, one guess — how close did you get?',
+    minStrangers: 1, maxStrangers: 2, prompts: [
+      ['Overrated ↔ Underrated', 'Way overrated', 'Slightly overrated', 'Right down the middle', 'Slightly underrated', 'Way underrated'],
+      ['Boring ↔ Thrilling', 'Deeply boring', 'A bit dull', 'Right down the middle', 'Pretty thrilling', 'Wildly thrilling'],
+      ['Wholesome ↔ Unhinged', 'Fully wholesome', 'Mostly wholesome', 'Right down the middle', 'A little unhinged', 'Fully unhinged'],
+      ['Safe ↔ Risky', 'Very safe', 'Somewhat safe', 'Right down the middle', 'Somewhat risky', 'Very risky'],
+      ['Plan-ahead ↔ Wing-it', 'Full itinerary', 'Loose plan', 'Right down the middle', 'Barely a plan', 'Zero plan'],
+      ['Green flag ↔ Red flag', 'Total green flag', 'Mostly green', 'Right down the middle', 'Mostly red', 'Total red flag'],
     ] },
   { kind: 'rapidFire', name: 'Rapid Fire', hint: '10 seconds. don’t overthink.',
     minStrangers: 1, maxStrangers: 1, prompts: [
@@ -414,10 +441,15 @@ export function rollGame(strangers: number, avoidKind?: GameKind, avoidName?: st
   const game = pick(fits);
   const chosen = pick(game.prompts);
   const [head, ...opts] = chosen;
-  // shuffle options
-  for (let i = opts.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [opts[i], opts[j]] = [opts[j], opts[i]];
+  // shuffle options — EXCEPT kinds where order carries meaning: twoTruths'
+  // options are "first/second/third thing they said" (spoken in that order,
+  // must stay in that order) and wavelength's options are a spectrum (must
+  // stay low-to-high or the "how close were you" scoring is nonsense).
+  if (game.kind !== 'twoTruths' && game.kind !== 'wavelength') {
+    for (let i = opts.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [opts[i], opts[j]] = [opts[j], opts[i]];
+    }
   }
   return { game, prompt: [head, ...opts] };
 }

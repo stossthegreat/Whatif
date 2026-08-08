@@ -7,7 +7,13 @@ import 'person.dart';
 /// experiences — including 1:1-only games — depending on the (unpredictable)
 /// group size. Prompts are deep and never repeat back-to-back, so no two plays
 /// feel the same.
-enum GameKind { point, poll, wouldRather, thumbs, same, freeze, twoTruths, rapidFire, spin }
+enum GameKind {
+  point, poll, wouldRather, thumbs, same, freeze, twoTruths, rapidFire, spin,
+  // one member (the round's target) sees a hidden spot on a spectrum, gives
+  // one spoken clue, the other guesses the zone. Mirrors twoTruths' shape —
+  // option-tally reveal, lieIdx carries the hidden answer.
+  wavelength,
+}
 
 GameKind gameKindFrom(String s) =>
     GameKind.values.firstWhere((k) => k.name == s, orElse: () => GameKind.poll);
@@ -148,6 +154,32 @@ class GameDef {
       minStrangers: 1, maxStrangers: 2,
       prompts: [
         ['Which one was the lie?', 'The first thing they said', 'The second thing they said', 'The third thing they said'],
+      ],
+    ),
+    // Word Collide — the real improv game "Mind Meld." Entirely spoken, so
+    // it reuses `thumbs` as-is: 👍 = we melded, 👎 = go again.
+    GameDef(
+      kind: GameKind.thumbs, name: 'Word Collide', vibe: 'warm', hint: '3-2-1, say a word together — did you meld?',
+      minStrangers: 1, maxStrangers: 2,
+      prompts: [
+        ['3…2…1 — say a word. Same beat. GO'],
+        ['Didn’t meld? Say a word that bridges your last two. Go again.'],
+        ['Keep going until you say the SAME word at the same time — that’s the meld.'],
+      ],
+    ),
+    // Wavelength — "the best party game since Codenames." One member (the
+    // round's target) sees the hidden zone and gives ONE spoken clue word;
+    // the other guesses which zone it's in. Options stay in spectrum order.
+    GameDef(
+      kind: GameKind.wavelength, name: 'Wavelength', vibe: 'wild', hint: 'one clue, one guess — how close did you get?',
+      minStrangers: 1, maxStrangers: 2,
+      prompts: [
+        ['Overrated ↔ Underrated', 'Way overrated', 'Slightly overrated', 'Right down the middle', 'Slightly underrated', 'Way underrated'],
+        ['Boring ↔ Thrilling', 'Deeply boring', 'A bit dull', 'Right down the middle', 'Pretty thrilling', 'Wildly thrilling'],
+        ['Wholesome ↔ Unhinged', 'Fully wholesome', 'Mostly wholesome', 'Right down the middle', 'A little unhinged', 'Fully unhinged'],
+        ['Safe ↔ Risky', 'Very safe', 'Somewhat safe', 'Right down the middle', 'Somewhat risky', 'Very risky'],
+        ['Plan-ahead ↔ Wing-it', 'Full itinerary', 'Loose plan', 'Right down the middle', 'Barely a plan', 'Zero plan'],
+        ['Green flag ↔ Red flag', 'Total green flag', 'Mostly green', 'Right down the middle', 'Mostly red', 'Total red flag'],
       ],
     ),
     GameDef(
@@ -664,7 +696,13 @@ class Cell {
       seen.add(chosen.first);
 
       final head = chosen.first;
-      final opts = chosen.skip(1).toList()..shuffle(r);
+      // order-sensitive kinds skip the shuffle: twoTruths' options are
+      // "first/second/third thing they said" (must match spoken order) and
+      // wavelength's are a spectrum (must stay low-to-high).
+      final opts = chosen.skip(1).toList();
+      if (game.kind != GameKind.twoTruths && game.kind != GameKind.wavelength) {
+        opts.shuffle(r);
+      }
       rounds.add(RoundDef(game: game, prompt: [head, ...opts]));
     }
     return rounds;

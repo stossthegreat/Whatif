@@ -151,6 +151,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   String get _targetName =>
       _target >= cell.people.length ? 'you' : '@${cell.people[_target].name}';
 
+  /// Wavelength: the round's target IS the clue-giver — they see the hidden
+  /// zone and speak one clue; everyone else guesses. Same "you" sentinel as
+  /// every other target-based kind (spin, {target} prompts).
+  bool get _amClueGiver => _target >= cell.people.length;
+
   /// Fill prompt variables — the same prompt lands on a different victim
   /// every single time it's played.
   String _fill(String s) => _duoize(s.replaceAll('{target}', _targetName));
@@ -390,6 +395,18 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             _result = 'you read them 😏 nailed the lie';
           } else {
             _result = 'they fooled you 😵 slippery';
+          }
+        case GameKind.wavelength:
+          final target = (m['lieIdx'] as num?)?.toInt() ?? cell.rounds[_round].lieIdx;
+          if (_selected == null || target == null) {
+            _result = 'no guess landed — the wavelength stays a mystery';
+          } else {
+            final dist = (_selected! - target).abs();
+            _result = dist == 0
+                ? 'bullseye 🎯 exact match'
+                : dist == 1
+                    ? 'so close — one zone off'
+                    : 'not quite — $dist zones off';
           }
       }
     });
@@ -706,6 +723,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       GameKind.spin => 18,
       GameKind.freeze => 11,
       GameKind.rapidFire => 13,
+      GameKind.wavelength => 20, // one spoken clue + a guess needs a beat longer than a tap-poll
       _ => 13, // tap-answer kinds — answer, then chat
     };
     final beatSecs = cell.rounds[_round].secs;
@@ -752,6 +770,10 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         _resolveRapid();
       case GameKind.spin:
         _resolveSpin();
+      case GameKind.wavelength:
+        // the clue-giver never answers (they already know it) — only a
+        // silent guesser times out, so autoResolve is always the guesser's.
+        _resolveWavelength(2); // "right down the middle" — the safe fallback
     }
   }
 
@@ -1044,6 +1066,33 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     setState(() {
       _selected = choice;
       _result = correct ? 'you read them 😏 nailed the lie' : 'they fooled you 😵 slippery';
+    });
+    Timer(const Duration(milliseconds: 650), _toReveal);
+  }
+
+  /// Wavelength: the guesser taps a zone; distance from the hidden target
+  /// (lieIdx) is the whole reveal. The clue-giver never calls this — their
+  /// UI has no buttons to tap.
+  void _resolveWavelength(int choice) {
+    if (_answered) return;
+    if (_serverDriven) {
+      _answered = true;
+      Buzz.commit();
+      setState(() => _selected = choice);
+      NetworkClient.instance.answer(_round, choice);
+      return;
+    }
+    _answered = true;
+    Buzz.commit();
+    final lie = cell.rounds[_round].lieIdx;
+    final dist = lie != null ? (choice - lie).abs() : _r.nextInt(3);
+    setState(() {
+      _selected = choice;
+      _result = dist == 0
+          ? 'bullseye 🎯 exact match'
+          : dist == 1
+              ? 'so close — one zone off'
+              : 'not quite — $dist zones off';
     });
     Timer(const Duration(milliseconds: 650), _toReveal);
   }
@@ -2000,6 +2049,36 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             ),
           ]),
         ];
+      case GameKind.wavelength:
+        // clue-giver sees the hidden zone and speaks ONE clue — they never
+        // tap. Everyone else gets the normal option buttons to guess.
+        if (_amClueGiver) {
+          final lie = cell.rounds[_round].lieIdx;
+          final zone = (lie != null && lie + 1 < _prompt.length) ? _prompt[lie + 1] : null;
+          return [
+            if (zone != null)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                decoration: BoxDecoration(
+                  color: C.sig.withOpacity(0.22),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: C.sig),
+                ),
+                child: Text('It’s here: $zone',
+                    style: T.body.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+              ),
+            const SizedBox(height: 8),
+            Text('Give ONE spoken clue — never say the word itself',
+                style: T.sub.copyWith(color: Colors.white70)),
+          ];
+        }
+        return [
+          for (var i = 1; i < _prompt.length; i++) ...[
+            _optBtn(_prompt[i], i - 1),
+            if (i < _prompt.length - 1) const SizedBox(height: 8),
+          ],
+        ];
     }
   }
 
@@ -2039,6 +2118,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                   _resolveTwoTruths(index);
                 case GameKind.rapidFire:
                   _resolveRapid();
+                case GameKind.wavelength:
+                  _resolveWavelength(index);
                 default:
                   break;
               }
