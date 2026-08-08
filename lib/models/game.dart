@@ -40,7 +40,7 @@ class GameDef {
 
   static const pack = <GameDef>[
     GameDef(
-      kind: GameKind.point, name: 'Point Party', hint: 'tap who fits — everyone points at once',
+      kind: GameKind.point, name: 'Most Likely To', hint: 'tap who fits — everyone points at once',
       minStrangers: 2, maxStrangers: 8,
       prompts: [
         ['Who woke up 5 minutes ago?'], ['Most likely to start a cult (a fun one)'],
@@ -50,6 +50,11 @@ class GameDef {
         ['Who has the worst screen time?'], ['Most likely to become famous'],
         ['Who is the main character here?'], ['Most likely to ghost the group'],
         ['Who gives the best advice?'], ['Most likely to start dancing right now'],
+        ['Most likely to trip over a perfectly flat surface'], ['Most likely to eat the last slice without asking'],
+        ['Most likely to get lost with GPS on'], ['Most likely to cry during a Pixar movie'],
+        ['Most likely to fall asleep in an action movie'], ['Most likely to forget their own birthday'],
+        ['Most likely to win the lottery and lose the ticket'], ['Most likely to become everyone’s best friend'],
+        ['Most likely to plan the best surprise trip'], ['Most likely to make you laugh in a dead-serious moment'],
       ],
     ),
     GameDef(
@@ -68,12 +73,22 @@ class GameDef {
       kind: GameKind.thumbs, name: 'Confession Cam', hint: 'thumbs up = guilty · on 3',
       minStrangers: 1, maxStrangers: 8,
       prompts: [
-        ['Never have I ever been kicked out of a bar'], ['…ghosted someone mid-conversation'],
-        ['…sent a text to the completely wrong person'], ['…faked being busy to skip plans'],
+        // clean
+        ['Never have I ever fallen backward off a chair'], ['…called a teacher "mom"'],
+        ['…gone to bed without brushing my teeth'], ['…met a celebrity'],
+        ['…been fired from a job'], ['…faked being sick to skip work'],
+        ['…lied on my resume'], ['…cooked disgustingly bad food'],
+        // funny / relatable
+        ['…ghosted someone mid-conversation'], ['…sent a text to the completely wrong person'],
+        ['…broken up with someone over text'], ['…texted "love you" to the wrong person'],
+        ['…waved back at someone who wasn’t waving at me'], ['…pushed a door that clearly said pull'],
         ['…stalked an ex online this week'], ['…cried in a public bathroom'],
         ['…pretended to know a song I didn’t'], ['…re-gifted a present'],
-        ['…screenshotted a chat to send to friends'], ['…had a crush on a friend’s partner'],
-        ['…googled myself'], ['…lied to get out of a date'],
+        ['…googled myself'], ['…gotten a tattoo'], ['…fought with someone in public'],
+        // spicy
+        ['…kissed someone I just met'], ['…had a one-night stand'],
+        ['…used a dating app'], ['…ghosted someone I was dating'],
+        ['…lied to get out of a date'], ['…checked a partner’s phone'],
       ],
     ),
     GameDef(
@@ -98,31 +113,41 @@ class GameDef {
         ['Give your worst fake cry — and hold'], ['Your best villain smile — freeze'],
         ['Most confused face — hold it'], ['Puppy eyes. Do not break.'],
         ['Your “I smelled something” face'], ['Hold your happiest fake laugh'],
+        // Gurning: real 750-year-old British ugliest-face championship
+        // (Egremont Crab Fair) — simplified to "pull it on 3."
+        ['Gurning: pull the UGLIEST face you can. 3…2…1 GO'],
+        ['Gurning round two: worse than that. Go again.'],
+        ['Your best fish face 🐟 — hold it'], ['Double chin championship. Commit.'],
       ],
     ),
+    // Match or Split — real WYR questions with a genuine tradeoff on both
+    // sides (the craft rule: "pizza vs tacos" has no cost either way, which
+    // is why it never sparks debate). Duo-only.
     GameDef(
-      kind: GameKind.wouldRather, name: 'Would You Rather', vibe: 'warm', hint: 'lock your choice, then compare',
-      minStrangers: 1, maxStrangers: 6,
-      prompts: [
-        ['Fight 100 duck-sized horses, or…', '100 tiny horses', '1 giant duck'],
-        ['Always be 10 min late, or…', 'always late', 'always 20 early'],
-        ['Read minds, or…', 'read minds', 'be invisible'],
-        ['Never use a phone again, or…', 'no phone', 'no music'],
-        ['Be famous, or…', 'famous', 'filthy rich'],
-        ['Only whisper forever, or…', 'whisper', 'shout'],
-        ['Teleport, or…', 'teleport', 'fly'],
-        ['No pizza forever, or…', 'no pizza', 'no burgers'],
-      ],
-    ),
-    GameDef(
-      kind: GameKind.twoTruths, name: 'Two Truths', vibe: 'spark', hint: 'read their face — spot the lie',
+      kind: GameKind.wouldRather, name: 'Match or Split', vibe: 'warm', hint: 'lock your choice, then compare',
       minStrangers: 1, maxStrangers: 2,
       prompts: [
-        ['Which one is the lie?', 'skydived once', 'has four siblings', 'hates coffee'],
-        ['Spot the lie', 'met a celebrity', 'speaks 3 languages', 'broke a bone at 7'],
-        ['Which is fake?', 'ran a marathon', 'was on TV once', 'can’t swim'],
-        ['Find the lie', 'been to 10 countries', 'allergic to cats', 'plays guitar'],
-        ['Which is made up?', 'has a twin', 'failed the driving test 4x', 'ate a bug on a dare'],
+        ['Always hiccup when you talk, or…', 'hiccup talking', 'sneeze laughing'],
+        ['Only ever whisper, or…', 'only whisper', 'only shout'],
+        ['Fight 100 duck-sized horses, or…', '100 tiny horses', '1 giant duck'],
+        ['Skip everywhere instead of walking, or…', 'always skip', 'always sing instead of talk'],
+        ['Say every thought out loud, or…', 'say everything', 'never speak again'],
+        ['Be a legendary storyteller from embarrassing moments, or…', 'great stories', 'never embarrass yourself'],
+        ['Be the star player on a losing team, or…', 'star, losing team', 'bench, championship team'],
+        ['Know all the mysteries of the universe but lose your memories, or…', 'cosmic secrets', 'keep your memories'],
+        ['Be talked dirty to in person, or…', 'in person', 'over text'],
+        ['Wake up next to a stranger, or…', 'a stranger', 'a room of everyone you’ve dated'],
+        ['Watch your partner flirt with someone you don’t know, or…', 'flirt, stranger', 'flirt, someone you know'],
+      ],
+    ),
+    // Spot The Lie — SPOKEN, never typed: say your 2 truths + 1 lie out
+    // loud, in order. Options are positions, not text, because the content
+    // is your own voice, not a server-authored fact.
+    GameDef(
+      kind: GameKind.twoTruths, name: 'Spot The Lie', vibe: 'spark', hint: 'say 2 truths + 1 lie, out loud — they guess which',
+      minStrangers: 1, maxStrangers: 2,
+      prompts: [
+        ['Which one was the lie?', 'The first thing they said', 'The second thing they said', 'The third thing they said'],
       ],
     ),
     GameDef(
@@ -427,6 +452,11 @@ class GameDef {
         ['All their exes are “crazy”', 'green flag', 'red flag'],
         ['They talk to their pet in a baby voice', 'green flag', 'red flag'],
         ['Their camera roll is 90% selfies', 'green flag', 'red flag'],
+        ['Texts back “k” when they’re mad instead of saying why', 'green flag', 'red flag'],
+        ['Sends full sentences instead of just “k”', 'green flag', 'red flag'],
+        ['Says “I feel…” instead of assuming what you’re thinking', 'green flag', 'red flag'],
+        ['Double-texts without shame', 'green flag', 'red flag'],
+        ['Says “you always…” or “you never…” mid-argument', 'green flag', 'red flag'],
       ],
     ),
     GameDef(
@@ -686,7 +716,9 @@ class SeqDef {
 
   static const ten = <SeqDef>[
     SeqDef(name: 'Face Off', icon: '😜', hint: 'pull it · hold it · crown it', vibe: 'warm', duo: true, beats: [
-      SeqBeat(kind: GameKind.freeze, secs: 11, pool: [['UGLIEST face contest. 3…2…1 GO'], ['Best fish face 🐟 HOLD IT'], ['Double chin championship. Commit.']]),
+      // Gurning — real 750-year-old British "ugliest face" championship
+      // (Egremont Crab Fair), simplified to "pull it on 3."
+      SeqBeat(kind: GameKind.freeze, secs: 11, pool: [['Gurning: UGLIEST face contest. 3…2…1 GO'], ['Best fish face 🐟 HOLD IT'], ['Double chin championship. Commit.']]),
       SeqBeat(kind: GameKind.freeze, secs: 11, pool: [['Now your best villain smirk. Freeze.'], ['The face you make reading old texts'], ['Your “I just saw my ex” face']]),
       SeqBeat(kind: GameKind.point, secs: 13, pool: [['Crown the funniest face 👑']]),
     ]),
@@ -700,14 +732,17 @@ class SeqDef {
       SeqBeat(kind: GameKind.poll, pool: [['Texting “lol” means nothing?', 'facts', 'lies'], ['Gym at 6am?', 'built different', 'lying'], ['Voice notes?', 'elite', 'jail']]),
       SeqBeat(kind: GameKind.poll, pool: [['They clap when the plane lands', 'green flag', 'red flag'], ['They still follow all their exes', 'green flag', 'red flag'], ['All their exes are “crazy”', 'green flag', 'red flag']]),
     ]),
+    // Perform-then-crown beats need real time to breathe — Charades/Heads
+    // Up! research converges on 60-90s as the sweet spot; the old flat ~23s
+    // cut people off before the funny part landed.
     SeqDef(name: 'Storytime', icon: '🎤', hint: 'real stories · best one wins', vibe: 'wild', duo: false, beats: [
-      SeqBeat(kind: GameKind.point, pool: [['Most embarrassing moment. Full story. GO'], ['Your most unhinged 3am decision'], ['Your biggest public L']]),
-      SeqBeat(kind: GameKind.point, pool: [['Worst date you’ve ever been on'], ['A time you got caught lying'], ['The dumbest thing you believed as a kid']]),
+      SeqBeat(kind: GameKind.point, secs: 40, pool: [['Most embarrassing moment. Full story. GO'], ['Your most unhinged 3am decision'], ['Your biggest public L']]),
+      SeqBeat(kind: GameKind.point, secs: 40, pool: [['Worst date you’ve ever been on'], ['A time you got caught lying'], ['The dumbest thing you believed as a kid']]),
     ]),
     SeqDef(name: 'Rizz Off', icon: '😏', hint: 'best line · worst line · shoot your shot', vibe: 'spark', duo: false, beats: [
-      SeqBeat(kind: GameKind.point, secs: 18, pool: [['Best pickup line. GO']]),
-      SeqBeat(kind: GameKind.point, secs: 18, pool: [['Now the WORST pickup line on purpose']]),
-      SeqBeat(kind: GameKind.point, secs: 18, pool: [['Shoot your shot at the camera — smoothest wins']]),
+      SeqBeat(kind: GameKind.point, secs: 22, pool: [['Best pickup line. GO'], ['Are you a parking ticket? Because you’ve got fine written all over you.']]),
+      SeqBeat(kind: GameKind.point, secs: 22, pool: [['Now the WORST pickup line on purpose']]),
+      SeqBeat(kind: GameKind.point, secs: 22, pool: [['Shoot your shot at the camera — smoothest wins']]),
     ]),
     SeqDef(name: 'Spin the Bottle', icon: '🍾', hint: 'the bottle picks · no escape', vibe: 'spark', duo: false, beats: [
       SeqBeat(kind: GameKind.spin, pool: [['{target} — what’s your actual type? Be honest'], ['{target} — rate your own rizz out of 10'], ['{target} — who in this room would you take on a date? 👀']]),
@@ -716,22 +751,22 @@ class SeqDef {
     SeqDef(name: 'Confessions', icon: '🙊', hint: 'never have I ever · thumbs up = guilty', vibe: 'wild', duo: true, beats: [
       SeqBeat(kind: GameKind.thumbs, pool: [['Never have I ever ghosted someone mid-conversation'], ['…sent a text to the completely wrong person'], ['…stalked an ex online this week']]),
       SeqBeat(kind: GameKind.thumbs, pool: [['…pretended not to see someone I know in public'], ['…flirted my way out of trouble'], ['…lied to get out of a date']]),
-      SeqBeat(kind: GameKind.thumbs, pool: [['…checked a partner’s phone'], ['…cried to get out of trouble'], ['…had a crush on a friend’s partner']]),
+      SeqBeat(kind: GameKind.thumbs, pool: [['…checked a partner’s phone'], ['…cried to get out of trouble'], ['…had a crush on a friend’s partner'], ['…used a dating app'], ['…had a one-night stand']]),
     ]),
     SeqDef(name: 'Would You Rather', icon: '🤔', hint: 'three impossible choices', vibe: 'warm', duo: true, beats: [
-      SeqBeat(kind: GameKind.wouldRather, pool: [['Fight 100 duck-sized horses, or…', '100 tiny horses', '1 giant duck'], ['Read minds, or…', 'read minds', 'be invisible']]),
-      SeqBeat(kind: GameKind.wouldRather, pool: [['Know how you die, or…', 'know when', 'know how'], ['Be famous, or…', 'famous', 'filthy rich']]),
-      SeqBeat(kind: GameKind.wouldRather, pool: [['Always say what you think, or…', 'brutal honesty', 'never speak again'], ['Teleport, or…', 'teleport', 'fly']]),
+      SeqBeat(kind: GameKind.wouldRather, pool: [['Fight 100 duck-sized horses, or…', '100 tiny horses', '1 giant duck'], ['Read minds, or…', 'read minds', 'be invisible'], ['Always hiccup when you talk, or…', 'hiccup talking', 'sneeze laughing']]),
+      SeqBeat(kind: GameKind.wouldRather, pool: [['Know how you die, or…', 'know when', 'know how'], ['Be famous, or…', 'famous', 'filthy rich'], ['Be the star on a losing team, or…', 'star, losing team', 'bench, winning team']]),
+      SeqBeat(kind: GameKind.wouldRather, pool: [['Always say what you think, or…', 'brutal honesty', 'never speak again'], ['Teleport, or…', 'teleport', 'fly'], ['Be talked dirty to in person, or…', 'in person', 'over text']]),
     ]),
     SeqDef(name: 'Impressions', icon: '🎭', hint: 'do it badly · funniest wins', vibe: 'wild', duo: false, beats: [
-      SeqBeat(kind: GameKind.point, pool: [['Your worst BATMAN'], ['Your worst British accent'], ['Your worst influencer apology']]),
-      SeqBeat(kind: GameKind.point, pool: [['Talk like a movie VILLAIN 😈 — best one wins'], ['Talk like your GRANDMA 👵'], ['Talk like a CEO on a podcast 💼']]),
-      SeqBeat(kind: GameKind.point, secs: 18, pool: [['Do your best EVIL LAUGH — crown the winner']]),
+      SeqBeat(kind: GameKind.point, secs: 35, pool: [['Your worst BATMAN'], ['Your worst British accent'], ['Your worst influencer apology']]),
+      SeqBeat(kind: GameKind.point, secs: 35, pool: [['Talk like a movie VILLAIN 😈 — best one wins'], ['Talk like your GRANDMA 👵'], ['Talk like a CEO on a podcast 💼']]),
+      SeqBeat(kind: GameKind.point, secs: 22, pool: [['Do your best EVIL LAUGH — crown the winner']]),
     ]),
     SeqDef(name: 'Roast Circle', icon: '💀', hint: 'roast · get roasted · make up', vibe: 'wild', duo: false, beats: [
-      SeqBeat(kind: GameKind.point, pool: [['Roast the person on your left (with love)'], ['Roast this app. Go.']]),
-      SeqBeat(kind: GameKind.point, pool: [['Roast your OWN haircut before someone else does'], ['Confess your pettiest move ever — pettiest wins']]),
-      SeqBeat(kind: GameKind.point, secs: 18, pool: [['Now the best COMPLIMENT — make someone blush to make up']]),
+      SeqBeat(kind: GameKind.point, secs: 35, pool: [['Roast the person on your left (with love)'], ['Roast this app. Go.']]),
+      SeqBeat(kind: GameKind.point, secs: 35, pool: [['Roast your OWN haircut before someone else does'], ['Confess your pettiest move ever — pettiest wins']]),
+      SeqBeat(kind: GameKind.point, secs: 22, pool: [['Now the best COMPLIMENT — make someone blush to make up']]),
     ]),
   ];
 
