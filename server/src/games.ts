@@ -130,6 +130,18 @@ export const PACK: GameDef[] = [
       ['Didn’t meld? Say a word that bridges your last two. Go again.'],
       ['Keep going until you say the SAME word at the same time — that’s the meld.'],
     ] },
+  // Whisper Challenge — the format that went viral via Jimmy Fallon and
+  // YouTube/TikTok. Reuses `thumbs` (same trick as Word Collide): the
+  // round's target is the mouther and sees the phrase, everyone else can't
+  // hear anything by design. The mouther taps guilty/not to judge the
+  // guess — index.ts's endRound needs zero new branches for this either.
+  { kind: 'thumbs', name: 'Whisper Challenge', vibe: 'wild', hint: 'loud music, silent lips, wildly wrong guesses',
+    minStrangers: 1, maxStrangers: 2, prompts: [
+      ['purple dinosaur'], ['I forgot my password'], ['spicy chicken sandwich'],
+      ['your camera’s frozen'], ['I have three cats'], ['pineapple on pizza'],
+      ['my wifi is dying'], ['send help immediately'], ['I love Mondays'],
+      ['where are my keys'], ['that’s a weird flex'], ['call me later'],
+    ] },
   // Wavelength — "the best party game since Codenames." One member
   // (targetId) sees the hidden zone (lieIdx) and gives ONE spoken clue word;
   // the other guesses which zone it's in. Options stay in spectrum order —

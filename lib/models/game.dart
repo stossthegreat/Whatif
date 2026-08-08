@@ -167,6 +167,19 @@ class GameDef {
         ['Keep going until you say the SAME word at the same time — that’s the meld.'],
       ],
     ),
+    // Whisper Challenge — reuses `thumbs`, same trick as Word Collide. The
+    // round's target is the mouther and sees the phrase; everyone else
+    // can't hear anything by design (see _isWhisperRound in live_screen).
+    GameDef(
+      kind: GameKind.thumbs, name: 'Whisper Challenge', vibe: 'wild', hint: 'loud music, silent lips, wildly wrong guesses',
+      minStrangers: 1, maxStrangers: 2,
+      prompts: [
+        ['purple dinosaur'], ['I forgot my password'], ['spicy chicken sandwich'],
+        ['your camera’s frozen'], ['I have three cats'], ['pineapple on pizza'],
+        ['my wifi is dying'], ['send help immediately'], ['I love Mondays'],
+        ['where are my keys'], ['that’s a weird flex'], ['call me later'],
+      ],
+    ),
     // Wavelength — "the best party game since Codenames." One member (the
     // round's target) sees the hidden zone and gives ONE spoken clue word;
     // the other guesses which zone it's in. Options stay in spectrum order.

@@ -126,6 +126,14 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   bool _impostorAmI = false;
   String? _impostorPhase;
 
+  // Who Am I — server-driven only, same reasoning as Impostor. No round, no
+  // vote: just a reveal-to-the-room, a timed ask window, then a reveal-to-
+  // the-target. 'ask' | 'reveal' | null.
+  String? _whoAmIPhase;
+  bool _whoAmIMine = false; // true = I'm the one who doesn't know
+  String? _whoAmICategory;
+  String? _whoAmIIdentity; // null while I'm the target and it's still 'ask'
+
   // a room is a session — several rounds, then the ceremony, then the wheel
   int _round = 0;
   bool _stamp = true; // the room-name stamp on arrival
@@ -161,6 +169,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   /// zone and speak one clue; everyone else guesses. Same "you" sentinel as
   /// every other target-based kind (spin, {target} prompts).
   bool get _amClueGiver => _target >= cell.people.length;
+
+  /// Whisper Challenge rides the `thumbs` kind (same as Word Collide) but
+  /// needs an asymmetric role split those don't: the round's target is the
+  /// mouther (sees the phrase, judges the guess), everyone else can't hear
+  /// anything by design and just watches lips.
+  bool get _isWhisperRound => game.kind == GameKind.thumbs && game.name == 'Whisper Challenge';
 
   /// Fill prompt variables — the same prompt lands on a different victim
   /// every single time it's played.
@@ -250,6 +264,10 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         _onImpostorPhase(m);
       case 'impostorReveal':
         _onImpostorReveal(m);
+      case 'whoAmIRole':
+        _onWhoAmIRole(m);
+      case 'whoAmIReveal':
+        _onWhoAmIReveal(m);
     }
   }
 
@@ -340,6 +358,32 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     Sfx.fanfare();
   }
 
+  // ---- Who Am I: no round, no vote — just two reveals and a timer. -----
+  void _onWhoAmIRole(Map<String, dynamic> m) {
+    if (!mounted) return;
+    setState(() {
+      _whoAmIMine = m['mine'] == true;
+      _whoAmICategory = m['category'] as String?;
+      _whoAmIIdentity = _whoAmIMine ? null : m['identity'] as String?;
+      _whoAmIPhase = 'ask';
+    });
+    Buzz.impact();
+    Track.event('who_am_i_role', {'mine': _whoAmIMine ? 1 : 0});
+  }
+
+  void _onWhoAmIReveal(Map<String, dynamic> m) {
+    if (!mounted) return;
+    setState(() {
+      _whoAmIIdentity = m['identity'] as String?;
+      _whoAmIPhase = 'reveal';
+    });
+    Buzz.commit();
+    Sfx.fanfare();
+    Timer(const Duration(seconds: 5), () {
+      if (mounted && _whoAmIPhase == 'reveal') setState(() => _whoAmIPhase = null);
+    });
+  }
+
   void _onRoundMsg(Map<String, dynamic> m) {
     if (!_serverDriven || _phase == _Phase.wheel) return;
     final idx = (m['idx'] as num?)?.toInt();
@@ -427,7 +471,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           _result = 'quick hands — the room felt that';
         case GameKind.thumbs:
           final g = (m['guilty'] as num?)?.toInt() ?? 0;
-          _result = g == 0 ? 'not one guilty soul 😇 (cap)' : '$g in the room ${g == 1 ? 'is' : 'are'} guilty 👀';
+          _result = _isWhisperRound
+              ? (g > 0 ? 'they got it 🎧 nailed the lip-read' : 'nope 😂 not even close')
+              : g == 0
+                  ? 'not one guilty soul 😇 (cap)'
+                  : '$g in the room ${g == 1 ? 'is' : 'are'} guilty 👀';
         case GameKind.poll:
         case GameKind.wouldRather:
           final counts = ((m['counts'] as List?) ?? const []).map((e) => (e as num).toInt()).toList();
@@ -716,11 +764,15 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       for (final s in SeqDef.ten)
         if (!duoRoom || s.duo) s,
     ]..sort((a, b) => order.indexOf(a.vibe).compareTo(order.indexOf(b.vibe)));
-    // Impostor needs real secret roles on real other phones — it only
-    // exists server-driven, and only with a crowd (3+) to hide behind.
+    // Impostor and Who Am I both need real secret roles on real other
+    // phones — server-driven only, and both need a crowd (3+) to work.
     if (_serverDriven && !duoRoom) {
       games.add(const SeqDef(
         name: 'Impostor', icon: '🕵️', hint: 'one of you is lying — find them',
+        vibe: 'wild', duo: false, beats: [],
+      ));
+      games.add(const SeqDef(
+        name: 'Who Am I', icon: '❔', hint: 'everyone else knows. you don’t.',
         vibe: 'wild', duo: false, beats: [],
       ));
     }
@@ -1562,6 +1614,14 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           // 5b · Impostor — night reveal, then the discuss banner
           if (_impostorPhase != null)
             _ImpostorOverlay(amI: _impostorAmI, phase: _impostorPhase!),
+          // 5c · Who Am I — role reveal, then the final identity reveal
+          if (_whoAmIPhase != null)
+            _WhoAmIOverlay(
+              mine: _whoAmIMine,
+              phase: _whoAmIPhase!,
+              category: _whoAmICategory,
+              identity: _whoAmIIdentity,
+            ),
           // 6 · the ceremony
           if (_phase == _Phase.awards) _awardsOverlay(),
           // 7 · the wheel — revive or next, the wheel decides
@@ -2031,8 +2091,14 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             AnimatedSwitcher(
               duration: M.quick,
               child: Text(
-                // spin games keep the prompt hidden until the bottle lands
-                game.kind == GameKind.spin && !_bottleDone ? 'Spin the Bottle 🍾' : _fill(_prompt.first),
+                // spin games keep the prompt hidden until the bottle lands;
+                // Whisper Challenge hides the phrase from everyone but the
+                // mouther — the whole game is that the guesser can't see it
+                game.kind == GameKind.spin && !_bottleDone
+                    ? 'Spin the Bottle 🍾'
+                    : (_isWhisperRound && !_amClueGiver)
+                        ? '🎧 loud music — read their lips, guess out loud'
+                        : _fill(_prompt.first),
                 key: ValueKey('$_round·$_bottleDone'),
                 style: T.big.copyWith(fontSize: 24, height: 1.12, shadows: const [
                   Shadow(color: Color(0xCC000000), blurRadius: 12),
@@ -2088,7 +2154,19 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           _optBtn(_prompt[2], 1),
         ];
       case GameKind.thumbs:
+        if (_isWhisperRound && !_amClueGiver) {
+          // the guesser has nothing to tap — they're guessing out loud,
+          // audible to the mouther normally; only the mouther judges it
+          return [
+            Text('waiting on their verdict…', style: T.sub.copyWith(color: Colors.white70)),
+          ];
+        }
         return [
+          if (_isWhisperRound)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text('did they get it?', style: T.sub.copyWith(color: Colors.white70)),
+            ),
           Row(children: [
             _thumb('👍', true),
             const SizedBox(width: 10),
@@ -2660,6 +2738,77 @@ class _ImpostorOverlay extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text('🕵️ IMPOSTOR ROUND',
+                      style: T.eyebrow.copyWith(color: C.live, letterSpacing: 3, fontSize: 12)),
+                  const SizedBox(height: 18),
+                  Text(emoji, style: const TextStyle(fontSize: 58)),
+                  const SizedBox(height: 16),
+                  Text(title, textAlign: TextAlign.center, style: T.big.copyWith(fontSize: 24, height: 1.15)),
+                  const SizedBox(height: 10),
+                  Text(sub,
+                      textAlign: TextAlign.center,
+                      style: T.body.copyWith(color: Colors.white70, fontSize: 14.5, height: 1.4)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Who Am I's banner — the inverse of _ImpostorOverlay's split: everyone
+/// but the target already knows and just watches; the target sees nothing
+/// until the final reveal. Same glass-card language as the other two.
+class _WhoAmIOverlay extends StatelessWidget {
+  const _WhoAmIOverlay({required this.mine, required this.phase, this.category, this.identity});
+  final bool mine;
+  final String phase;
+  final String? category;
+  final String? identity;
+
+  @override
+  Widget build(BuildContext context) {
+    final String emoji;
+    final String title;
+    final String sub;
+    if (phase == 'reveal') {
+      emoji = '🎭';
+      title = 'You were: ${identity ?? '???'}';
+      sub = 'Reveal time — how many questions did it take?';
+    } else if (mine) {
+      emoji = '❔';
+      title = 'You don’t know who you are';
+      sub = '${category ?? 'Someone'} — ask the room yes/no questions out loud';
+    } else {
+      emoji = '👀';
+      title = 'They are: ${identity ?? '???'}';
+      sub = 'Don’t say it — just answer their questions';
+    }
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: const Color(0xB3000000),
+          alignment: Alignment.center,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.7, end: 1),
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutBack,
+            builder: (context, v, child) =>
+                Opacity(opacity: v.clamp(0, 1), child: Transform.scale(scale: v, child: child)),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 34),
+              padding: const EdgeInsets.fromLTRB(26, 30, 26, 30),
+              decoration: BoxDecoration(
+                color: const Color(0xF2140A1E),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: C.sig, width: 1.5),
+                boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 60, spreadRadius: -10)],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('❔ WHO AM I',
                       style: T.eyebrow.copyWith(color: C.live, letterSpacing: 3, fontSize: 12)),
                   const SizedBox(height: 18),
                   Text(emoji, style: const TextStyle(fontSize: 58)),

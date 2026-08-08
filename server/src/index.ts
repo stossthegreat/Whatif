@@ -436,6 +436,54 @@ function startImpostorVote(cell: Cell): void {
   }, IMPOSTOR_VOTE_SECS * 1000);
 }
 
+// ---- Who Am I ----------------------------------------------------------
+// Celebrity Heads' shape, not Twenty's: the whole ROOM feeds the target,
+// not one asker. Deliberately simple — the questioning is real voice, not
+// an app mechanic (same call as Impostor's discuss phase and Twenty's
+// yes/no), so this needed no answer-tallying at all: reveal to the room,
+// timed ask window, reveal to the target. No new GameKind, no round.
+const WHO_AM_I_ASK_MS = 45_000;
+const WHO_AM_I_POOL: [string, ...string[]][] = [
+  ['Celebrities', 'Beyoncé', 'Dwayne Johnson', 'Taylor Swift', 'Gordon Ramsay', 'Lady Gaga', 'Bob Ross'],
+  ['Disney & Movie Characters', 'Shrek', 'Elsa', 'Darth Vader', 'Mickey Mouse', 'Spider-Man', 'Yoda'],
+  ['Jobs', 'Astronaut', 'Detective', 'Chef', 'Pilot', 'Surgeon', 'Lifeguard'],
+  ['Animals', 'Platypus', 'Kangaroo', 'Penguin', 'Sloth', 'Narwhal', 'Peacock'],
+];
+
+function startWhoAmI(cell: Cell): void {
+  if (cell.inRound) return;
+  // the whole trick is a crowd that knows and one person who doesn't
+  if (cell.members.length < 3) { startPickedGame(cell); return; }
+
+  const target = pick(cell.members);
+  const [category, ...names] = pick(WHO_AM_I_POOL);
+  const identity = pick(names);
+  cell.inRound = true;
+
+  for (const mid of cell.members) {
+    const u = store.users.get(mid);
+    if (!u) continue;
+    send(u, mid === target
+      ? { t: 'whoAmIRole', mine: true, category, endsAt: Date.now() + WHO_AM_I_ASK_MS }
+      : { t: 'whoAmIRole', mine: false, category, identity, endsAt: Date.now() + WHO_AM_I_ASK_MS });
+  }
+
+  later(cell.id, WHO_AM_I_ASK_MS, (c) => {
+    broadcastCell(c.id, { t: 'whoAmIReveal', identity });
+    c.inRound = false;
+    c.gamesPlayed += 1;
+    for (const mid of c.members) {
+      const uid = c.meta.get(mid)?.uid;
+      if (uid) social.onGameComplete(uid);
+    }
+    if (c.gamesPlayed % 3 === 0) {
+      later(c.id, 3000, (c2) => sendAwards(c2));
+    } else {
+      later(c.id, 3000, (c2) => broadcastCell(c2.id, { t: 'talk' }));
+    }
+  });
+}
+
 function endRound(cell: Cell) {
   const idx = cell.roundIdx;
   const round = cell.rounds[idx];
@@ -1189,6 +1237,7 @@ wss.on('connection', (ws, req) => {
         // roulette rooms don't take requests — the wheel of fate runs them
         if (cell && cell.mode !== 'roulette') {
           if (m.name === 'Impostor') startImpostor(cell);
+          else if (m.name === 'Who Am I') startWhoAmI(cell);
           else startPickedGame(cell, typeof m.name === 'string' ? m.name : undefined);
         }
         break;
