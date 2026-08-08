@@ -120,6 +120,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     ['🌀', 'CHAOS — the rules just changed'],
   ];
 
+  // Impostor — server-driven only (real secret roles need real other
+  // people). 'night' | 'discuss' | null; null hides the overlay so the
+  // normal point-vote UI shows through once the vote round starts.
+  bool _impostorAmI = false;
+  String? _impostorPhase;
+
   // a room is a session — several rounds, then the ceremony, then the wheel
   int _round = 0;
   bool _stamp = true; // the room-name stamp on arrival
@@ -238,6 +244,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         _onPeerJoined(m);
       case 'peerLeft':
         _onPeerLeft(m);
+      case 'impostorRole':
+        _onImpostorRole(m);
+      case 'impostorPhase':
+        _onImpostorPhase(m);
+      case 'impostorReveal':
+        _onImpostorReveal(m);
     }
   }
 
@@ -285,6 +297,49 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _toast('@${gone.name} left the room');
   }
 
+  // ---- Impostor: secret role + phase banners — the vote itself rides the
+  // normal point-round machinery (_onRoundMsg/_onResultMsg), so these three
+  // only ever touch the overlay, never the game loop.
+  void _onImpostorRole(Map<String, dynamic> m) {
+    if (!mounted) return;
+    final role = m['role'] as String?;
+    setState(() {
+      _impostorAmI = role == 'impostor';
+      _impostorPhase = 'night';
+    });
+    Buzz.impact();
+    Track.event('impostor_role', {'role': role ?? ''});
+  }
+
+  void _onImpostorPhase(Map<String, dynamic> m) {
+    if (!mounted) return;
+    setState(() => _impostorPhase = m['phase'] as String?);
+    if (_impostorPhase == 'discuss') {
+      Buzz.tick();
+      Sfx.pip();
+    }
+  }
+
+  void _onImpostorReveal(Map<String, dynamic> m) {
+    if (!mounted) return;
+    final impostorIdx = _idxOf(m['impostorId'] as String?);
+    final correct = m['correct'] == true;
+    final impostorName = impostorIdx == null
+        ? 'someone'
+        : (impostorIdx >= cell.people.length ? 'YOU 😳' : '@${cell.people[impostorIdx].name}');
+    setState(() {
+      // lands a beat after the normal "the room pointed at X" reveal — two
+      // distinct beats, the vote result then the verdict.
+      _result = correct
+          ? 'CORRECT 🎯 the impostor was $impostorName'
+          : 'WRONG 😵 the impostor was actually $impostorName';
+      _impostorAmI = false;
+      _impostorPhase = null;
+    });
+    Buzz.commit();
+    Sfx.fanfare();
+  }
+
   void _onRoundMsg(Map<String, dynamic> m) {
     if (!_serverDriven || _phase == _Phase.wheel) return;
     final idx = (m['idx'] as num?)?.toInt();
@@ -318,6 +373,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _split = const [];
       _result = '';
       _voteCounts = {};
+      // any new round — including the Impostor vote itself — clears the
+      // night/discuss banner so the real game underneath shows through
+      _impostorPhase = null;
     });
     if (_beat == 1) {
       Track.event('game_started', {
@@ -658,6 +716,14 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       for (final s in SeqDef.ten)
         if (!duoRoom || s.duo) s,
     ]..sort((a, b) => order.indexOf(a.vibe).compareTo(order.indexOf(b.vibe)));
+    // Impostor needs real secret roles on real other phones — it only
+    // exists server-driven, and only with a crowd (3+) to hide behind.
+    if (_serverDriven && !duoRoom) {
+      games.add(const SeqDef(
+        name: 'Impostor', icon: '🕵️', hint: 'one of you is lying — find them',
+        vibe: 'wild', duo: false, beats: [],
+      ));
+    }
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1493,6 +1559,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             ),
           // 5 · Chaos Card — full-screen interruption
           if (_chaos != null) _ChaosOverlay(emoji: _chaos![0], text: _chaos![1]),
+          // 5b · Impostor — night reveal, then the discuss banner
+          if (_impostorPhase != null)
+            _ImpostorOverlay(amI: _impostorAmI, phase: _impostorPhase!),
           // 6 · the ceremony
           if (_phase == _Phase.awards) _awardsOverlay(),
           // 7 · the wheel — revive or next, the wheel decides
@@ -2541,6 +2610,75 @@ class _ChaosOverlay extends StatelessWidget {
   }
 }
 
+/// Impostor's night/discuss banner — same glass-card language as
+/// _ChaosOverlay on purpose (it's the same "read this, then it clears"
+/// shape), swapped content: your secret role, then the discuss countdown.
+class _ImpostorOverlay extends StatelessWidget {
+  const _ImpostorOverlay({required this.amI, required this.phase});
+  final bool amI;
+  final String phase;
+
+  @override
+  Widget build(BuildContext context) {
+    final String emoji;
+    final String title;
+    final String sub;
+    if (phase == 'discuss') {
+      emoji = '💬';
+      title = 'Talk it out';
+      sub = 'One of you isn’t who they say. Who’s lying about their identity?';
+    } else if (amI) {
+      emoji = '🕵️';
+      title = 'You are the Impostor';
+      sub = 'Blend in — you vote too, same as everyone else';
+    } else {
+      emoji = '👀';
+      title = 'You are Crew';
+      sub = 'One of you isn’t who they say. Watch closely.';
+    }
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: const Color(0xB3000000),
+          alignment: Alignment.center,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.7, end: 1),
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutBack,
+            builder: (context, v, child) =>
+                Opacity(opacity: v.clamp(0, 1), child: Transform.scale(scale: v, child: child)),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 34),
+              padding: const EdgeInsets.fromLTRB(26, 30, 26, 30),
+              decoration: BoxDecoration(
+                color: const Color(0xF2140A1E),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: C.sig, width: 1.5),
+                boxShadow: [BoxShadow(color: C.sigGlow, blurRadius: 60, spreadRadius: -10)],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('🕵️ IMPOSTOR ROUND',
+                      style: T.eyebrow.copyWith(color: C.live, letterSpacing: 3, fontSize: 12)),
+                  const SizedBox(height: 18),
+                  Text(emoji, style: const TextStyle(fontSize: 58)),
+                  const SizedBox(height: 16),
+                  Text(title, textAlign: TextAlign.center, style: T.big.copyWith(fontSize: 24, height: 1.15)),
+                  const SizedBox(height: 10),
+                  Text(sub,
+                      textAlign: TextAlign.center,
+                      style: T.body.copyWith(color: Colors.white70, fontSize: 14.5, height: 1.4)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// One of THE TEN in the picker — a living emoji tile, the name, the recipe,
 /// and a beat count. Slides in with a tiny stagger.
 class _GameRow extends StatefulWidget {
@@ -2651,7 +2789,7 @@ class _GameRowState extends State<_GameRow> with SingleTickerProviderStateMixin 
                 ),
               ),
               const SizedBox(width: 10),
-              Text('${g.beats.length} rounds',
+              Text(g.beats.isEmpty ? 'social deduction' : '${g.beats.length} rounds',
                   style: T.tiny.copyWith(color: C.tx3, fontSize: 10.5)),
               const SizedBox(width: 6),
               const Icon(Icons.chevron_right_rounded, size: 18, color: C.tx3),

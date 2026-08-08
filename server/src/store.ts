@@ -67,6 +67,12 @@ export interface Cell {
   callVideo?: boolean;           // call cells: started as video?
   seqBeats?: RoundWire[];        // the current game's remaining beat chain
   seqPos: number;                // index into seqBeats
+
+  /// Impostor: set for the duration of one night→discuss→vote sequence.
+  /// The vote itself rides the normal 'point' round machinery — this field
+  /// is how endRound knows the point round it just resolved was secretly an
+  /// accusation, and who the truth actually was.
+  impostorId?: string;
 }
 
 /// In-memory store. Deliberately behind one object so it can be swapped for

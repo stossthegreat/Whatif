@@ -379,6 +379,63 @@ function startBeat(cell: Cell) {
   }, secs * 1000);
 }
 
+// ---- Impostor ---------------------------------------------------------
+// Mafia/Werewolf's skeleton, Among Us's pacing: one secret role, a silent
+// night, an open discussion, then a vote — real lie-detection with your
+// actual face and voice as the only tools. The vote itself is NOT new
+// machinery: it's a normal 'point' round (tap a face), so endRound's
+// existing point branch does all the tallying. The only new pieces are the
+// secret role (sent per-member, never broadcast) and the two timed phases
+// before the vote opens.
+const IMPOSTOR_NIGHT_MS = 10_000;
+const IMPOSTOR_DISCUSS_MS = 50_000;
+const IMPOSTOR_VOTE_SECS = 20;
+
+function startImpostor(cell: Cell): void {
+  if (cell.inRound) return;
+  // needs a real crowd — the "night" has nothing to hide behind at 2
+  if (cell.members.length < 3) { startPickedGame(cell); return; }
+
+  const impostorId = pick(cell.members);
+  cell.impostorId = impostorId;
+  cell.inRound = true; // blocks other picks until the sequence resolves
+
+  const nightEndsAt = Date.now() + IMPOSTOR_NIGHT_MS;
+  for (const mid of cell.members) {
+    const u = store.users.get(mid);
+    if (u) send(u, { t: 'impostorRole', role: mid === impostorId ? 'impostor' : 'crew', endsAt: nightEndsAt });
+  }
+
+  later(cell.id, IMPOSTOR_NIGHT_MS, (c) => {
+    const discussEndsAt = Date.now() + IMPOSTOR_DISCUSS_MS;
+    broadcastCell(c.id, { t: 'impostorPhase', phase: 'discuss', endsAt: discussEndsAt });
+    later(c.id, IMPOSTOR_DISCUSS_MS, (c2) => startImpostorVote(c2));
+  });
+}
+
+function startImpostorVote(cell: Cell): void {
+  // a member could have left mid-sequence — the round still runs, endRound's
+  // normal fallback (`winner ??= pick(members)`) covers an empty tally
+  const wire: RoundWire = {
+    kind: 'point', name: 'Impostor', hint: 'one of you isn’t who they say — point at the impostor',
+    prompt: ['Point at who you think is lying about their identity'],
+    targetId: null,
+  };
+  const idx = cell.roundIdx + 1;
+  cell.roundIdx = idx;
+  if (idx < cell.rounds.length) cell.rounds[idx] = wire; else cell.rounds.push(wire);
+  cell.answers = new Map();
+  cell.inRound = true;
+
+  const endsAt = Date.now() + IMPOSTOR_VOTE_SECS * 1000;
+  broadcastCell(cell.id, { t: 'round', idx, endsAt, game: wire, beat: 1, beats: 1 });
+  if (cell.roundTimer) clearTimeout(cell.roundTimer);
+  cell.roundTimer = setTimeout(() => {
+    const c = store.cells.get(cell.id);
+    if (c && c.roundIdx === idx) endRound(c);
+  }, IMPOSTOR_VOTE_SECS * 1000);
+}
+
 function endRound(cell: Cell) {
   const idx = cell.roundIdx;
   const round = cell.rounds[idx];
@@ -421,6 +478,20 @@ function endRound(cell: Cell) {
 
   cell.inRound = false;
   broadcastCell(cell.id, msg);
+
+  // this point round was secretly an Impostor accusation — reveal the
+  // truth a beat after the normal "the room pointed at X" lands, so the
+  // vote result and the verdict read as two distinct beats, not one. The
+  // client's own reveal countdown runs ~1.3s before it even shows the vote
+  // result, so this waits past that before overwriting it with the verdict.
+  if (kind === 'point' && cell.impostorId) {
+    const accusedId = typeof msg.winnerId === 'string' ? msg.winnerId : null;
+    const impostorId = cell.impostorId;
+    cell.impostorId = undefined;
+    later(cell.id, 2600, (c) => {
+      broadcastCell(c.id, { t: 'impostorReveal', impostorId, accusedId, correct: accusedId === impostorId });
+    });
+  }
 
   // more beats in this game? quick flip, straight into the next beat
   if (cell.seqBeats && cell.seqPos < cell.seqBeats.length - 1) {
@@ -1117,7 +1188,8 @@ wss.on('connection', (ws, req) => {
         const cell = user.cellId ? store.cells.get(user.cellId) : undefined;
         // roulette rooms don't take requests — the wheel of fate runs them
         if (cell && cell.mode !== 'roulette') {
-          startPickedGame(cell, typeof m.name === 'string' ? m.name : undefined);
+          if (m.name === 'Impostor') startImpostor(cell);
+          else startPickedGame(cell, typeof m.name === 'string' ? m.name : undefined);
         }
         break;
       }
