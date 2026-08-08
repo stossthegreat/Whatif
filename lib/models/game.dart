@@ -167,6 +167,21 @@ class GameDef {
         ['Keep going until you say the SAME word at the same time — that’s the meld.'],
       ],
     ),
+    // Judge Says — Cards Against Humanity's real DNA. Voting rides `same`
+    // unmodified; live_screen.dart's judge-role split + the judgePick
+    // round-trip own the second half (see _isJudgeRound/_amJudge there).
+    GameDef(
+      kind: GameKind.same, name: 'Judge Says', vibe: 'wild', hint: 'everyone answers — one judge crowns the funniest',
+      minStrangers: 2, maxStrangers: 8,
+      prompts: [
+        ['What’s that smell?', 'my ex’s new relationship', 'the sound of my dreams dying', 'unpaid rent', 'existential dread', 'gas station sushi'],
+        ['What’s my secret power?', 'crying in public bathrooms', 'reheating fish in the office microwave', 'never replying to texts', 'winning arguments with strangers online', 'summoning Wi-Fi with pure willpower'],
+        ['What ended my last relationship?', 'my group chat', 'a poorly timed pineapple pizza order', 'my mother', 'reply-all to the wrong email', 'my true crime podcast obsession'],
+        ['Instead of coal, Santa now gives bad children ___', 'a group project', 'dial-up internet', 'a participation trophy', 'my browser history', 'expired milk'],
+        ['Coming to Broadway this season: ___ The Musical', 'Reply-All', 'My Landlord', 'Buffering', 'The Group Chat', 'Monday Morning'],
+        ['This is the way the world ends — not with a bang but with ___', 'a dead phone battery', 'a Wi-Fi outage', 'someone muted on a work call', 'an autocorrect fail', 'a group project'],
+      ],
+    ),
     // Whisper Challenge — reuses `thumbs`, same trick as Word Collide. The
     // round's target is the mouther and sees the phrase; everyone else
     // can't hear anything by design (see _isWhisperRound in live_screen).

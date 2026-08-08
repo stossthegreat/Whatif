@@ -176,6 +176,15 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   /// anything by design and just watches lips.
   bool get _isWhisperRound => game.kind == GameKind.thumbs && game.name == 'Whisper Challenge';
 
+  /// Judge Says rides `same` (tap-one-of-N, same wire shape as any option
+  /// kind) for the voting half — the round's target is the judge and
+  /// doesn't vote. What's genuinely new is the second half: after the vote
+  /// closes, only the judge gets asked (via _judgeAsked) to crown one.
+  bool get _isJudgeRound => game.kind == GameKind.same && game.name == 'Judge Says';
+  bool get _amJudge => _isJudgeRound && _amClueGiver;
+  bool _judgeAsked = false;
+  int? _judgeWinnerIdx;
+
   /// Fill prompt variables — the same prompt lands on a different victim
   /// every single time it's played.
   String _fill(String s) => _duoize(s.replaceAll('{target}', _targetName));
@@ -268,6 +277,10 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
         _onWhoAmIRole(m);
       case 'whoAmIReveal':
         _onWhoAmIReveal(m);
+      case 'judgeAsk':
+        _onJudgeAsk(m);
+      case 'judgeSaysResult':
+        _onJudgeSaysResult(m);
     }
   }
 
@@ -384,6 +397,43 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     });
   }
 
+  // ---- Judge Says: vote closes normally (_onResultMsg), then only the
+  // judge is asked to crown one. Individualized — only the judge's client
+  // ever receives 'judgeAsk', so no extra role check is needed here.
+  void _onJudgeAsk(Map<String, dynamic> m) {
+    if (!mounted || !_isJudgeRound) return;
+    setState(() {
+      _judgeAsked = true;
+      // _onResultMsg already flipped this true for everyone when the vote
+      // closed — un-flip it just for the judge so their pick buttons
+      // render again through the normal _inputs() path.
+      _answered = false;
+      _selected = null;
+    });
+    Buzz.impact();
+    Sfx.pip();
+  }
+
+  void _onJudgeSaysResult(Map<String, dynamic> m) {
+    if (!mounted || !_isJudgeRound) return;
+    final winnerIdx = (m['winnerIdx'] as num?)?.toInt();
+    final winnerPersonIdx = _idxOf(m['winnerId'] as String?);
+    final who = winnerPersonIdx == null
+        ? null
+        : (winnerPersonIdx >= cell.people.length ? 'you' : '@${cell.people[winnerPersonIdx].name}');
+    final option = (winnerIdx != null && winnerIdx + 1 < _prompt.length) ? _prompt[winnerIdx + 1] : null;
+    setState(() {
+      _judgeWinnerIdx = winnerIdx;
+      _answered = true;
+      _result = option != null
+          ? (who != null ? '🏆 "$option" wins — $who' : '🏆 "$option" wins')
+          : '🏆 the judge has crowned a winner';
+    });
+    Buzz.commit();
+    Sfx.fanfare();
+    _toReveal();
+  }
+
   void _onRoundMsg(Map<String, dynamic> m) {
     if (!_serverDriven || _phase == _Phase.wheel) return;
     final idx = (m['idx'] as num?)?.toInt();
@@ -420,6 +470,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       // any new round — including the Impostor vote itself — clears the
       // night/discuss banner so the real game underneath shows through
       _impostorPhase = null;
+      _judgeAsked = false;
+      _judgeWinnerIdx = null;
     });
     if (_beat == 1) {
       Track.event('game_started', {
@@ -488,6 +540,13 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             _result = 'the room split $a / ${100 - a}';
           }
         case GameKind.same:
+          if (_isJudgeRound) {
+            // the vote just closed — the round isn't over, the judge still
+            // has to crown one. Nothing to show yet; _onJudgeAsk/
+            // _onJudgeSaysResult own the reveal from here.
+            _result = _amJudge ? 'crown the funniest…' : 'the judge is deciding…';
+            break;
+          }
           final counts = ((m['counts'] as List?) ?? const []).map((e) => (e as num).toInt()).toList();
           final matches = _selected != null && _selected! < counts.length
               ? (counts[_selected!] - 1).clamp(0, 99)
@@ -516,6 +575,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           }
       }
     });
+    // Judge Says isn't done when the vote closes — the judge still has to
+    // pick. _onJudgeSaysResult calls _toReveal() once that verdict lands.
+    if (_isJudgeRound) return;
     _toReveal();
   }
 
@@ -773,6 +835,10 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       ));
       games.add(const SeqDef(
         name: 'Who Am I', icon: '❔', hint: 'everyone else knows. you don’t.',
+        vibe: 'wild', duo: false, beats: [],
+      ));
+      games.add(const SeqDef(
+        name: 'Judge Says', icon: '⚖️', hint: 'everyone answers — one judge crowns the funniest',
         vibe: 'wild', duo: false, beats: [],
       ));
     }
@@ -1167,6 +1233,20 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _result = m > 0 ? '$m of you said the same thing 🧠' : 'nobody matched you — iconic';
     });
     Timer(const Duration(milliseconds: 650), _toReveal);
+  }
+
+  /// Judge Says: the judge's pick, sent AFTER the vote already closed —
+  /// this is never the normal 'answer' message, it's its own round-trip.
+  /// Judge Says is server-driven only (gated in the picker), so there's no
+  /// local-fallback branch to write here.
+  void _resolveJudgePick(int choice) {
+    if (_answered) return;
+    Buzz.commit();
+    setState(() {
+      _selected = choice;
+      _answered = true;
+    });
+    NetworkClient.instance.judgePick(_round, choice);
   }
 
   void _resolveTwoTruths(int choice) {
@@ -2174,6 +2254,21 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
           ]),
         ];
       case GameKind.same:
+        if (_amJudge && !_judgeAsked) {
+          // the vote's still open — the judge has nothing to do yet
+          return [Text('waiting for the room to answer…', style: T.sub.copyWith(color: Colors.white70))];
+        }
+        return [
+          if (_amJudge)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text('crown the funniest 👑', style: T.sub.copyWith(color: Colors.white70)),
+            ),
+          for (var i = 1; i < _prompt.length; i++) ...[
+            _optBtn(_prompt[i], i - 1),
+            if (i < _prompt.length - 1) const SizedBox(height: 8),
+          ],
+        ];
       case GameKind.twoTruths:
         return [
           for (var i = 1; i < _prompt.length; i++) ...[
@@ -2260,7 +2355,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                 case GameKind.wouldRather:
                   _resolveSplit(index);
                 case GameKind.same:
-                  _resolveSame(index);
+                  if (_amJudge) {
+                    _resolveJudgePick(index);
+                  } else {
+                    _resolveSame(index);
+                  }
                 case GameKind.twoTruths:
                   _resolveTwoTruths(index);
                 case GameKind.rapidFire:

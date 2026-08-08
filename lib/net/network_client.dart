@@ -186,6 +186,9 @@ class NetworkClient {
   void startParty() => send({'t': 'startParty'});
   void leaveParty() => send({'t': 'leaveParty'});
   void answer(int round, dynamic v) => send({'t': 'answer', 'round': round, 'v': v});
+  /// Judge Says: the judge's pick, sent AFTER the vote already closed —
+  /// a distinct round-trip from the normal answer() one.
+  void judgePick(int round, int choice) => send({'t': 'judgePick', 'round': round, 'choice': choice});
   void vote(String e) => send({'t': 'vote', 'e': e});
   void spinWheel() => send({'t': 'spinWheel'});
   void pickGame([String? name]) =>

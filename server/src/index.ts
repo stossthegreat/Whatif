@@ -10,7 +10,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'crypto';
-import { rollGame, SEQ_PACK, seqByName, type GameKind, type SeqDef } from './games.js';
+import { rollGame, SEQ_PACK, seqByName, PACK, type GameKind, type SeqDef } from './games.js';
 import { store, type User, type Meet, type Cell, type RoundWire } from './store.js';
 import { mintToken, LIVEKIT_URL } from './livekit.js';
 import * as db from './db.js';
@@ -484,6 +484,76 @@ function startWhoAmI(cell: Cell): void {
   });
 }
 
+// ---- Judge Says ---------------------------------------------------------
+// Cards Against Humanity's real shape. The vote half is NOT new machinery
+// — it's a normal 'same' round (tap one of the pre-written options), so
+// endRound's existing option-tally branch does all the counting. What's
+// new: the round's target is the judge and never votes, and the round
+// isn't actually over when the vote closes — the judge still has to crown
+// one, via a distinct judgePick round-trip (see the 'judgePick' message
+// handler and the hook inside endRound below).
+const JUDGE_SAYS_VOTE_SECS = 20;
+
+function startJudgeSays(cell: Cell): void {
+  if (cell.inRound) return;
+  // needs real competition among voters to be worth judging
+  if (cell.members.length < 3) { startPickedGame(cell); return; }
+  const game = PACK.find((g) => g.name === 'Judge Says');
+  if (!game) { startPickedGame(cell); return; }
+
+  const judgeId = pick(cell.members);
+  const prompt = pick(game.prompts);
+  const wire: RoundWire = { kind: 'same', name: game.name, hint: game.hint, prompt, targetId: judgeId };
+
+  cell.judgeSaysId = judgeId;
+  const idx = cell.roundIdx + 1;
+  cell.roundIdx = idx;
+  if (idx < cell.rounds.length) cell.rounds[idx] = wire; else cell.rounds.push(wire);
+  cell.answers = new Map();
+  cell.inRound = true;
+
+  const endsAt = Date.now() + JUDGE_SAYS_VOTE_SECS * 1000;
+  broadcastCell(cell.id, { t: 'round', idx, endsAt, game: wire, beat: 1, beats: 1 });
+  if (cell.roundTimer) clearTimeout(cell.roundTimer);
+  cell.roundTimer = setTimeout(() => {
+    const c = store.cells.get(cell.id);
+    if (c && c.roundIdx === idx) endRound(c);
+  }, JUDGE_SAYS_VOTE_SECS * 1000);
+}
+
+/// Everything that happens once a round is TRULY finished — more beats,
+/// the ceremony, or back to the hang. Its own function because Judge Says
+/// needs to skip it once (right when the vote closes) and call it again
+/// later, once the judge actually picks.
+function finishRound(cell: Cell): void {
+  // more beats in this game? quick flip, straight into the next beat
+  if (cell.seqBeats && cell.seqPos < cell.seqBeats.length - 1) {
+    cell.seqPos += 1;
+    later(cell.id, 2000, (c) => startBeat(c));
+    return;
+  }
+
+  // game complete — the reveal breathes, then back to the hang. Every 3rd
+  // game earns a ceremony. Roulette rooms roll the next game automatically.
+  cell.seqBeats = undefined;
+  cell.gamesPlayed += 1;
+  for (const mid of cell.members) {
+    const uid = cell.meta.get(mid)?.uid;
+    if (uid) social.onGameComplete(uid);
+  }
+  if (cell.gamesPlayed % 3 === 0) {
+    later(cell.id, 3500, (c) => sendAwards(c));
+    if (cell.mode === 'roulette') {
+      later(cell.id, 12000, (c) => { if (!c.inRound) startPickedGame(c); });
+    }
+  } else {
+    later(cell.id, 3500, (c) => broadcastCell(c.id, { t: 'talk' }));
+    if (cell.mode === 'roulette') {
+      later(cell.id, 8000, (c) => { if (!c.inRound) startPickedGame(c); });
+    }
+  }
+}
+
 function endRound(cell: Cell) {
   const idx = cell.roundIdx;
   const round = cell.rounds[idx];
@@ -541,32 +611,22 @@ function endRound(cell: Cell) {
     });
   }
 
-  // more beats in this game? quick flip, straight into the next beat
-  if (cell.seqBeats && cell.seqPos < cell.seqBeats.length - 1) {
-    cell.seqPos += 1;
-    later(cell.id, 2000, (c) => startBeat(c));
-    return;
+  // this 'same' round was secretly Judge Says — the vote just closed, but
+  // the round isn't over: the judge still has to crown one. Ask them (they
+  // already have the options from the round's own prompt) and PAUSE —
+  // finishRound runs from the 'judgePick' handler instead, once they pick.
+  if (kind === 'same' && cell.judgeSaysId) {
+    const judgeId = cell.judgeSaysId;
+    const judge = store.users.get(judgeId);
+    if (judge) {
+      cell.inRound = true; // still mid-sequence — re-lock after the false above
+      later(cell.id, 1200, () => send(judge, { t: 'judgeAsk', round: idx }));
+      return;
+    }
+    cell.judgeSaysId = undefined; // judge vanished — fall through as normal
   }
 
-  // game complete — the reveal breathes, then back to the hang. Every 3rd
-  // game earns a ceremony. Roulette rooms roll the next game automatically.
-  cell.seqBeats = undefined;
-  cell.gamesPlayed += 1;
-  for (const mid of cell.members) {
-    const uid = cell.meta.get(mid)?.uid;
-    if (uid) social.onGameComplete(uid);
-  }
-  if (cell.gamesPlayed % 3 === 0) {
-    later(cell.id, 3500, (c) => sendAwards(c));
-    if (cell.mode === 'roulette') {
-      later(cell.id, 12000, (c) => { if (!c.inRound) startPickedGame(c); });
-    }
-  } else {
-    later(cell.id, 3500, (c) => broadcastCell(c.id, { t: 'talk' }));
-    if (cell.mode === 'roulette') {
-      later(cell.id, 8000, (c) => { if (!c.inRound) startPickedGame(c); });
-    }
-  }
+  finishRound(cell);
 }
 
 function sendAwards(cell: Cell) {
@@ -1238,6 +1298,7 @@ wss.on('connection', (ws, req) => {
         if (cell && cell.mode !== 'roulette') {
           if (m.name === 'Impostor') startImpostor(cell);
           else if (m.name === 'Who Am I') startWhoAmI(cell);
+          else if (m.name === 'Judge Says') startJudgeSays(cell);
           else startPickedGame(cell, typeof m.name === 'string' ? m.name : undefined);
         }
         break;
@@ -1259,8 +1320,11 @@ wss.on('connection', (ws, req) => {
         const cell = store.cells.get(user.cellId);
         if (cell && (m.round == null || m.round === cell.roundIdx)) {
           cell.answers.set(id, m.v);
-          // everyone's in — a quick beat to see it, then flip early
-          if (cell.answers.size >= cell.members.length && cell.roundTimer) {
+          // everyone's in — a quick beat to see it, then flip early. Judge
+          // Says' judge never submits an answer (they vote later, on a
+          // separate round-trip), so they don't count toward "everyone".
+          const need = cell.members.length - (cell.judgeSaysId ? 1 : 0);
+          if (cell.answers.size >= need && cell.roundTimer) {
             clearTimeout(cell.roundTimer);
             const idx = cell.roundIdx;
             cell.roundTimer = setTimeout(() => {
@@ -1269,6 +1333,32 @@ wss.on('connection', (ws, req) => {
             }, 2000);
           }
         }
+        break;
+      }
+      case 'judgePick': {
+        // only the judge can end a Judge Says round, and only for the round
+        // they were actually asked about — a stale/spoofed pick is a no-op
+        if (!user.cellId) break;
+        const cell = store.cells.get(user.cellId);
+        if (!cell || cell.judgeSaysId !== id) break;
+        const jIdx = typeof m.round === 'number' ? m.round : cell.roundIdx;
+        const round = cell.rounds[jIdx];
+        if (!round || round.name !== 'Judge Says') break;
+        const choice = typeof m.choice === 'number' ? Math.trunc(m.choice) : -1;
+        const nOpts = Math.max(0, round.prompt.length - 1);
+        if (choice < 0 || choice >= nOpts) break;
+
+        // who submitted the winning option, if determinable (first found on a tie)
+        let winnerId: string | null = null;
+        for (const [mid, v] of cell.answers) if (v === choice) { winnerId = mid; break; }
+        cell.judgeSaysId = undefined;
+        if (winnerId) {
+          cell.lastWinnerId = winnerId;
+          const uid = cell.meta.get(winnerId)?.uid;
+          if (uid) social.onPointWin(uid); // Storyteller badge fuel, same as a point-round win
+        }
+        broadcastCell(cell.id, { t: 'judgeSaysResult', round: jIdx, winnerIdx: choice, winnerId });
+        finishRound(cell);
         break;
       }
       case 'react':

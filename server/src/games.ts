@@ -130,6 +130,20 @@ export const PACK: GameDef[] = [
       ['Didn’t meld? Say a word that bridges your last two. Go again.'],
       ['Keep going until you say the SAME word at the same time — that’s the meld.'],
     ] },
+  // Judge Says — Cards Against Humanity's real DNA ($500M-scale, Amazon's
+  // #1 card game): a fill-in-the-blank prompt, everyone taps one of the
+  // pre-written options (never typed — that's the "hand of cards"), one
+  // rotating judge crowns the funniest. Voting rides `same` unmodified;
+  // index.ts's startJudgeSays/the endRound hook own the judge half.
+  { kind: 'same', name: 'Judge Says', vibe: 'wild', hint: 'everyone answers — one judge crowns the funniest',
+    minStrangers: 2, maxStrangers: 8, prompts: [
+      ['What’s that smell?', 'my ex’s new relationship', 'the sound of my dreams dying', 'unpaid rent', 'existential dread', 'gas station sushi'],
+      ['What’s my secret power?', 'crying in public bathrooms', 'reheating fish in the office microwave', 'never replying to texts', 'winning arguments with strangers online', 'summoning Wi-Fi with pure willpower'],
+      ['What ended my last relationship?', 'my group chat', 'a poorly timed pineapple pizza order', 'my mother', 'reply-all to the wrong email', 'my true crime podcast obsession'],
+      ['Instead of coal, Santa now gives bad children ___', 'a group project', 'dial-up internet', 'a participation trophy', 'my browser history', 'expired milk'],
+      ['Coming to Broadway this season: ___ The Musical', 'Reply-All', 'My Landlord', 'Buffering', 'The Group Chat', 'Monday Morning'],
+      ['This is the way the world ends — not with a bang but with ___', 'a dead phone battery', 'a Wi-Fi outage', 'someone muted on a work call', 'an autocorrect fail', 'a group project'],
+    ] },
   // Whisper Challenge — the format that went viral via Jimmy Fallon and
   // YouTube/TikTok. Reuses `thumbs` (same trick as Word Collide): the
   // round's target is the mouther and sees the phrase, everyone else can't
