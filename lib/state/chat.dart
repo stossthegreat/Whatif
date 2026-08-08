@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../net/network_client.dart';
+import 'notify.dart';
 
 /// One message in a thread. id == -1 while in flight (tmp holds the local id
 /// until the server ack swaps the real one in).
@@ -173,10 +174,33 @@ class ChatStore extends ChangeNotifier {
       NetworkClient.instance.dmRead(from, msg.id);
     } else {
       unreadTotal += 1;
+      // already-known peer (an existing conversation) gets a real face on
+      // the toast; a brand-new thread falls back to a default — chatsList()
+      // below will fill in the real name/photo for the feed either way
+      final known = chats.where((c) => c.uid == from);
+      final peer = known.isEmpty ? null : known.first;
+      Notify.instance.push(AppToast(
+        kind: ToastKind.message,
+        title: peer != null ? '@${peer.name}' : 'New message',
+        subtitle: _previewFor(msg),
+        uid: from,
+        name: peer?.name ?? 'someone',
+        hue: peer?.hue ?? 210,
+        photoId: peer?.photoId,
+      ));
     }
     NetworkClient.instance.chatsList(); // refresh previews/ordering
     notifyListeners();
   }
+
+  String _previewFor(Msg m) => switch (m.kind) {
+        'voice' => '🎤 voice note',
+        'photo' => '📷 photo',
+        'gif' => 'GIF',
+        'invite' => '🎮 room invite',
+        'call' => '📞 call',
+        _ => m.body,
+      };
 
   void _onHistory(Map<String, dynamic> m) {
     final w = m['with'] as String?;

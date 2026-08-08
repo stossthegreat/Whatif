@@ -5,6 +5,7 @@ import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
+import '../widgets/notification_bell.dart';
 import '../state/chat.dart';
 import 'chat_screen.dart' show AppNav;
 import 'chats_screen.dart';
@@ -98,6 +99,8 @@ class MeScreen extends StatelessWidget {
                         );
                       },
                     ),
+                    const SizedBox(width: 10),
+                    const NotificationBell(),
                     const SizedBox(width: 10),
                     Press(
                       onTap: () {

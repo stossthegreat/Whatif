@@ -7,6 +7,7 @@ import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
 import '../widgets/glass.dart';
 import '../widgets/identity_orb.dart';
+import '../widgets/notification_bell.dart';
 import 'chat_screen.dart';
 import 'friends_screen.dart';
 
@@ -182,6 +183,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
                       ),
                     ),
                     const Spacer(),
+                    const NotificationBell(),
+                    const SizedBox(width: 10),
                     // new message — pick any friend, start talking
                     Press(
                       onTap: () { Buzz.tick(); _composeSheet(context); },
