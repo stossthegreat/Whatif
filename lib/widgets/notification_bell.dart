@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import '../core/haptics.dart';
-import '../state/chat.dart';
 import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../screens/notifications_screen.dart';
 
-/// The persistent bell — pending friend requests + unread messages, one
-/// number, one tap to the feed. Matches the glass-circle icon language
-/// already used for the settings/friends buttons on Home and Profile, so it
-/// slots into any screen's existing header row without looking bolted on.
+/// The persistent bell. Counts SOCIAL notifications only — friend requests
+/// and a live room invite. Messages deliberately don't count here: they
+/// already badge the Messages tab, and two badges claiming the same unread
+/// makes both feel broken.
 class NotificationBell extends StatelessWidget {
   const NotificationBell({super.key, this.size = 38, this.iconSize = 19});
   final double size;
@@ -17,9 +16,10 @@ class NotificationBell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([SocialState.instance, ChatStore.instance]),
+      animation: SocialState.instance,
       builder: (context, _) {
-        final n = SocialState.instance.reqCount + ChatStore.instance.unreadTotal;
+        final s = SocialState.instance;
+        final n = s.reqCount + (s.knock != null ? 1 : 0);
         return GestureDetector(
           onTap: () {
             Buzz.tick();
