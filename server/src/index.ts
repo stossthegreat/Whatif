@@ -333,17 +333,26 @@ function assignTargets(rounds: RoundWire[], members: string[]) {
 /// name, or the dice (or roulette mode) picked it. Beats auto-chain.
 function startPickedGame(cell: Cell, name?: string) {
   if (cell.inRound) return; // one game at a time
-  // Solo rooms don't play. Every game here is social — a vote round alone
-  // renders "tap a face to vote" over zero faces, and a confession alone
-  // is a man agreeing with himself. The room waits; joinCell starts the
-  // first game the moment a real person walks in.
-  if (cell.members.length < 2) return;
   // Duo rooms (the most common shape) only ever get duo-suited games —
   // "point at the person who…" copy is a group sport. A group-only name
   // picked in a duo falls back into the duo pool instead of erroring.
-  const pool = cell.members.length <= 2 ? SEQ_PACK.filter((s) => s.duo) : SEQ_PACK;
+  let pool: SeqDef[] = cell.members.length <= 2 ? SEQ_PACK.filter((s) => s.duo) : SEQ_PACK;
+  // SOLO = PRACTICE MODE. Build 72 hard-blocked solo rooms (a vote round
+  // alone renders "tap a face to vote" over zero faces) — but total silence
+  // was worse: pressing a game and getting NOTHING reads as a dead app, and
+  // solo is exactly how the app gets tested and demoed. So solo rooms play
+  // the same games minus only the beats that need another face on screen
+  // (point crowns, bottle spins). Face pulls, hot takes, confessions and
+  // impossible choices all work with one person and a camera.
+  if (cell.members.length < 2) {
+    pool = pool
+      .map((s) => ({ ...s, beats: s.beats.filter((b) => b.kind !== 'point' && b.kind !== 'spin') }))
+      .filter((s) => s.beats.length > 0);
+  }
+  if (!pool.length) return;
+  // match by NAME, not identity — the solo map above clones the defs
   const named = name ? seqByName(name) : undefined;
-  const seq: SeqDef = (named && pool.includes(named) ? named : undefined) ?? pick(pool);
+  const seq: SeqDef = (named ? pool.find((s) => s.name === named.name) : undefined) ?? pick(pool);
 
   // roll one prompt per beat now, so the whole chain is decided up front
   cell.seqBeats = seq.beats.map((b) => {
@@ -631,6 +640,24 @@ function endRound(cell: Cell) {
     if (judge) {
       cell.inRound = true; // still mid-sequence — re-lock after the false above
       later(cell.id, 1200, () => send(judge, { t: 'judgeAsk', round: idx }));
+      // STUCK-ROOM GUARD: a judge who never picks (left, phone died, froze)
+      // used to leave inRound=true FOREVER — every later pick in that room
+      // silently died. If they haven't crowned anyone in 18s, the room
+      // crowns a random submitted answer itself and moves on.
+      later(cell.id, 18_000, (c) => {
+        if (c.roundIdx !== idx || c.judgeSaysId !== judgeId) return; // already resolved
+        const r = c.rounds[idx];
+        const nOpts = Math.max(1, (r?.prompt.length ?? 2) - 1);
+        const submitted = [...c.answers.values()].filter(
+          (v): v is number => typeof v === 'number' && v >= 0 && v < nOpts);
+        const choice = submitted.length ? pick(submitted) : 0;
+        let winnerId: string | null = null;
+        for (const [mid, v] of c.answers) if (v === choice) { winnerId = mid; break; }
+        c.judgeSaysId = undefined;
+        if (winnerId) c.lastWinnerId = winnerId;
+        broadcastCell(c.id, { t: 'judgeSaysResult', round: idx, winnerIdx: choice, winnerId });
+        finishRound(c);
+      });
       return;
     }
     cell.judgeSaysId = undefined; // judge vanished — fall through as normal
@@ -1305,13 +1332,16 @@ wss.on('connection', (ws, req) => {
       case 'leaveParty': leaveParty(id); break;
       case 'pickGame': {
         const cell = user.cellId ? store.cells.get(user.cellId) : undefined;
-        // roulette rooms don't take requests — the wheel of fate runs them
-        if (cell && cell.mode !== 'roulette') {
-          if (m.name === 'Impostor') startImpostor(cell);
-          else if (m.name === 'Who Am I') startWhoAmI(cell);
-          else if (m.name === 'Judge Says') startJudgeSays(cell);
-          else startPickedGame(cell, typeof m.name === 'string' ? m.name : undefined);
-        }
+        // An explicit human pick is honored EVERYWHERE — including roulette.
+        // Roulette means "games auto-chain", not "your taps are ignored":
+        // silently eating a pick reads as a dead app (learned the hard way).
+        // The auto-chain resumes on its own after the picked game ends.
+        if (!cell) { console.log(`[game] pick ignored: ${user.uid} not in a cell`); break; }
+        if (cell.inRound) { console.log(`[game] pick ignored: cell ${cell.id} mid-round`); break; }
+        if (m.name === 'Impostor') startImpostor(cell);
+        else if (m.name === 'Who Am I') startWhoAmI(cell);
+        else if (m.name === 'Judge Says') startJudgeSays(cell);
+        else startPickedGame(cell, typeof m.name === 'string' ? m.name : undefined);
         break;
       }
       case 'startParty': {

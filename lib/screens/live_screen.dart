@@ -88,6 +88,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   bool get _serverDriven => widget.live && cell.rounds.first.targetId != null;
   Timer? _resultGrace;
   Timer? _wheelTimeout;
+  Timer? _pickWatch; // "pick → nothing" watchdog: toast if no round starts
   bool _wheelArming = false;
   DateTime? _roundEndsAt;
 
@@ -455,6 +456,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _idle?.cancel();
     _startTimer?.cancel();
     _resultGrace?.cancel();
+    _pickWatch?.cancel(); // the pick landed — the watchdog stands down
     _revealTick?.cancel();
     setState(() {
       _revealCount = null;
@@ -668,6 +670,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _comboReset?.cancel();
     _resultGrace?.cancel();
     _wheelTimeout?.cancel();
+    _pickWatch?.cancel();
     _revealTick?.cancel();
     _netSub?.cancel();
     super.dispose();
@@ -756,6 +759,16 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     Track.event('game_picked', {'game': name ?? 'random'});
     if (_serverDriven) {
       NetworkClient.instance.pickGame(name);
+      // WATCHDOG: a pick the server ignores must never be silent. If no
+      // round starts within 3s, say so out loud — "press → nothing" is the
+      // one failure mode this app is never allowed to have again, and this
+      // line is also the instant tell that Railway is running a stale build.
+      _pickWatch?.cancel();
+      _pickWatch = Timer(const Duration(seconds: 3), () {
+        if (mounted && _phase != _Phase.game) {
+          _toast('game didn’t start — the server may be on an old build');
+        }
+      });
       return; // the {t:'round'} broadcast starts it for everyone
     }
     // simulated / old server: build the beat chain locally
@@ -822,13 +835,20 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     // duo rooms only see duo-suited games — group-phrased prompts ("point
     // at the person who…") are meaningless with one other face on screen
     final duoRoom = cell.people.length == 1;
+    // solo = practice mode: the server strips point/spin beats (they need
+    // another face), so only list games that still have beats left after
+    // that — a game that would start as nothing must not be offered
+    final soloRoom = cell.people.isEmpty && widget.live;
     final games = [
       for (final s in SeqDef.ten)
-        if (!duoRoom || s.duo) s,
+        if ((!duoRoom || s.duo) &&
+            (!soloRoom ||
+                s.beats.any((b) => b.kind != GameKind.point && b.kind != GameKind.spin)))
+          s,
     ]..sort((a, b) => order.indexOf(a.vibe).compareTo(order.indexOf(b.vibe)));
     // Impostor and Who Am I both need real secret roles on real other
     // phones — server-driven only, and both need a crowd (3+) to work.
-    if (_serverDriven && !duoRoom) {
+    if (_serverDriven && cell.people.length >= 2) {
       games.add(const SeqDef(
         name: 'Impostor', icon: '🕵️', hint: 'one of you is lying — find them',
         vibe: 'wild', duo: false, beats: [],
@@ -862,9 +882,11 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               Text('PICK A GAME', style: T.eyebrow.copyWith(letterSpacing: 3, fontSize: 11)),
               const SizedBox(height: 4),
               Text(
-                  cell.people.length == 1
-                      ? 'every one is a few rounds back to back · more games with 3+ people'
-                      : 'every one is a few rounds back to back',
+                  cell.people.isEmpty && widget.live
+                      ? 'practice rounds while it’s just you — the full pack unlocks when someone drops in'
+                      : cell.people.length == 1
+                          ? 'every one is a few rounds back to back · more games with 3+ people'
+                          : 'every one is a few rounds back to back',
                   style: T.tiny),
               const SizedBox(height: 8),
               Flexible(
