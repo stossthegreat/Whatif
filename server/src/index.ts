@@ -640,6 +640,24 @@ function endRound(cell: Cell) {
     if (judge) {
       cell.inRound = true; // still mid-sequence — re-lock after the false above
       later(cell.id, 1200, () => send(judge, { t: 'judgeAsk', round: idx }));
+      // STUCK-ROOM GUARD: a judge who never picks (left, phone died, froze)
+      // used to leave inRound=true FOREVER — every later pick in that room
+      // silently died. If they haven't crowned anyone in 18s, the room
+      // crowns a random submitted answer itself and moves on.
+      later(cell.id, 18_000, (c) => {
+        if (c.roundIdx !== idx || c.judgeSaysId !== judgeId) return; // already resolved
+        const r = c.rounds[idx];
+        const nOpts = Math.max(1, (r?.prompt.length ?? 2) - 1);
+        const submitted = [...c.answers.values()].filter(
+          (v): v is number => typeof v === 'number' && v >= 0 && v < nOpts);
+        const choice = submitted.length ? pick(submitted) : 0;
+        let winnerId: string | null = null;
+        for (const [mid, v] of c.answers) if (v === choice) { winnerId = mid; break; }
+        c.judgeSaysId = undefined;
+        if (winnerId) c.lastWinnerId = winnerId;
+        broadcastCell(c.id, { t: 'judgeSaysResult', round: idx, winnerIdx: choice, winnerId });
+        finishRound(c);
+      });
       return;
     }
     cell.judgeSaysId = undefined; // judge vanished — fall through as normal
@@ -1314,13 +1332,16 @@ wss.on('connection', (ws, req) => {
       case 'leaveParty': leaveParty(id); break;
       case 'pickGame': {
         const cell = user.cellId ? store.cells.get(user.cellId) : undefined;
-        // roulette rooms don't take requests — the wheel of fate runs them
-        if (cell && cell.mode !== 'roulette') {
-          if (m.name === 'Impostor') startImpostor(cell);
-          else if (m.name === 'Who Am I') startWhoAmI(cell);
-          else if (m.name === 'Judge Says') startJudgeSays(cell);
-          else startPickedGame(cell, typeof m.name === 'string' ? m.name : undefined);
-        }
+        // An explicit human pick is honored EVERYWHERE — including roulette.
+        // Roulette means "games auto-chain", not "your taps are ignored":
+        // silently eating a pick reads as a dead app (learned the hard way).
+        // The auto-chain resumes on its own after the picked game ends.
+        if (!cell) { console.log(`[game] pick ignored: ${user.uid} not in a cell`); break; }
+        if (cell.inRound) { console.log(`[game] pick ignored: cell ${cell.id} mid-round`); break; }
+        if (m.name === 'Impostor') startImpostor(cell);
+        else if (m.name === 'Who Am I') startWhoAmI(cell);
+        else if (m.name === 'Judge Says') startJudgeSays(cell);
+        else startPickedGame(cell, typeof m.name === 'string' ? m.name : undefined);
         break;
       }
       case 'startParty': {

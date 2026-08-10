@@ -88,6 +88,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   bool get _serverDriven => widget.live && cell.rounds.first.targetId != null;
   Timer? _resultGrace;
   Timer? _wheelTimeout;
+  Timer? _pickWatch; // "pick → nothing" watchdog: toast if no round starts
   bool _wheelArming = false;
   DateTime? _roundEndsAt;
 
@@ -455,6 +456,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _idle?.cancel();
     _startTimer?.cancel();
     _resultGrace?.cancel();
+    _pickWatch?.cancel(); // the pick landed — the watchdog stands down
     _revealTick?.cancel();
     setState(() {
       _revealCount = null;
@@ -668,6 +670,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _comboReset?.cancel();
     _resultGrace?.cancel();
     _wheelTimeout?.cancel();
+    _pickWatch?.cancel();
     _revealTick?.cancel();
     _netSub?.cancel();
     super.dispose();
@@ -756,6 +759,16 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     Track.event('game_picked', {'game': name ?? 'random'});
     if (_serverDriven) {
       NetworkClient.instance.pickGame(name);
+      // WATCHDOG: a pick the server ignores must never be silent. If no
+      // round starts within 3s, say so out loud — "press → nothing" is the
+      // one failure mode this app is never allowed to have again, and this
+      // line is also the instant tell that Railway is running a stale build.
+      _pickWatch?.cancel();
+      _pickWatch = Timer(const Duration(seconds: 3), () {
+        if (mounted && _phase != _Phase.game) {
+          _toast('game didn’t start — the server may be on an old build');
+        }
+      });
       return; // the {t:'round'} broadcast starts it for everyone
     }
     // simulated / old server: build the beat chain locally
