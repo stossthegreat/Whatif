@@ -9,13 +9,27 @@ import { store } from './store.js';
 /// changes are rare (per user), the payload is tiny, and instant propagation
 /// is what makes the app feel like one coherent memory instead of a set of
 /// caches that disagree for a while.
+const pendingFresh = new Map<string, { patch: { photoId?: number; thumbId?: number }; timer: NodeJS.Timeout }>();
+
 function broadcastFaceFresh(uid: string, patch: { photoId?: number; thumbId?: number }): void {
-  const msg = JSON.stringify({ t: 'faceFresh', uid, ...patch });
-  for (const u of store.users.values()) {
-    if (u.ws.readyState === 1 /* OPEN */) {
-      try { u.ws.send(msg); } catch { /* socket died mid-iteration */ }
-    }
-  }
+  // avatar + thumb land as two uploads back to back — coalesce into ONE
+  // broadcast so every online client re-pulls Explore once per change,
+  // not twice. 1.2s covers the gap between the two POSTs comfortably.
+  const cur = pendingFresh.get(uid);
+  const merged = { ...(cur?.patch ?? {}), ...patch };
+  if (cur) clearTimeout(cur.timer);
+  pendingFresh.set(uid, {
+    patch: merged,
+    timer: setTimeout(() => {
+      pendingFresh.delete(uid);
+      const msg = JSON.stringify({ t: 'faceFresh', uid, ...merged });
+      for (const u of store.users.values()) {
+        if (u.ws.readyState === 1 /* OPEN */) {
+          try { u.ws.send(msg); } catch { /* socket died mid-iteration */ }
+        }
+      }
+    }, 1200),
+  });
 }
 
 /// Media over HTTP (WS is the wrong pipe for bytes): photos, voice notes,

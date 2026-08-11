@@ -286,6 +286,7 @@ class SocialState extends ChangeNotifier {
       case 'badge':
         lastBadgeLabel = m['label'] as String?;
         notifyListeners();
+      case 'profileFresh':
       case 'faceFresh':
         // someone's photo changed. If it's ME, heal my own pointer right
         // now (the server is the authority on which media row exists); if
@@ -301,6 +302,7 @@ class SocialState extends ChangeNotifier {
         }
         final known = friends.any((f) => f.uid == uid) ||
             reqsIn.any((f) => f.uid == uid) ||
+            reqsOut.any((f) => f.uid == uid) ||
             recent.any((r) => r.uid == uid);
         if (known) NetworkClient.instance.friendsSnapshot();
     }

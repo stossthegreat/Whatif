@@ -1600,6 +1600,12 @@ wss.on('connection', (ws, req) => {
       case 'deleteAccount': {
         // the privacy policy promises immediate server-side deletion — honour it
         console.log(`[delete] account ${user.uid}`);
+        // friends learn NOW, not on their next coincidental snapshot — the
+        // row vanishes from their lists and (client-side) their chat threads
+        for (const fuid of user.friendUids ?? []) {
+          const f = store.userByUid(fuid);
+          if (f) { send(f, { t: 'friendRemoved', uid: user.uid }); void social.snapshot(f); }
+        }
         db.deleteUser(user.uid);
         dbs.deleteSocial(user.uid);
         store.purgeSocial(user.uid);

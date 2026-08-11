@@ -299,9 +299,24 @@ export async function traitVote(user: User, m: Record<string, unknown>): Promise
 }
 
 // ---- profiles --------------------------------------------------------------
+
+/// A profile just changed (bio/age/title/interests/name) — nudge every
+/// connected phone so friends lists, explore cards and open profiles
+/// re-pull now instead of on their own next fetch. Same fan-out shape as
+/// media.ts's faceFresh; profile edits are rare, the payload is tiny.
+function broadcastProfileFresh(uid: string): void {
+  const msg = JSON.stringify({ t: 'profileFresh', uid });
+  for (const u of store.users.values()) {
+    if (u.ws.readyState === 1 /* OPEN */) {
+      try { u.ws.send(msg); } catch { /* socket died mid-iteration */ }
+    }
+  }
+}
+
 export function setProfile(user: User, m: Record<string, unknown>): void {
   if (!dbEnabled) return err(user, 'noDb');
   dbs.setProfile(user.uid, m);
+  broadcastProfileFresh(user.uid);
 }
 
 export async function profile(user: User, m: Record<string, unknown>): Promise<void> {
@@ -409,6 +424,7 @@ export async function setTitle(user: User, m: Record<string, unknown>): Promise<
   await run('UPDATE users SET active_title=$2 WHERE uid=$1', [user.uid, title]);
   feedToFriends(user, { t: 'feedEvent', kind: 'title', uid: user.uid, name: user.name, x: title });
   send(user, { t: 'titles', list: allowed, active: title });
+  broadcastProfileFresh(user.uid);
 }
 
 export async function titles(user: User): Promise<void> {
@@ -497,5 +513,11 @@ export function onBlocked(user: User, targetUid: string): void {
   dbs.bumpRep(targetUid, -8);
   void dbs.removeEdge(user.uid, targetUid);
   user.friendUids?.delete(targetUid);
-  store.userByUid(targetUid)?.friendUids?.delete(user.uid);
+  const other = store.userByUid(targetUid);
+  other?.friendUids?.delete(user.uid);
+  // the severed edge reaches BOTH UIs now, not on a coincidental refetch.
+  // Deliberately shaped like an unfriend — a block must never announce
+  // itself as a block to the blocked party.
+  if (other) send(other, { t: 'friendRemoved', uid: user.uid });
+  refreshBoth(user, targetUid);
 }

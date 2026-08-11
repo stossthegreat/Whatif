@@ -49,7 +49,13 @@ class _LikesScreenState extends State<LikesScreen> {
   }
 
   void _onNet(Map<String, dynamic> m) {
-    if (!mounted || m['t'] != 'likesMe') return;
+    if (!mounted) return;
+    if (m['t'] == 'faceFresh' || m['t'] == 'profileFresh') {
+      // a face/profile on (or about to be on) this grid changed — re-pull
+      NetworkClient.instance.likesMe();
+      return;
+    }
+    if (m['t'] != 'likesMe') return;
     setState(() {
       _loaded = true;
       _locked = m['locked'] == true;

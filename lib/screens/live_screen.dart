@@ -1371,7 +1371,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) {
+        // AnimatedBuilder on SocialState: photos and friend-state keep moving
+        // while the sheet is open (faceFresh, accepted requests) — without it
+        // the sheet freezes at whatever was true when it was opened
+        builder: (ctx, setSheet) => AnimatedBuilder(
+          animation: SocialState.instance,
+          builder: (ctx, _) {
           final friends = SocialState.instance.friends.map((f) => f.uid).toSet();
           return Padding(
             padding: const EdgeInsets.all(12),
@@ -1429,7 +1434,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               ),
             ),
           );
-        },
+          },
+        ),
       ),
     );
   }

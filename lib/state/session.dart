@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/game.dart';
+import '../net/network_client.dart';
 import '../models/person.dart';
 
 /// Someone you vibed with and saved. The quiet "meeting people" layer — never
@@ -176,6 +177,12 @@ class AppSession extends ChangeNotifier {
     if (clean.length < 3) return;
     myHandle = clean.substring(0, clean.length.clamp(0, 14));
     _persist();
+    // Re-introduce ourselves NOW. The socket said hello at boot — before
+    // onboarding asked for a name — so without this the server (and every
+    // card other people see) carries the random placeholder handle for the
+    // entire first session. hello() is a no-op if the socket isn't up; the
+    // reconnect path re-sends it with this name anyway.
+    NetworkClient.instance.hello();
     notifyListeners();
   }
 
