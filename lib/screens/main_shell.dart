@@ -43,8 +43,10 @@ class _MainShellState extends State<MainShell> {
     // app start — possibly before the socket is even up. Explore's buttons and
     // the Friends lane both read the friend graph, so without this they show
     // whatever was true when the app launched: the "sometimes it knows my
-    // friends, sometimes it doesn't" bug.
-    if (i == 1 || i == 2) NetworkClient.instance.friendsSnapshot();
+    // friends, sometimes it doesn't" bug. Profile (tab 3) reads the same
+    // graph for its People preview — it was skipped here, which left it
+    // stale on any socket that missed a push event.
+    if (i == 1 || i == 2 || i == 3) NetworkClient.instance.friendsSnapshot();
   }
 
   @override

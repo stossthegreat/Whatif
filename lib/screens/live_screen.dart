@@ -923,14 +923,15 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       _target = _idxOf(cell.rounds[_round].targetId) ?? _r.nextInt(cell.people.length + 1);
       _bottleDone = game.kind != GameKind.spin;
     });
-    // mirrors the server's conversation-first table exactly
+    // mirrors the server's conversation-first table exactly (+15s across the
+    // board — rounds kept ending before the funny part landed)
     var secs = switch (game.kind) {
-      GameKind.point => 23, // perform games — quick fire, not a monologue
-      GameKind.spin => 18,
-      GameKind.freeze => 11,
-      GameKind.rapidFire => 13,
-      GameKind.wavelength => 20, // one spoken clue + a guess needs a beat longer than a tap-poll
-      _ => 13, // tap-answer kinds — answer, then chat
+      GameKind.point => 38, // perform games — time for the bit to land
+      GameKind.spin => 33,
+      GameKind.freeze => 26,
+      GameKind.rapidFire => 28,
+      GameKind.wavelength => 35, // one spoken clue + a guess needs a beat longer than a tap-poll
+      _ => 28, // tap-answer kinds — answer, then chat
     };
     final beatSecs = cell.rounds[_round].secs;
     if (beatSecs != null) secs = beatSecs;
@@ -1371,7 +1372,12 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) {
+        // AnimatedBuilder on SocialState: photos and friend-state keep moving
+        // while the sheet is open (faceFresh, accepted requests) — without it
+        // the sheet freezes at whatever was true when it was opened
+        builder: (ctx, setSheet) => AnimatedBuilder(
+          animation: SocialState.instance,
+          builder: (ctx, _) {
           final friends = SocialState.instance.friends.map((f) => f.uid).toSet();
           return Padding(
             padding: const EdgeInsets.all(12),
@@ -1429,7 +1435,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               ),
             ),
           );
-        },
+          },
+        ),
       ),
     );
   }

@@ -46,6 +46,11 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
     _sub = NetworkClient.instance.events.listen((m) {
       if (m['t'] == 'profileCard' && m['uid'] == widget.uid && mounted) {
         setState(() => _card = m);
+      } else if ((m['t'] == 'faceFresh' || m['t'] == 'profileFresh') &&
+          m['uid'] == widget.uid && mounted) {
+        // their photo changed while we're looking at them — re-pull the
+        // card instead of showing the old face until reopen
+        NetworkClient.instance.profile(widget.uid);
       }
     });
     NetworkClient.instance.profile(widget.uid);
@@ -107,9 +112,15 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                   Center(
                     child: Column(
                       children: [
-                        Avatar(hue: widget.hue, photoId: photoId, size: 104, ring: C.sig),
+                        // server truth over push-time params — the card
+                        // carries live name/hue, the ctor values are frozen
+                        // at whatever the pushing screen knew
+                        Avatar(
+                            hue: ((c?['hue'] as num?) ?? widget.hue).toDouble(),
+                            photoId: photoId, size: 104, ring: C.sig),
                         const SizedBox(height: 14),
-                        Text('@${widget.name}', style: T.big.copyWith(fontSize: 26)),
+                        Text('@${(c?['name'] as String?) ?? widget.name}',
+                            style: T.big.copyWith(fontSize: 26)),
                         if (title != null && title.isNotEmpty) ...[
                           const SizedBox(height: 6),
                           Container(

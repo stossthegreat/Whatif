@@ -139,7 +139,13 @@ export async function initDb(): Promise<void> {
     'CREATE INDEX IF NOT EXISTS reports_open ON reports(handled_at, severity DESC, created_at DESC)',
     'CREATE UNIQUE INDEX IF NOT EXISTS bans_subject ON bans(subject_type, subject)',
   ]);
-  console.log('[db] connected, schema ready');
+  // HONEST status line. This used to print "schema ready" unconditionally —
+  // run() swallows errors by design (fail-soft), so during a total auth
+  // failure the log still claimed success and sent a real migration debug
+  // session chasing ghosts. Probe before declaring victory.
+  const probe = await run('SELECT 1 AS ok');
+  if (probe) console.log('[db] connected, schema ready');
+  else console.error('[db] ❌ NOT CONNECTED — schema init failed. Check DATABASE_URL (usually the password). Running memory-only.');
 }
 
 // ---- permanent room codes ---------------------------------------------------

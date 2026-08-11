@@ -10,7 +10,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'crypto';
-import { rollGame, SEQ_PACK, seqByName, PACK, type GameKind, type SeqDef } from './games.js';
+import { rollGame, SEQ_PACK, seqByName, PACK, pickFreshIdx, type GameKind, type SeqDef } from './games.js';
 import { store, type User, type Meet, type Cell, type RoundWire } from './store.js';
 import { mintToken, LIVEKIT_URL } from './livekit.js';
 import * as db from './db.js';
@@ -26,6 +26,7 @@ import * as matching from './matching.js';
 import * as moderation from './moderation.js';
 import * as explore from './explore.js';
 import { verifyAppleToken } from './apple_verify.js';
+import { verifyGoogleToken } from './google_verify.js';
 import { mountAdmin } from './admin.js';
 import { mountIap } from './iap.js';
 
@@ -93,7 +94,7 @@ function compatible(a: User, b: User): boolean {
 /// Guests can browse everything; going on camera needs a verified account so
 /// that bans, reports and reputation attach to something durable.
 function canGoLive(u: User): boolean {
-  if (!REQUIRE_ACCOUNT || u.appleVerified === true) return true;
+  if (!REQUIRE_ACCOUNT || u.appleVerified === true || u.googleVerified === true) return true;
   send(u, { t: 'err', code: 'needAccount' });
   return false;
 }
@@ -254,14 +255,17 @@ function leaveParty(userId: string) {
 
 // Conversation-first pacing: talk games get real time; a round ends early when
 // everyone has answered. This is a place to meet people, not a quiz show.
+// Every duration runs +15s over the old build — live feedback was unanimous
+// that rounds ended before the funny part landed. Tap-answer rounds still end
+// early once everyone has answered, so the extra time never drags a poll.
 const ROUND_SECS: Record<string, number> = {
-  point: 23,     // perform/talk games — quick fire, not a monologue
-  spin: 18,      // bottle + the target performs
-  freeze: 11,
-  rapidFire: 13,
-  wavelength: 20, // one spoken clue + a guess needs a beat longer than a tap-poll
+  point: 38,     // perform/talk games — time for the bit to actually land
+  spin: 33,      // bottle + the target performs
+  freeze: 26,
+  rapidFire: 28,
+  wavelength: 35, // one spoken clue + a guess needs a beat longer than a tap-poll
 };
-const secsFor = (kind: string) => ROUND_SECS[kind] ?? 13; // tap-answer kinds
+const secsFor = (kind: string) => ROUND_SECS[kind] ?? 28; // tap-answer kinds
 
 // third element: works in a 2-person room? ("point at someone" / "person on
 // your left" are group sports — never show them to a duo)
@@ -302,14 +306,14 @@ function clearCellTimers(cell: Cell) {
   if (cell.roundTimer) { clearTimeout(cell.roundTimer); cell.roundTimer = undefined; }
 }
 
-function rollSession(strangers: number): RoundWire[] {
+function rollSession(strangers: number, uids: string[] = []): RoundWire[] {
   const ROUNDS = 5;
   const rounds: RoundWire[] = [];
   let k = lastKind;
   let n = lastName;
   for (let i = 0; i < ROUNDS; i++) {
     const vibe = i === 0 ? 'warm' : i === ROUNDS - 1 ? 'spark' : undefined;
-    const r = rollGame(strangers, k, n, vibe);
+    const r = rollGame(strangers, k, n, vibe, uids);
     k = r.game.kind;
     n = r.game.name;
     rounds.push({
@@ -354,9 +358,19 @@ function startPickedGame(cell: Cell, name?: string) {
   const named = name ? seqByName(name) : undefined;
   const seq: SeqDef = (named ? pool.find((s) => s.name === named.name) : undefined) ?? pick(pool);
 
+  // played-version memory: everyone in the room gets the version fewest of
+  // them have seen — "it should know they've played this, give another one".
+  // Keys use the ORIGINAL def's beat index (the solo map clones the seq but
+  // keeps beat references, so indexOf against the original still lands).
+  const uids = cell.members
+    .map((id) => store.users.get(id)?.uid)
+    .filter((u): u is string => !!u);
+  const original = seqByName(seq.name);
+
   // roll one prompt per beat now, so the whole chain is decided up front
   cell.seqBeats = seq.beats.map((b) => {
-    const prompt = [...b.pool[Math.floor(Math.random() * b.pool.length)]];
+    const beatIdx = original ? original.beats.indexOf(b) : -1;
+    const prompt = [...b.pool[pickFreshIdx(uids, `${seq.name}#${beatIdx}`, b.pool.length)]];
     const head = prompt.shift()!;
     // same order-sensitive exception as rollGame: twoTruths' "first/second/
     // third" and wavelength's spectrum both need to stay in place.
@@ -719,7 +733,10 @@ async function formCell(memberIds: string[], modeOverride?: 'call') {
   }
 
   const strangers = live.length - 1;
-  const rounds = rollSession(strangers);
+  const rounds = rollSession(
+    strangers,
+    live.map((id) => store.users.get(id)?.uid).filter((u): u is string => !!u),
+  );
   assignTargets(rounds, live);
 
   const cellId = randomUUID();
@@ -1143,6 +1160,20 @@ wss.on('connection', (ws, req) => {
             else appleLink = verified;
           }
         }
+        // Google — the Android mirror of the Apple block above, same
+        // recovery-key model: verified google_id maps back to the canonical
+        // uid so a reinstall gets the whole graph back.
+        let googleLink: string | null = null;
+        const googleToken = typeof m.googleToken === 'string' ? m.googleToken : '';
+        if (googleToken) {
+          const gVerified = await verifyGoogleToken(googleToken);
+          if (gVerified) {
+            user.googleVerified = true;
+            const canonical = db.dbEnabled ? await dbs.uidForGoogle(gVerified) : null;
+            if (canonical) m = { ...m, uid: canonical };
+            else googleLink = gVerified;
+          }
+        }
         // device identity (Keychain-backed, survives reinstall) — the anchor
         // that makes a ban outlast deleting the app
         const deviceId = typeof m.deviceId === 'string' && m.deviceId.length
@@ -1187,7 +1218,7 @@ wss.on('connection', (ws, req) => {
           live: LIVE_BASELINE + store.onlineCount,
           http: { token: mintAuthToken(user.uid), base: process.env.PUBLIC_URL || '' },
           features: { social: db.dbEnabled, media: db.dbEnabled, gifs: gifsEnabled },
-          account: { signedIn: user.appleVerified === true },
+          account: { signedIn: user.appleVerified === true || user.googleVerified === true },
           photo: { id: acct?.photoId ?? null, thumbId: acct?.thumbId ?? null },
           plus: {
             active: isPlus(user),
@@ -1209,6 +1240,7 @@ wss.on('connection', (ws, req) => {
           gender: user.gender, meet: acct?.meet ?? user.meet, vibes,
           age: typeof m.age === 'number' ? m.age : null });
         if (appleLink && db.dbEnabled) dbs.linkApple(user.uid, appleLink);
+        if (googleLink && db.dbEnabled) dbs.linkGoogle(user.uid, googleLink);
         void db.loadSocial(user.uid).then((d) => {
           if (!d) return;
           if (store.userByUid(user.uid) !== user) return; // reconnected again meanwhile
@@ -1417,7 +1449,10 @@ wss.on('connection', (ws, req) => {
         if (revive) {
           // first reviver rerolls one shared session and restarts the room loop
           if (!cell.reviveRounds) {
-            cell.reviveRounds = rollSession(Math.max(1, cell.members.length - 1));
+            cell.reviveRounds = rollSession(
+              Math.max(1, cell.members.length - 1),
+              cell.members.map((mid) => store.users.get(mid)?.uid).filter((u): u is string => !!u),
+            );
             assignTargets(cell.reviveRounds, cell.members);
             clearCellTimers(cell);
             cell.rounds = cell.reviveRounds;
@@ -1584,6 +1619,12 @@ wss.on('connection', (ws, req) => {
       case 'deleteAccount': {
         // the privacy policy promises immediate server-side deletion — honour it
         console.log(`[delete] account ${user.uid}`);
+        // friends learn NOW, not on their next coincidental snapshot — the
+        // row vanishes from their lists and (client-side) their chat threads
+        for (const fuid of user.friendUids ?? []) {
+          const f = store.userByUid(fuid);
+          if (f) { send(f, { t: 'friendRemoved', uid: user.uid }); void social.snapshot(f); }
+        }
         db.deleteUser(user.uid);
         dbs.deleteSocial(user.uid);
         store.purgeSocial(user.uid);

@@ -341,33 +341,37 @@ class _PartyScreenState extends State<PartyScreen> {
                       ),
                     ),
                     const SizedBox(height: 28),
-                    // who's here
+                    // who's here — listens to SocialState so a member's new
+                    // photo (faceFresh) repaints without waiting on setState
                     if (_members.isNotEmpty)
-                      Center(
-                        child: Wrap(
-                          spacing: 14,
-                          runSpacing: 12,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            for (final m in _members)
-                              Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Avatar(
-                                      hue: m.hue,
-                                      photoId: m.id == NetworkClient.instance.myId
-                                          ? AppSession.instance.photoId
-                                          : SocialState.instance.photoOf(m.uid),
-                                      size: 46,
-                                      ring: m.id == _hostId ? C.sig : null),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    m.id == NetworkClient.instance.myId ? 'you' : '@${m.name}',
-                                    style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
-                                  ),
-                                ],
-                              ),
-                          ],
+                      AnimatedBuilder(
+                        animation: SocialState.instance,
+                        builder: (context, _) => Center(
+                          child: Wrap(
+                            spacing: 14,
+                            runSpacing: 12,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              for (final m in _members)
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Avatar(
+                                        hue: m.hue,
+                                        photoId: m.id == NetworkClient.instance.myId
+                                            ? AppSession.instance.photoId
+                                            : SocialState.instance.photoOf(m.uid),
+                                        size: 46,
+                                        ring: m.id == _hostId ? C.sig : null),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      m.id == NetworkClient.instance.myId ? 'you' : '@${m.name}',
+                                      style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     const SizedBox(height: 12),

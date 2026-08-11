@@ -19,6 +19,7 @@ export interface User {
   connectedAt?: number;  // handshake time — the no-hello reaper's clock
   deviceId?: string | null; // Keychain-backed device id — bans outlive reinstalls
   appleVerified?: boolean;  // proved a real Apple identity token, not a claim
+  googleVerified?: boolean; // proved a real Google ID token — Android's Apple
   helloed?: boolean;     // real client spoke — reaper stands down
   plusUntil?: Date | null;  // Rivlr+ paid-until, hydrated from the DB on hello
   /// "meet anyone this once" — set when a filtered user chooses to widen for

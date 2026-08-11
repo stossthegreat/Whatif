@@ -380,7 +380,10 @@ class _ChatScreenState extends State<ChatScreen> {
       backgroundColor: C.black,
       body: SafeArea(
         child: AnimatedBuilder(
-          animation: ChatStore.instance,
+          // BOTH stores: the header avatar reads SocialState.photoOf, so a
+          // face change must rebuild this screen too — bound to ChatStore
+          // alone, an open thread kept the old face forever.
+          animation: Listenable.merge([ChatStore.instance, SocialState.instance]),
           builder: (context, _) {
             final store = ChatStore.instance;
             final msgs = store.thread(widget.uid);

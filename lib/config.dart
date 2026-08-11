@@ -18,4 +18,14 @@ class AppConfig {
   );
 
   static bool get isLive => backend.isNotEmpty;
+
+  /// Google Sign-In. This is the WEB application OAuth client id from Google
+  /// Cloud — the same value the server holds as GOOGLE_CLIENT_ID, because
+  /// it's the audience Google mints the idToken for. Empty (the default)
+  /// hides the Google button entirely, so an unconfigured build can never
+  /// show a dead button. Set in Codemagic with:
+  ///   --dart-define=GOOGLE_SERVER_CLIENT_ID=xxxx.apps.googleusercontent.com
+  static const String googleServerClientId =
+      String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID', defaultValue: '');
+  static bool get googleEnabled => googleServerClientId.isNotEmpty;
 }

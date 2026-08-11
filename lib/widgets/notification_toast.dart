@@ -66,9 +66,8 @@ class _NotificationToastState extends State<NotificationToast> {
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    const BoxShadow(color: Color(0x66000000), blurRadius: 24, offset: Offset(0, 8)),
-                    BoxShadow(color: C.sigGlow, blurRadius: 30, spreadRadius: -14),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0x66000000), blurRadius: 24, offset: Offset(0, 8)),
                   ],
                 ),
                 child: ClipRRect(
@@ -96,7 +95,7 @@ class _NotificationToastState extends State<NotificationToast> {
                                     alignment: Alignment.center,
                                     decoration: const BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color: C.sig,
+                                      color: Color(0xFF2A2433),
                                       border: Border.fromBorderSide(BorderSide(color: Color(0xFF140A1E), width: 2)),
                                     ),
                                     child: Icon(t.icon, size: 11, color: Colors.white),

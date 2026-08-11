@@ -2,6 +2,35 @@ import type { Express, Request, Response } from 'express';
 import express from 'express';
 import { run, dbEnabled } from './db.js';
 import { verifyAuthToken } from './auth.js';
+import { store } from './store.js';
+
+/// A face just changed — tell every connected phone RIGHT NOW instead of
+/// letting each surface discover it on its own next poll/snapshot. Avatar
+/// changes are rare (per user), the payload is tiny, and instant propagation
+/// is what makes the app feel like one coherent memory instead of a set of
+/// caches that disagree for a while.
+const pendingFresh = new Map<string, { patch: { photoId?: number; thumbId?: number }; timer: NodeJS.Timeout }>();
+
+function broadcastFaceFresh(uid: string, patch: { photoId?: number; thumbId?: number }): void {
+  // avatar + thumb land as two uploads back to back — coalesce into ONE
+  // broadcast so every online client re-pulls Explore once per change,
+  // not twice. 1.2s covers the gap between the two POSTs comfortably.
+  const cur = pendingFresh.get(uid);
+  const merged = { ...(cur?.patch ?? {}), ...patch };
+  if (cur) clearTimeout(cur.timer);
+  pendingFresh.set(uid, {
+    patch: merged,
+    timer: setTimeout(() => {
+      pendingFresh.delete(uid);
+      const msg = JSON.stringify({ t: 'faceFresh', uid, ...merged });
+      for (const u of store.users.values()) {
+        if (u.ws.readyState === 1 /* OPEN */) {
+          try { u.ws.send(msg); } catch { /* socket died mid-iteration */ }
+        }
+      }
+    }, 1200),
+  });
+}
 
 /// Media over HTTP (WS is the wrong pipe for bytes): photos, voice notes,
 /// avatars into Postgres BYTEA, plus the Tenor GIF proxy. Auth = the HMAC
@@ -106,6 +135,7 @@ export function mountMedia(app: Express): void {
         dropAvatarCache(Number(old));
         void run('DELETE FROM media WHERE id=$1 AND owner=$2', [old, uid]);
       }
+      broadcastFaceFresh(uid, { photoId: Number(id) });
     } else if (kind === 'thumb') {
       // the grid derivative: swaps ONLY the thumb pointer, full photo untouched
       const prev = await run('SELECT photo_thumb_id FROM users WHERE uid=$1', [uid]);
@@ -115,6 +145,7 @@ export function mountMedia(app: Express): void {
         dropAvatarCache(Number(old));
         void run('DELETE FROM media WHERE id=$1 AND owner=$2', [old, uid]);
       }
+      broadcastFaceFresh(uid, { thumbId: Number(id) });
     }
     res.json({ id: Number(id), size: bytes.length });
   });

@@ -52,7 +52,7 @@ class ChatSummary {
   final bool lastFromMe;
   final int unread;
   bool pinned;
-  final bool online;
+  bool online; // mutable: 'friendOnline' patches it live
 }
 
 /// Client messaging state: per-peer thread caches, optimistic sends, unread,
@@ -142,6 +142,35 @@ class ChatStore extends ChangeNotifier {
           typingPeers.remove(from);
         }
         notifyListeners();
+      case 'friendRemoved':
+        // unfriend / block / account deletion — the thread goes with the
+        // edge, immediately, not on the next coincidental list pull
+        final ruid = m['uid'] as String?;
+        if (ruid != null) {
+          chats.removeWhere((c) => c.uid == ruid);
+          threads.remove(ruid);
+          unreadTotal = chats.fold(0, (a, c) => a + c.unread);
+          notifyListeners();
+        }
+      case 'friendOnline':
+        final ouid = m['uid'] as String?;
+        if (ouid != null) {
+          final i = chats.indexWhere((c) => c.uid == ouid);
+          if (i >= 0) {
+            chats[i].online = m['on'] == true;
+            notifyListeners();
+          }
+        }
+      case 'faceFresh':
+        // a chat partner's photo changed — refresh the summaries so the
+        // thread list shows the new face now, not on the next list pull.
+        // activePeer counts too: a brand-new thread has no chats row yet,
+        // and its open header would otherwise never hear about the change.
+        final fuid = m['uid'] as String?;
+        if (fuid != null && (chats.any((c) => c.uid == fuid) || activePeer == fuid)) {
+          NetworkClient.instance.chatsList();
+          notifyListeners();
+        }
       case 'msgReact':
         final id = ((m['id'] as num?) ?? -1).toInt();
         final from = m['from'] as String?;
