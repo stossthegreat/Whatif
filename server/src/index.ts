@@ -26,6 +26,7 @@ import * as matching from './matching.js';
 import * as moderation from './moderation.js';
 import * as explore from './explore.js';
 import { verifyAppleToken } from './apple_verify.js';
+import { verifyGoogleToken } from './google_verify.js';
 import { mountAdmin } from './admin.js';
 import { mountIap } from './iap.js';
 
@@ -93,7 +94,7 @@ function compatible(a: User, b: User): boolean {
 /// Guests can browse everything; going on camera needs a verified account so
 /// that bans, reports and reputation attach to something durable.
 function canGoLive(u: User): boolean {
-  if (!REQUIRE_ACCOUNT || u.appleVerified === true) return true;
+  if (!REQUIRE_ACCOUNT || u.appleVerified === true || u.googleVerified === true) return true;
   send(u, { t: 'err', code: 'needAccount' });
   return false;
 }
@@ -1143,6 +1144,20 @@ wss.on('connection', (ws, req) => {
             else appleLink = verified;
           }
         }
+        // Google — the Android mirror of the Apple block above, same
+        // recovery-key model: verified google_id maps back to the canonical
+        // uid so a reinstall gets the whole graph back.
+        let googleLink: string | null = null;
+        const googleToken = typeof m.googleToken === 'string' ? m.googleToken : '';
+        if (googleToken) {
+          const gVerified = await verifyGoogleToken(googleToken);
+          if (gVerified) {
+            user.googleVerified = true;
+            const canonical = db.dbEnabled ? await dbs.uidForGoogle(gVerified) : null;
+            if (canonical) m = { ...m, uid: canonical };
+            else googleLink = gVerified;
+          }
+        }
         // device identity (Keychain-backed, survives reinstall) — the anchor
         // that makes a ban outlast deleting the app
         const deviceId = typeof m.deviceId === 'string' && m.deviceId.length
@@ -1187,7 +1202,7 @@ wss.on('connection', (ws, req) => {
           live: LIVE_BASELINE + store.onlineCount,
           http: { token: mintAuthToken(user.uid), base: process.env.PUBLIC_URL || '' },
           features: { social: db.dbEnabled, media: db.dbEnabled, gifs: gifsEnabled },
-          account: { signedIn: user.appleVerified === true },
+          account: { signedIn: user.appleVerified === true || user.googleVerified === true },
           photo: { id: acct?.photoId ?? null, thumbId: acct?.thumbId ?? null },
           plus: {
             active: isPlus(user),
@@ -1209,6 +1224,7 @@ wss.on('connection', (ws, req) => {
           gender: user.gender, meet: acct?.meet ?? user.meet, vibes,
           age: typeof m.age === 'number' ? m.age : null });
         if (appleLink && db.dbEnabled) dbs.linkApple(user.uid, appleLink);
+        if (googleLink && db.dbEnabled) dbs.linkGoogle(user.uid, googleLink);
         void db.loadSocial(user.uid).then((d) => {
           if (!d) return;
           if (store.userByUid(user.uid) !== user) return; // reconnected again meanwhile

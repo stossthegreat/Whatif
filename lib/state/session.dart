@@ -124,6 +124,7 @@ class AppSession extends ChangeNotifier {
       myVibes = p.getStringList('vibes') ?? myVibes;
       rulesAccepted = p.getBool('rulesAccepted') ?? false;
       appleUserId = p.getString('appleUserId');
+      googleUserId = p.getString('googleUserId');
       blocked.addAll(p.getStringList('blocked') ?? const []);
       bio = p.getString('bio') ?? '';
       city = p.getString('city') ?? '';
@@ -197,6 +198,19 @@ class AppSession extends ChangeNotifier {
     appleUserId = appleId;
     appleToken = token;               // signed proof, sent once on the next hello
     _prefs?.setString('appleUserId', appleId);
+    signedIn = true;
+    notifyListeners();
+  }
+
+  /// Sign in with Google — the Android mirror of the Apple pair above.
+  /// Same model: uid stays the permanent identity, the Google id is a
+  /// recovery key linked server-side; the token is held in memory only.
+  String? googleUserId;
+  String? googleToken;
+  void setGoogleIdentity(String googleId, {String? token}) {
+    googleUserId = googleId;
+    googleToken = token;              // signed proof, sent once on the next hello
+    _prefs?.setString('googleUserId', googleId);
     signedIn = true;
     notifyListeners();
   }

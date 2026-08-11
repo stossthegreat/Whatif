@@ -1,5 +1,8 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import '../config.dart';
 import '../core/apple_auth.dart';
+import '../core/google_auth.dart';
 import '../core/haptics.dart';
 import '../state/session.dart';
 import '../theme/tokens.dart';
@@ -53,6 +56,20 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
+  Future<void> _google() async {
+    if (_busy) return;
+    setState(() { _busy = true; _error = null; });
+    Buzz.tick();
+    final ok = await googleSignIn();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      _proceed(signedIn: true);
+    } else {
+      setState(() => _error = 'Google sign-in didn’t work — try again or continue as guest');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = Responsive.of(context);
@@ -83,9 +100,9 @@ class _SignInScreenState extends State<SignInScreen> {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                      'Sign in with Apple and the people you click with stay '
-                      'yours — across reinstalls, forever. Or skip it and meet '
-                      'people right now.',
+                      'Sign in with ${Platform.isIOS ? 'Apple' : 'Google'} and '
+                      'the people you click with stay yours — across '
+                      'reinstalls, forever. Or skip it and meet people right now.',
                       style: T.body.copyWith(fontSize: 16)),
                   const SizedBox(height: 24),
                   // ---- the agreement gate ----
@@ -139,35 +156,74 @@ class _SignInScreenState extends State<SignInScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Opacity(
-                    opacity: _ready ? 1 : 0.4,
-                    child: Press(
-                      haptic: false,
-                      onTap: _busy ? null : (_ready ? _apple : _needBoxes),
-                      child: Container(
-                        height: 56,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
+                  // Apple: iOS only — the native flow doesn't exist on
+                  // Android without extra web-redirect setup, and a button
+                  // that errors on tap is worse than no button.
+                  if (Platform.isIOS)
+                    Opacity(
+                      opacity: _ready ? 1 : 0.4,
+                      child: Press(
+                        haptic: false,
+                        onTap: _busy ? null : (_ready ? _apple : _needBoxes),
+                        child: Container(
+                          height: 56,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: _busy
+                              ? const SizedBox(
+                                  width: 22, height: 22,
+                                  child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.black))
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.apple, size: 24, color: Colors.black),
+                                    const SizedBox(width: 10),
+                                    Text('Sign in with Apple',
+                                        style: T.body.copyWith(
+                                            color: Colors.black, fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
                         ),
-                        child: _busy
-                            ? const SizedBox(
-                                width: 22, height: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.black))
-                            : Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.apple, size: 24, color: Colors.black),
-                                  const SizedBox(width: 10),
-                                  Text('Sign in with Apple',
-                                      style: T.body.copyWith(
-                                          color: Colors.black, fontWeight: FontWeight.w700)),
-                                ],
-                              ),
                       ),
                     ),
-                  ),
+                  // Google: shown only when the build carries a client id —
+                  // an unconfigured build can never show a dead button.
+                  if (AppConfig.googleEnabled) ...[
+                    if (Platform.isIOS) const SizedBox(height: 10),
+                    Opacity(
+                      opacity: _ready ? 1 : 0.4,
+                      child: Press(
+                        haptic: false,
+                        onTap: _busy ? null : (_ready ? _google : _needBoxes),
+                        child: Container(
+                          height: 56,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: _busy
+                              ? const SizedBox(
+                                  width: 22, height: 22,
+                                  child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.black))
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text('G',
+                                        style: T.display(22).copyWith(color: const Color(0xFF4285F4))),
+                                    const SizedBox(width: 10),
+                                    Text('Continue with Google',
+                                        style: T.body.copyWith(
+                                            color: Colors.black, fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ),
+                  ],
                   if (_error != null) ...[
                     const SizedBox(height: 12),
                     Center(child: Text(_error!, style: T.tiny.copyWith(color: C.live))),

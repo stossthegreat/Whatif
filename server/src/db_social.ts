@@ -30,6 +30,8 @@ export async function initSocial(): Promise<void> {
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS tz_offset_min INT',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS active_title TEXT',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_id TEXT',
+    // Google is the recovery key on Android, exactly as apple_id is on iOS
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT',
     // Explore: opt out and you vanish from the grid entirely
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS discoverable BOOLEAN NOT NULL DEFAULT true',
     // small avatar derivative — grid cards must never pull the 1MB original
@@ -43,6 +45,8 @@ export async function initSocial(): Promise<void> {
   for (const q of alters) await run(q);
   await run(`CREATE UNIQUE INDEX IF NOT EXISTS users_apple_idx
              ON users(apple_id) WHERE apple_id IS NOT NULL`);
+  await run(`CREATE UNIQUE INDEX IF NOT EXISTS users_google_idx
+             ON users(google_id) WHERE google_id IS NOT NULL`);
   await run(`CREATE UNIQUE INDEX IF NOT EXISTS users_room_code
              ON users(room_code) WHERE room_code IS NOT NULL`);
   // handle search (prefix) + explore's freshest-first roster
@@ -595,6 +599,20 @@ export function linkApple(uid: string, appleId: string): void {
      ON CONFLICT (uid) DO UPDATE SET
        apple_id = COALESCE(users.apple_id, EXCLUDED.apple_id)`,
     [uid, appleId]);
+}
+
+/// Google-as-recovery-key — the Android mirror of the Apple pair above.
+export async function uidForGoogle(googleId: string): Promise<string | null> {
+  const r = await run('SELECT uid FROM users WHERE google_id = $1', [googleId]);
+  return (r?.rows?.[0]?.uid as string | undefined) ?? null;
+}
+
+export function linkGoogle(uid: string, googleId: string): void {
+  void run(
+    `INSERT INTO users (uid, google_id) VALUES ($1, $2)
+     ON CONFLICT (uid) DO UPDATE SET
+       google_id = COALESCE(users.google_id, EXCLUDED.google_id)`,
+    [uid, googleId]);
 }
 
 /// Grid-card data for many people in ONE query. profileCard costs nine

@@ -144,6 +144,9 @@ class NetworkClient {
       if (s.appleUserId != null) 'appleId': s.appleUserId,
       // signed proof of the Apple identity — the server ignores the bare id
       if (s.appleToken != null) 'appleToken': s.appleToken,
+      if (s.googleUserId != null) 'googleId': s.googleUserId,
+      // signed proof of the Google identity — same rule, same shape
+      if (s.googleToken != null) 'googleToken': s.googleToken,
       // Keychain-backed hardware id: what makes a ban survive a reinstall
       if (DeviceId.value != null) 'deviceId': DeviceId.value,
     });
