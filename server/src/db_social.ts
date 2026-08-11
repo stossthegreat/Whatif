@@ -197,7 +197,10 @@ export async function initSocial(): Promise<void> {
     WHERE s1.uid < s1.target
     ON CONFLICT DO NOTHING`);
 
-  console.log('[db] social schema ready');
+  // same honesty rule as initDb: probe, don't presume
+  const probe = await run('SELECT 1 AS ok');
+  if (probe) console.log('[db] social schema ready');
+  else console.error('[db] ❌ social schema NOT ready — connection failing. Check DATABASE_URL.');
 }
 
 // ---- friendships -----------------------------------------------------------
