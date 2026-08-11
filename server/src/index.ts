@@ -10,7 +10,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'crypto';
-import { rollGame, SEQ_PACK, seqByName, PACK, type GameKind, type SeqDef } from './games.js';
+import { rollGame, SEQ_PACK, seqByName, PACK, pickFreshIdx, type GameKind, type SeqDef } from './games.js';
 import { store, type User, type Meet, type Cell, type RoundWire } from './store.js';
 import { mintToken, LIVEKIT_URL } from './livekit.js';
 import * as db from './db.js';
@@ -255,14 +255,17 @@ function leaveParty(userId: string) {
 
 // Conversation-first pacing: talk games get real time; a round ends early when
 // everyone has answered. This is a place to meet people, not a quiz show.
+// Every duration runs +15s over the old build — live feedback was unanimous
+// that rounds ended before the funny part landed. Tap-answer rounds still end
+// early once everyone has answered, so the extra time never drags a poll.
 const ROUND_SECS: Record<string, number> = {
-  point: 23,     // perform/talk games — quick fire, not a monologue
-  spin: 18,      // bottle + the target performs
-  freeze: 11,
-  rapidFire: 13,
-  wavelength: 20, // one spoken clue + a guess needs a beat longer than a tap-poll
+  point: 38,     // perform/talk games — time for the bit to actually land
+  spin: 33,      // bottle + the target performs
+  freeze: 26,
+  rapidFire: 28,
+  wavelength: 35, // one spoken clue + a guess needs a beat longer than a tap-poll
 };
-const secsFor = (kind: string) => ROUND_SECS[kind] ?? 13; // tap-answer kinds
+const secsFor = (kind: string) => ROUND_SECS[kind] ?? 28; // tap-answer kinds
 
 // third element: works in a 2-person room? ("point at someone" / "person on
 // your left" are group sports — never show them to a duo)
@@ -303,14 +306,14 @@ function clearCellTimers(cell: Cell) {
   if (cell.roundTimer) { clearTimeout(cell.roundTimer); cell.roundTimer = undefined; }
 }
 
-function rollSession(strangers: number): RoundWire[] {
+function rollSession(strangers: number, uids: string[] = []): RoundWire[] {
   const ROUNDS = 5;
   const rounds: RoundWire[] = [];
   let k = lastKind;
   let n = lastName;
   for (let i = 0; i < ROUNDS; i++) {
     const vibe = i === 0 ? 'warm' : i === ROUNDS - 1 ? 'spark' : undefined;
-    const r = rollGame(strangers, k, n, vibe);
+    const r = rollGame(strangers, k, n, vibe, uids);
     k = r.game.kind;
     n = r.game.name;
     rounds.push({
@@ -355,9 +358,19 @@ function startPickedGame(cell: Cell, name?: string) {
   const named = name ? seqByName(name) : undefined;
   const seq: SeqDef = (named ? pool.find((s) => s.name === named.name) : undefined) ?? pick(pool);
 
+  // played-version memory: everyone in the room gets the version fewest of
+  // them have seen — "it should know they've played this, give another one".
+  // Keys use the ORIGINAL def's beat index (the solo map clones the seq but
+  // keeps beat references, so indexOf against the original still lands).
+  const uids = cell.members
+    .map((id) => store.users.get(id)?.uid)
+    .filter((u): u is string => !!u);
+  const original = seqByName(seq.name);
+
   // roll one prompt per beat now, so the whole chain is decided up front
   cell.seqBeats = seq.beats.map((b) => {
-    const prompt = [...b.pool[Math.floor(Math.random() * b.pool.length)]];
+    const beatIdx = original ? original.beats.indexOf(b) : -1;
+    const prompt = [...b.pool[pickFreshIdx(uids, `${seq.name}#${beatIdx}`, b.pool.length)]];
     const head = prompt.shift()!;
     // same order-sensitive exception as rollGame: twoTruths' "first/second/
     // third" and wavelength's spectrum both need to stay in place.
@@ -720,7 +733,10 @@ async function formCell(memberIds: string[], modeOverride?: 'call') {
   }
 
   const strangers = live.length - 1;
-  const rounds = rollSession(strangers);
+  const rounds = rollSession(
+    strangers,
+    live.map((id) => store.users.get(id)?.uid).filter((u): u is string => !!u),
+  );
   assignTargets(rounds, live);
 
   const cellId = randomUUID();
@@ -1433,7 +1449,10 @@ wss.on('connection', (ws, req) => {
         if (revive) {
           // first reviver rerolls one shared session and restarts the room loop
           if (!cell.reviveRounds) {
-            cell.reviveRounds = rollSession(Math.max(1, cell.members.length - 1));
+            cell.reviveRounds = rollSession(
+              Math.max(1, cell.members.length - 1),
+              cell.members.map((mid) => store.users.get(mid)?.uid).filter((u): u is string => !!u),
+            );
             assignTargets(cell.reviveRounds, cell.members);
             clearCellTimers(cell);
             cell.rounds = cell.reviveRounds;
