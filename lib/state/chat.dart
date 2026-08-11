@@ -142,6 +142,13 @@ class ChatStore extends ChangeNotifier {
           typingPeers.remove(from);
         }
         notifyListeners();
+      case 'faceFresh':
+        // a chat partner's photo changed — refresh the summaries so the
+        // thread list shows the new face now, not on the next list pull
+        final fuid = m['uid'] as String?;
+        if (fuid != null && chats.any((c) => c.uid == fuid)) {
+          NetworkClient.instance.chatsList();
+        }
       case 'msgReact':
         final id = ((m['id'] as num?) ?? -1).toInt();
         final from = m['from'] as String?;

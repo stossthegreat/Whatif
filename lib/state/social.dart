@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../net/network_client.dart';
 import 'notify.dart';
+import 'session.dart';
 
 /// A person on your side of the graph — friend, request, or celebration.
 class FriendInfo {
@@ -285,6 +286,23 @@ class SocialState extends ChangeNotifier {
       case 'badge':
         lastBadgeLabel = m['label'] as String?;
         notifyListeners();
+      case 'faceFresh':
+        // someone's photo changed. If it's ME, heal my own pointer right
+        // now (the server is the authority on which media row exists); if
+        // it's anyone in my graph, re-pull the snapshot so friends lists,
+        // requests and recents all show the new face immediately instead
+        // of on their own next refresh.
+        final uid = m['uid'] as String?;
+        if (uid == null) break;
+        if (uid == AppSession.instance.myUid) {
+          final pid = (m['photoId'] as num?)?.toInt();
+          if (pid != null) AppSession.instance.healPhotoId(pid);
+          break;
+        }
+        final known = friends.any((f) => f.uid == uid) ||
+            reqsIn.any((f) => f.uid == uid) ||
+            recent.any((r) => r.uid == uid);
+        if (known) NetworkClient.instance.friendsSnapshot();
     }
   }
 

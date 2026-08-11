@@ -10,9 +10,11 @@ import '../widgets/aurora.dart';
 import '../widgets/glass.dart';
 import 'legal_screen.dart';
 
-/// Sign-in. One REAL button — Sign in with Apple (identity that survives
-/// reinstalls) — and an honest guest path. No fake social buttons: App Review
-/// taps everything, and dead buttons are an instant rejection.
+/// Sign-in — required, no guest path. Apple on iOS, Google on Android
+/// (each shown only where it actually works): a real identity is what makes
+/// bans stick, recovery work, and the people you meet stay yours. No fake
+/// social buttons: store review taps everything, and dead buttons are an
+/// instant rejection.
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key, required this.onContinue});
   final VoidCallback onContinue;
@@ -52,7 +54,7 @@ class _SignInScreenState extends State<SignInScreen> {
     if (ok) {
       _proceed(signedIn: true);
     } else {
-      setState(() => _error = 'Apple sign-in didn’t work — try again or continue as guest');
+      setState(() => _error = 'Apple sign-in didn’t work — try again');
     }
   }
 
@@ -66,7 +68,7 @@ class _SignInScreenState extends State<SignInScreen> {
     if (ok) {
       _proceed(signedIn: true);
     } else {
-      setState(() => _error = 'Google sign-in didn’t work — try again or continue as guest');
+      setState(() => _error = 'Google sign-in didn’t work — try again');
     }
   }
 
@@ -102,7 +104,7 @@ class _SignInScreenState extends State<SignInScreen> {
                   Text(
                       'Sign in with ${Platform.isIOS ? 'Apple' : 'Google'} and '
                       'the people you click with stay yours — across '
-                      'reinstalls, forever. Or skip it and meet people right now.',
+                      'reinstalls, forever.',
                       style: T.body.copyWith(fontSize: 16)),
                   const SizedBox(height: 24),
                   // ---- the agreement gate ----
@@ -228,24 +230,9 @@ class _SignInScreenState extends State<SignInScreen> {
                     const SizedBox(height: 12),
                     Center(child: Text(_error!, style: T.tiny.copyWith(color: C.live))),
                   ],
+                  // No guest path — a real identity is what makes bans stick,
+                  // recovery work, and the people you meet stay yours.
                   const Spacer(),
-                  Opacity(
-                    opacity: _ready ? 1 : 0.4,
-                    child: Press(
-                      haptic: false,
-                      onTap: () => _ready ? _proceed(signedIn: false) : _needBoxes(),
-                      child: Container(
-                        height: 56,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: C.hair2),
-                        ),
-                        child: Text('Continue as guest  →',
-                            style: T.body.copyWith(color: C.tx, fontWeight: FontWeight.w700)),
-                      ),
-                    ),
-                  ),
                   const SizedBox(height: 14),
                 ],
               ),

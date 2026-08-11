@@ -63,6 +63,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
             .map((p) => _Person.fromMap(p.cast<String, dynamic>()))
             .toList();
       });
+    } else if (m['t'] == 'faceFresh') {
+      // someone's photo just changed — re-pull the grid now instead of
+      // letting their old face sit here until the next 10s poll
+      _refresh();
     }
   }
 
