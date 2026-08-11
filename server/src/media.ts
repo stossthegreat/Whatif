@@ -3,6 +3,7 @@ import express from 'express';
 import { run, dbEnabled } from './db.js';
 import { verifyAuthToken } from './auth.js';
 import { store } from './store.js';
+import { moderateImage } from './moderation.js';
 
 /// A face just changed — tell every connected phone RIGHT NOW instead of
 /// letting each surface discover it on its own next poll/snapshot. Avatar
@@ -116,6 +117,14 @@ export function mountMedia(app: Express): void {
     if (!Buffer.isBuffer(bytes) || bytes.length === 0) return res.status(400).json({ err: 'empty' });
     if (bytes.length > MAX_BYTES) return res.status(413).json({ err: 'tooBig' });
     if (!magicOk(mime, bytes)) return res.status(415).json({ err: 'magic' });
+
+    // proactive filter — photos are the highest-risk surface on a live video
+    // app and the easiest to auto-screen. Voice notes aren't image content,
+    // so they stay on the reactive report/block path.
+    if (kind === 'photo' || kind === 'avatar' || kind === 'thumb') {
+      const mod = await moderateImage(bytes, mime);
+      if (mod?.flagged) return res.status(422).json({ err: 'flagged', categories: mod.categories });
+    }
 
     const r = await run(
       'INSERT INTO media (owner, kind, mime, bytes, size) VALUES ($1,$2,$3,$4,$5) RETURNING id',

@@ -1194,7 +1194,16 @@ wss.on('connection', (ws, req) => {
           }
           if (deviceId) db.noteDevice(user.uid, deviceId);
         }
-        if (typeof m.name === 'string' && m.name.trim()) user.name = m.name.trim().slice(0, 16);
+        if (typeof m.name === 'string' && m.name.trim()) {
+          const proposed = m.name.trim().slice(0, 16);
+          // hello() fires on every reconnect with the SAME handle every time —
+          // only moderate on a genuine change, not on every connect
+          if (proposed !== user.name) {
+            const mod = await moderation.moderateText(proposed);
+            if (mod?.flagged) send(user, { t: 'err', code: 'flagged', where: 'handle' });
+            else user.name = proposed;
+          }
+        }
         // whitelist: other people's paid filters read this, so it can't be
         // an arbitrary string a modified client invents
         if (m.gender === 'Woman' || m.gender === 'Man' || m.gender === 'Non-binary') {
@@ -1552,7 +1561,7 @@ wss.on('connection', (ws, req) => {
       }
       case 'friends': void social.snapshot(user); break;
       case 'traitVote': void social.traitVote(user, m); break;
-      case 'setProfile': social.setProfile(user, m); break;
+      case 'setProfile': void social.setProfile(user, m); break;
       case 'profile': void social.profile(user, m); break;
       case 'setTitle': void social.setTitle(user, m); break;
       case 'titles': void social.titles(user); break;

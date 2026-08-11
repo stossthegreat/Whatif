@@ -3,6 +3,7 @@ import { dbEnabled } from './db.js';
 import * as dbs from './db_social.js';
 import { sendPush, pushEnabled } from './push.js';
 import { claimForPair } from './media.js';
+import { moderateText, isSevere } from './moderation.js';
 
 /// Messaging between matched friends. WS carries the realtime layer; Postgres
 /// is the source of truth; offline delivery rides push. Ordering = message id.
@@ -41,6 +42,18 @@ export async function dm(user: User, m: Record<string, unknown>): Promise<void> 
   if ((kind === 'voice' || kind === 'photo') && mediaId == null) return;
   if (store.isBlocked(user.uid, to)) return err(user, 'blocked');
   if ((await dbs.friendState(user.uid, to)) !== 'friends') return err(user, 'notFriends');
+  // proactive filter, text only — ordinary flirty/adult chat between two
+  // people who matched each other is expected here and stays allowed; only
+  // the genuinely dangerous categories (minors, self-harm coaching, graphic
+  // violence, real threats) get hard-blocked at send time. Report+block
+  // remain the backstop for everything this doesn't catch.
+  if (kind === 'text') {
+    const mod = await moderateText(body);
+    if (mod?.flagged && isSevere(mod.categories)) {
+      send(user, { t: 'err', code: 'flagged', where: 'chat' });
+      return;
+    }
+  }
   if (mediaId != null) {
     // the media must be YOURS and unclaimed — then it belongs to this thread
     const ok = await claimForPair(mediaId, user.uid, dbs.pairKey(user.uid, to));

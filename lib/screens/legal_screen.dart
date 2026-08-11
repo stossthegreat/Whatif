@@ -62,7 +62,7 @@ class LegalCopy {
 
   static const privacy = '''PRIVACY POLICY
 Rivlr — live social video
-Effective date: 3 August 2026 · Version 4.0
+Effective date: 11 August 2026 · Version 4.1
 
 This Privacy Policy explains what Rivlr ("Rivlr", "we", "us", "our") collects, why we collect it, how long we keep it, who we share it with, and every choice you have. Please read it carefully — by using Rivlr you agree to the practices described here. Capitalised terms not defined here have the meanings given in our Terms of Service. This policy is also available at any time from Settings → Privacy Policy in the app, and on the web.
 
@@ -80,8 +80,8 @@ Rivlr pairs people into live video rooms with games, lets you browse who is onli
 • Reports you file about other users, and the people you block, save, or add as friends
 • Anything you include when you contact us at m2mb@info.com
 
-4. SIGN IN WITH APPLE (OPTIONAL)
-If you choose Sign in with Apple, we receive and store ONLY the anonymous Apple user identifier — a random string scoped to Rivlr. We do not request, read, or store your name or email address from Apple. The identifier lets your friends, messages and profile survive reinstalls. Guest use (no account) is always available.
+4. SIGNING IN — APPLE OR GOOGLE, REQUIRED
+Rivlr requires an account: Sign in with Apple on iOS, Sign in with Google on Android. There is no guest mode — a real, verifiable identity is what makes suspensions actually stick, and it is why your friends, messages and profile survive a reinstall. Whichever you use, we receive and store ONLY the anonymous user identifier that provider issues for Rivlr — a random string. We do not request, read, or store your name or email address from Apple or from Google.
 
 5. CAMERA AND MICROPHONE — NEVER RECORDED
 WE DO NOT RECORD, STORE, OR ANALYSE YOUR VIDEO OR AUDIO. When a room ends, the stream ends. There is no archive, no server-side capture, no face or voice analysis, and no use of your video or audio to train AI systems. In most one-to-one rooms your video travels directly between the two phones and never touches our servers at all; in group rooms and when a direct connection isn't possible, it is relayed in real time by our video provider without being recorded. This is the foundation of Rivlr and it does not change.
@@ -109,7 +109,7 @@ While you play: round answers, votes, and reactions are processed in server memo
 We use Firebase Analytics to understand which screens and games people use, in aggregate (e.g. "how many rooms started today"). We answer "no" to tracking under Apple's App Tracking Transparency because we do not track you across other companies' apps or websites, and we do not use analytics data to identify you.
 
 10. PUSH NOTIFICATIONS
-If you allow notifications, we store a device push token so we can tell you things like a friend coming online, a new message, or a friend request. Sending uses Apple Push Notification service and Google Firebase Cloud Messaging. Turn notifications off in iOS Settings at any time; the token stops being used.
+If you allow notifications, we store a device push token so we can tell you things like a friend coming online, a new message, or a friend request. Sending uses Apple Push Notification service and Google Firebase Cloud Messaging. Turn notifications off in your device Settings at any time; the token stops being used.
 
 11. TECHNICAL DATA AND YOUR DEVICE IDENTIFIER
 Like every online service, our servers momentarily see your IP address and connection metadata when your device connects. We use it transiently for delivery, rate limiting, and abuse prevention (for example, limiting how many simultaneous connections one address can open). We do not build profiles from it.
@@ -126,9 +126,18 @@ We also generate a random identifier for your device and store it in your phone'
 
 To be precise about the one thing people care most about: "never recorded"
 means LIVE ROOM video and audio. It does not mean we hold nothing at all —
-the things we do hold are listed in sections 3, 6 and 7, and the two places a
-human may look at your content are listed in section 12a.
-12a. WHEN A HUMAN MAY SEE SOMETHING
+the things we do hold are listed in sections 3, 6 and 7; the automated
+screen every upload passes through is in section 12a, and the places a
+human may look at your content are listed in section 12b.
+12a. AUTOMATED SCREENING, BEFORE ANYTHING IS EVEN POSTED
+On top of report + block, Rivlr runs an automated content-safety filter over
+photos and text at the moment you submit them — profile photos, chat photos,
+your handle, your bio, and messages — and blocks the worst of it outright,
+before it is ever stored or shown to anyone. This is automated pattern
+matching, not a person, and it runs on every relevant upload, not only after
+a complaint. See section 15 for the processor that performs this scan.
+
+12b. WHEN A HUMAN MAY SEE SOMETHING
 We would rather over-explain this than let "never recorded" be read as more
 than it is:
 • If someone reports your profile photo or a photo/voice note you sent, a
@@ -142,7 +151,7 @@ than it is:
 Live room video and audio are never in any of this, because they are never
 captured in the first place.
 
-12b. DISCOVERY — WHO CAN SEE YOU
+12c. DISCOVERY — WHO CAN SEE YOU
 Rivlr has an Explore tab: a grid of people who are online right now, so the
 app still works when the matching queue is quiet.
 • While you are online and signed in, other signed-in adults may see a CARD:
@@ -150,8 +159,9 @@ app still works when the matching queue is quiet.
   interests you and they share. Nothing else.
 • Your date of birth is NEVER shown — only a derived age on the profile you
   choose to open.
-• Guests (not signed in) cannot appear in Explore and cannot ask anyone to
-  meet.
+• Only people who have completed sign-in appear in Explore or can ask
+  someone to meet — there is no way to browse or be browsed without an
+  account.
 • Tapping your card does not connect anyone to you. It sends a request that
   rings, exactly like a call, and nothing happens unless you accept.
 • You can switch this off completely: Settings → Discovery → "Show me in
@@ -164,14 +174,17 @@ about, never see each other in Explore.
 To run the service you asked for (matching, rooms, games, friends, messaging, calls); to keep the community safe (report handling, blocks, abuse prevention, under-18 removal); to maintain and improve Rivlr using aggregate statistics; and to communicate service messages. We do not use your information for marketing to third parties.
 
 14. LEGAL BASES (EEA / UK)
-Where GDPR / UK GDPR applies we rely on: performance of a contract (running the service — matching, games, friends, messaging); legitimate interests (safety, security, abuse prevention, aggregate analytics); and consent (camera/microphone access, push notifications, optional profile details — each revocable at any time in iOS Settings or by removing the details). We do not use automated decision-making producing legal effects; the only automated action is removal after repeated community reports, which you can contest at m2mb@info.com. California residents: we do not "sell" or "share" personal information as defined by the CCPA/CPRA, and we honour access and deletion requests as described below.
+Where GDPR / UK GDPR applies we rely on: performance of a contract (running the service — matching, games, friends, messaging); legitimate interests (safety, security, abuse prevention, aggregate analytics); and consent (camera/microphone access, push notifications, optional profile details — each revocable at any time in device Settings or by removing the details). We do not use automated decision-making producing legal effects; the only automated action is removal after repeated community reports, which you can contest at m2mb@info.com. California residents: we do not "sell" or "share" personal information as defined by the CCPA/CPRA, and we honour access and deletion requests as described below.
 
 15. WHO WE SHARE WITH
 We share personal data only with the processors that make the service run, each bound to process it solely on our instructions:
 • LiveKit — real-time video relay for group rooms and fallback connections (no recording)
-• Railway — server hosting and our database
+• Railway — server hosting
+• Supabase — our database host
+• OpenAI — automated content-safety screening of photos and text at the moment you submit them (section 12a); used for moderation only, on that single request, never to train any model
 • Google Firebase — analytics and push delivery
 • Apple — Sign in with Apple and push delivery
+• Google — Sign in with Google
 • Tenor (Google) — GIF search results (receives your search text only)
 We may also disclose information: with your consent; to comply with law or valid legal process; to enforce our Terms or protect the rights, property, or safety of Rivlr, our users, or the public; and as aggregate, anonymised statistics that identify no one. If Rivlr is involved in a merger, acquisition, or sale of assets, user information may be part of the transferred assets — we will notify you (in-app and/or on this page) of any change in ownership or in how your information is handled.
 
@@ -212,7 +225,7 @@ Questions, requests, complaints: m2mb@info.com. We read everything.''';
 
   static const terms = '''TERMS OF SERVICE & END USER LICENCE AGREEMENT
 Rivlr — live social video
-Effective date: 3 August 2026 · Version 4.0
+Effective date: 11 August 2026 · Version 4.1
 
 These Terms are a binding contract between you and Rivlr ("Rivlr", "we", "us"). They incorporate our Privacy Policy and House Rules by reference. By creating an account, ticking the boxes at sign-in, or using Rivlr in any way, you agree to all of them; if you do not agree, do not use the service. If we publish additional rules for specific features ("Additional Terms"), those apply too.
 
@@ -223,7 +236,7 @@ You must be at least 18 years old and legally able to enter this agreement. By u
 Rivlr connects you into live video rooms with people you don't know (always one-to-one for strangers), lets you browse people who are online and invite them to meet (they choose whether to accept), supports rooms you create with friends, and — when two people choose each other — friendships with messaging and calls. Games run inside rooms. We may add, change, or remove features at any time as the service evolves.
 
 3. YOUR ACCOUNT AND SECURITY
-Going live on camera requires signing in with Apple — this is what lets suspensions actually stick, and it is why the graph of friends and messages survives a reinstall. Your account (whether guest or Sign in with Apple) is yours alone: do not sell, transfer, or share it, and do not let anyone else use it. You may not choose a handle you have no right to use or one intended to impersonate another person. You are responsible for activity on your account. If we must resolve a dispute over who owns an account, our determination (which may include suspension or termination) is final. Tell us immediately at m2mb@info.com about any unauthorised use.
+Rivlr requires an account — Sign in with Apple on iOS, Sign in with Google on Android. There is no guest mode: a real, verifiable identity is what lets suspensions actually stick, and it is why the graph of friends and messages survives a reinstall. Your account is yours alone: do not sell, transfer, or share it, and do not let anyone else use it. You may not choose a handle you have no right to use or one intended to impersonate another person. You are responsible for activity on your account. If we must resolve a dispute over who owns an account, our determination (which may include suspension or termination) is final. Tell us immediately at m2mb@info.com about any unauthorised use.
 
 4. FREE SERVICE AND RIVLR+ SUBSCRIPTIONS
 Rivlr is free to use. Meeting people, messaging, rooms, and games cost nothing and always will.
@@ -253,7 +266,9 @@ You agree that you will NOT, in any room, message, profile, or other content:
 We may investigate any of the above and take any action we consider appropriate, including removing content, suspending or permanently terminating accounts, and reporting to law enforcement.
 
 6. MODERATION
-Reporting is one tap away in every room, chat and profile, and asks what kind of problem it is — child safety, nudity or sexual content, harassment or hate, violence or threats, impersonation, or something else. Blocks are instant and permanent: a blocked person can never be matched with you again.
+Before anything is even shown to anyone, an automated filter screens photos and text you submit — profile photos, chat photos, your handle and bio, and messages — for content that breaks these Terms, and blocks the worst of it outright at the moment you try to send it.
+
+Reporting is also one tap away in every room, chat and profile, and asks what kind of problem it is — child safety, nudity or sexual content, harassment or hate, violence or threats, impersonation, or something else. Blocks are instant and permanent: a blocked person can never be matched with you again.
 
 Every report reaches a human review queue, ordered by severity, and we act within 24 hours — child-safety and nudity reports are handled ahead of everything else. Outcomes include removing a profile photo or other content, temporarily suspending an account, and permanently removing it.
 
@@ -274,7 +289,7 @@ Rivlr connects strangers by design. We do not run background checks and cannot v
 If you have a dispute with another user, we are under no obligation to become involved, though we may act on reports under Section 6. To the maximum extent permitted by law, you release Rivlr and its personnel from claims, demands, and damages of every kind arising out of or connected with such disputes.
 
 10. THIRD-PARTY SERVICES
-The service uses third-party providers (video relay, hosting, analytics, push delivery, GIF search) and may contain links or content from services we do not control. We are not responsible for third-party services, their content, or their privacy practices, and your dealings with any third party are between you and them. GIFs are provided by Tenor and subject to its terms.
+The service uses third-party providers (video relay, hosting, database, analytics, push delivery, GIF search, automated content moderation) and may contain links or content from services we do not control. We are not responsible for third-party services, their content, or their privacy practices, and your dealings with any third party are between you and them. GIFs are provided by Tenor and subject to its terms.
 
 11. APP LICENCE
 We grant you a personal, revocable, non-exclusive, non-transferable licence to install and use the Rivlr app on devices you own or control, for your personal use, subject to these Terms and the app store's rules. You may not copy, modify, distribute, sell, lease, reverse-engineer, or create derivative works from the app or service except where the law expressly permits.
@@ -329,7 +344,7 @@ No nudity. No harassment, hate, or threats. No violence, weapons, or drugs. Inst
 We never record rooms — that's a promise. You don't record them either. No screenshots, no screen-capture, no sharing anyone's face without consent.
 
 4. THE ROOM PROTECTS ITSELF
-Long-press any face to report or block — one tap, instant. Community reports remove people automatically. Blocked people can never be matched with you again.
+Long-press any face to report or block — one tap, instant. Photos and messages are also auto-screened before they ever post. Community reports remove people automatically. Blocked people can never be matched with you again.
 
 Breaking these gets you removed. The room decides fast.''';
 
