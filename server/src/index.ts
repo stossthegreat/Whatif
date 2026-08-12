@@ -1691,7 +1691,7 @@ server.listen(PORT, () => {
 
 social.init(send);
 chat.init(send);
-calls.init(send, formCell);
+calls.init(send, formCell, isPlus);
 explore.init(send, meetOk);
 social.startRepDecay();
 

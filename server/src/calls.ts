@@ -12,7 +12,8 @@ type SendFn = (u: User, m: Record<string, unknown>) => void;
 type FormCell = (memberIds: string[], modeOverride?: 'call') => Promise<void>;
 let send: SendFn = () => {};
 let formCell: FormCell = async () => {};
-export function init(s: SendFn, f: FormCell) { send = s; formCell = f; }
+let isPlus: (u: User) => boolean = () => false;
+export function init(s: SendFn, f: FormCell, p: (u: User) => boolean) { send = s; formCell = f; isPlus = p; }
 
 interface Ring {
   meet?: boolean; // came from Explore -> forms a normal room
@@ -39,9 +40,13 @@ async function missedCallDm(fromUser: User, toUid: string, video: boolean): Prom
 }
 
 /// Ring someone. Two origins share this machine:
-///   • a friend CALL (origin absent) — friends only, forms a private call cell
-///   • an Explore MEET (origin 'explore') — strangers allowed, forms a normal
-///     'hang' room so games and P2P work exactly like a matched room
+///   • a friend CALL (origin absent) — friends only, forms a private call cell,
+///     always free — calling people you've already met is never paywalled
+///   • an Explore/Discover MEET (origin 'explore') — a specific stranger,
+///     forms a normal 'hang' room so games and P2P work exactly like a
+///     matched room. This is the same "1-on-1 with a specific person" thing
+///     Roulette's random queue gates behind Rivlr+, so it's gated here too —
+///     otherwise Explore's grid would be a free side door around that gate.
 /// Everything else — blocked check, busy/idle guard, 30s timeout, missed-call
 /// DM — is identical, which is the whole reason to reuse it.
 export async function invite(user: User, m: Record<string, unknown>): Promise<void> {
@@ -52,6 +57,9 @@ export async function invite(user: User, m: Record<string, unknown>): Promise<vo
   if (!to || to === user.uid) return;
   if (store.isBlocked(user.uid, to)) return;
   if (social.isNeverPair(user.uid, to)) return;
+  if (meet && !isPlus(user)) {
+    return send(user, { t: 'err', code: 'needPlus', where: 'oneOnOne' });
+  }
   if (!meet && (await dbs.friendState(user.uid, to)) !== 'friends') {
     return send(user, { t: 'err', code: 'notFriends' });
   }
