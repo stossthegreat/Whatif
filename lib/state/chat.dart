@@ -111,7 +111,13 @@ class ChatStore extends ChangeNotifier {
         // a send the server rejected — the optimistic bubble would otherwise
         // sit "pending" forever with no clue (the pre-b61 experience)
         final code = m['code'] as String?;
-        if (code == 'badMedia' || code == 'notFriends' || code == 'blocked') {
+        // 'flagged' (server-side content moderation rejected the message) is
+        // the same story as the other three: the send never landed, so the
+        // optimistic bubble must go — but 'flagged' is also reused for
+        // profile/handle rejections elsewhere, so only act on it here when
+        // it's tagged as ours. app.dart's global handler shows the toast.
+        final isOurs = code != 'flagged' || m['where'] == 'chat';
+        if (isOurs && (code == 'badMedia' || code == 'notFriends' || code == 'blocked' || code == 'flagged')) {
           for (final t in threads.values) {
             for (var i = t.length - 1; i >= 0; i--) {
               if (t[i].pending) {

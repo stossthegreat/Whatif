@@ -1,5 +1,82 @@
 import { run, dbEnabled, addBan } from './db.js';
 
+/// Proactive content filtering — the piece Apple's UGC guideline (1.2)
+/// actually asks for on top of report+block: a way to catch objectionable
+/// content BEFORE it's posted, not only after someone complains. Free tier
+/// (OpenAI's moderation endpoint has no cost) so this stays on even for a
+/// solo-founder budget. If OPENAI_API_KEY isn't set, or the call fails, we
+/// fail OPEN — the upload/message goes through — because report, block and
+/// the human queue below are the real backstop; a moderation outage should
+/// never brick the app for everyone.
+const OPENAI_KEY = process.env.OPENAI_API_KEY || '';
+export const aiModerationEnabled = !!OPENAI_KEY;
+if (!OPENAI_KEY) {
+  console.warn('[moderation] OPENAI_API_KEY not set — AI pre-filtering is OFF; report+block+human queue still work');
+}
+
+export interface ModResult {
+  flagged: boolean;
+  categories: string[]; // the specific categories that tripped, e.g. 'sexual/minors'
+}
+
+type OaContent = string | { type: 'image_url'; image_url: { url: string } }[];
+
+async function callModeration(input: OaContent): Promise<ModResult | null> {
+  if (!OPENAI_KEY) return null;
+  try {
+    const resp = await fetch('https://api.openai.com/v1/moderations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
+      body: JSON.stringify({ model: 'omni-moderation-latest', input }),
+    });
+    if (!resp.ok) {
+      console.error('[moderation] openai status', resp.status);
+      return null;
+    }
+    const j = await resp.json() as {
+      results?: { flagged?: boolean; categories?: Record<string, boolean> }[];
+    };
+    const r = j.results?.[0];
+    if (!r) return null;
+    const categories = Object.entries(r.categories ?? {}).filter(([, v]) => v).map(([k]) => k);
+    return { flagged: !!r.flagged, categories };
+  } catch (e) {
+    console.error('[moderation] openai request failed', e);
+    return null;
+  }
+}
+
+/// Moderate free text — bios, handles, DM messages. Empty/whitespace-only
+/// text is trivially clean; skip the network round trip for it.
+export async function moderateText(text: string): Promise<ModResult | null> {
+  const t = text.trim();
+  if (!t) return { flagged: false, categories: [] };
+  return callModeration(t);
+}
+
+/// Moderate an uploaded image (profile photo, chat photo) before it's ever
+/// stored or served to anyone else. Voice notes aren't covered — this model
+/// doesn't take audio — so those stay on the reactive report/block path.
+export async function moderateImage(bytes: Buffer, mime: string): Promise<ModResult | null> {
+  const url = `data:${mime};base64,${bytes.toString('base64')}`;
+  return callModeration([{ type: 'image_url', image_url: { url } }]);
+}
+
+/// Categories severe enough to hard-block a DM outright even between two
+/// friends who matched each other — sexualizing a minor, self-harm coaching,
+/// graphic violence, real threats. Ordinary flirty/adult "sexual" or
+/// "harassment" scores are deliberately let through here: this is a flirty
+/// duo-game app where consenting-adult banter is expected product behaviour,
+/// and it's still covered by report + block + the human queue if it crosses
+/// a line the model didn't score high enough to catch.
+const SEVERE_CATEGORIES = new Set([
+  'sexual/minors', 'self-harm/intent', 'self-harm/instructions',
+  'violence/graphic', 'illicit/violent', 'harassment/threatening', 'hate/threatening',
+]);
+export function isSevere(categories: string[]): boolean {
+  return categories.some((c) => SEVERE_CATEGORIES.has(c));
+}
+
 /// Report triage.
 ///
 /// A raw count is trivially gameable — three friends can erase anyone — so a

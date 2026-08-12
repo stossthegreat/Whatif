@@ -330,6 +330,30 @@ class _RootState extends State<_Root> {
             PlusScreen.push(ctx, reason: 'Choosing who you meet is part of Rivlr+.');
           }
         }
+        // content moderation rejected something server-side — say so wherever
+        // the user happens to be, since the screen that sent it (profile edit
+        // saves on dispose, handle change fires from onboarding) may already
+        // be gone by the time the server answers. The local optimistic edit
+        // (profile fields, handle) stays in the field so they can just fix
+        // and resave it — reopening Edit Profile shows exactly what to change.
+        if (m['code'] == 'flagged') {
+          final where = m['where'] as String?;
+          final ctx = RivlrApp.navKey.currentContext;
+          if (ctx != null) {
+            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: C.char2,
+              content: Text(
+                where == 'chat'
+                    ? 'that message was blocked — it broke our community guidelines'
+                    : where == 'handle'
+                        ? 'that name was blocked — try something else'
+                        : 'that didn’t save — some of the text broke our community guidelines',
+                style: T.body.copyWith(color: Colors.white),
+              ),
+            ));
+          }
+        }
       case 'cell':
         _onCell(m);
       case 'ended':

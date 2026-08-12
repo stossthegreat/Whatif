@@ -2,6 +2,7 @@ import { store, type User, type Cell } from './store.js';
 import { dbEnabled, run } from './db.js';
 import * as dbs from './db_social.js';
 import { sendPush, pushEnabled } from './push.js';
+import { moderateText } from './moderation.js';
 
 /// The social brain: rating → match → friendship, presence, trait votes,
 /// hidden reputation. index.ts injects its send function at boot (avoids a
@@ -313,8 +314,18 @@ function broadcastProfileFresh(uid: string): void {
   }
 }
 
-export function setProfile(user: User, m: Record<string, unknown>): void {
+export async function setProfile(user: User, m: Record<string, unknown>): Promise<void> {
   if (!dbEnabled) return err(user, 'noDb');
+  // one moderation call covers every free-text field in this save — the
+  // fields themselves are validated/truncated inside dbs.setProfile, this
+  // pass only decides whether the save is allowed to happen at all
+  const free = ['bio', 'city', 'country', 'pronouns']
+    .map((f) => (typeof m[f] === 'string' ? (m[f] as string) : ''))
+    .filter(Boolean).join('\n');
+  if (free) {
+    const mod = await moderateText(free);
+    if (mod?.flagged) { send(user, { t: 'err', code: 'flagged', where: 'profile' }); return; }
+  }
   dbs.setProfile(user.uid, m);
   broadcastProfileFresh(user.uid);
 }
