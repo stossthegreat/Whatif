@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
 import '../core/analytics.dart';
 import '../core/camera_service.dart';
@@ -14,12 +13,16 @@ import '../widgets/glass.dart';
 import '../widgets/notification_bell.dart';
 import '../widgets/portal_ring.dart';
 import '../widgets/self_view.dart';
+import 'discover_screen.dart';
+import 'plus_screen.dart';
 import 'settings_screen.dart';
 
 /// HOME — you, live, full bleed. The app is already on before you press
 /// anything: your own camera is the stage, the world's headcount is at the
-/// top, and one huge TAP TO START floats in the middle. The three ways in
-/// are chips at the bottom — pick a lane, tap anywhere, you're moving.
+/// top, and one huge TAP TO START floats in the middle — it always means
+/// Roulette, the free instant-chaos lane. 1-on-1 (Rivlr+) and Groups are
+/// two clear doors below it, not lanes to pick then press a separate button
+/// for — tapping either one goes straight there.
 ///
 /// A low number is never shown; a shown number is never invented.
 class HomeScreen extends StatefulWidget {
@@ -45,23 +48,11 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
-  /// 'hang' | 'roulette' — what TAP TO START launches. Groups is a door, not
-  /// a lane: its chip navigates immediately and never becomes the selection.
-  String _mode = 'hang';
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadMode();
     if (widget.active) CameraService.instance.ensure();
-  }
-
-  Future<void> _loadMode() async {
-    final sp = await SharedPreferences.getInstance();
-    final m = sp.getString('home.mode');
-    if (!mounted || (m != 'hang' && m != 'roulette')) return;
-    setState(() => _mode = m!);
   }
 
   @override
@@ -89,27 +80,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  void _select(String m) {
-    if (m == _mode) return;
-    Buzz.tick();
-    setState(() => _mode = m);
-    SharedPreferences.getInstance().then((sp) => sp.setString('home.mode', m));
-  }
-
+  /// The dial always means Roulette now — 1-on-1 moved to its own door
+  /// (Discover) since it's a browse-and-choose flow, not a press-and-wait one.
   void _start() {
     Buzz.pop();
-    if (_mode == 'roulette') {
-      Sfx.match();
-    } else {
-      Sfx.pop();
-    }
-    Track.event('home_start', {'mode': _mode});
-    widget.onPlay(_mode);
+    Sfx.match();
+    Track.event('home_start', {'mode': 'roulette'});
+    widget.onPlay('roulette');
   }
 
-  String get _modeLine => _mode == 'roulette'
-      ? 'no choices — games hit back to back'
-      : 'someone new · games when you want';
+  void _openOneOnOne() {
+    if (!AppSession.instance.plus) {
+      Buzz.tick();
+      PlusScreen.push(context,
+          reason: '1-on-1 rooms are part of Rivlr+ — Roulette and Groups are always free.');
+      return;
+    }
+    Buzz.pop();
+    DiscoverScreen.push(context);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -165,45 +154,49 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 const _FilterChip(),
                 _ChaosPill(onTap: () => widget.onPlay('roulette')),
                 const Spacer(),
-                // the Portal — Rivlr's living mark; taps fall through to the stage
+                // the Portal — Rivlr's living mark; taps fall through to the
+                // stage. Always Roulette now: the one thing pressing the
+                // stage does, with 1-on-1 and Groups as their own doors below.
                 IgnorePointer(
                   child: PortalRing(
-                    title: 'Tap to\nstart',
-                    line: _modeLine,
-                    size: 258 * r.scale,
+                    title: 'Tap to\nroll',
+                    line: 'no choices — games hit back to back',
+                    size: 246 * r.scale,
                   ),
                 ),
                 const Spacer(),
                 // tonight's games — the billboard for what they don't have
                 _GameTicker(onTap: _start),
-                const SizedBox(height: 12),
-                // the three ways in — chips, not slabs
+                const SizedBox(height: 14),
+                // the two doors — deliberate destinations, never confused
+                // with the dial above. 1-on-1 carries its Rivlr+ tag right
+                // on the card, so the value is visible before anyone taps.
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: r.gutter),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _ModeChip(
-                        emoji: '🎥',
-                        label: '1 on 1',
-                        selected: _mode == 'hang',
-                        onTap: () => _select('hang'),
-                      ),
-                      const SizedBox(width: 10),
-                      _ModeChip(
-                        emoji: '🎰',
-                        label: 'Roulette',
-                        selected: _mode == 'roulette',
-                        onTap: () => _select('roulette'),
-                      ),
-                      const SizedBox(width: 10),
-                      _ModeChip(
-                        emoji: '👥',
-                        label: 'Groups',
-                        selected: false,
-                        onTap: () { Buzz.pop(); widget.onPlay('groups'); },
-                      ),
-                    ],
+                  child: AnimatedBuilder(
+                    animation: AppSession.instance,
+                    builder: (context, _) => Row(
+                      children: [
+                        Expanded(
+                          child: _DoorCard(
+                            emoji: '🎥',
+                            label: '1 on 1',
+                            sub: AppSession.instance.plus ? 'choose who you meet' : 'Rivlr+',
+                            tagged: !AppSession.instance.plus,
+                            onTap: _openOneOnOne,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _DoorCard(
+                            emoji: '👥',
+                            label: 'Groups',
+                            sub: 'with your people',
+                            onTap: () { Buzz.pop(); widget.onPlay('groups'); },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -216,18 +209,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 }
 
-// ---- chips -----------------------------------------------------------------
+// ---- doors -----------------------------------------------------------------
 
-class _ModeChip extends StatelessWidget {
-  const _ModeChip({
+/// A deliberate destination, not a filter — visually distinct from the dial
+/// above it on purpose. Two equal cards, icon over label over one line of
+/// truth about what's behind it.
+class _DoorCard extends StatelessWidget {
+  const _DoorCard({
     required this.emoji,
     required this.label,
-    required this.selected,
+    required this.sub,
     required this.onTap,
+    this.tagged = false,
   });
   final String emoji;
   final String label;
-  final bool selected;
+  final String sub;
+  final bool tagged;
   final VoidCallback onTap;
 
   @override
@@ -235,24 +233,41 @@ class _ModeChip extends StatelessWidget {
     return Press(
       haptic: false,
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: M.quick,
-        curve: M.ease,
-        padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
-          gradient: selected ? C.gradSig : null,
-          color: selected ? null : const Color(0x66000000),
-          borderRadius: BorderRadius.circular(R.chip),
-          border: Border.all(
-              color: selected ? const Color(0x47FFFFFF) : C.hair2, width: 1),
-          boxShadow: selected ? C.glowSig(blur: 18, spread: -4) : null,
+          color: const Color(0x59000000),
+          borderRadius: BorderRadius.circular(R.card),
+          border: Border.all(color: C.hair2, width: 1),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 15)),
-            const SizedBox(width: 7),
-            Text(label, style: T.display(14).copyWith(letterSpacing: 0.8)),
+            Text(emoji, style: const TextStyle(fontSize: 22)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Text(label, style: T.display(15).copyWith(letterSpacing: 0.4)),
+                      // a quiet crown, not a scary padlock — an upsell, not
+                      // a denial. Only shown while signed out of Rivlr+.
+                      if (tagged) ...[
+                        const SizedBox(width: 5),
+                        Text('👑', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.9))),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(sub,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: T.tiny.copyWith(color: C.tx2, fontSize: 11.5, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
           ],
         ),
       ),
