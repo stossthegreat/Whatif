@@ -323,11 +323,14 @@ class _RootState extends State<_Root> {
         // going live needs a real account — surface the sign-in at the exact
         // moment they wanted to play, which is when they're most willing
         if (m['code'] == 'needAccount') _needAccount();
-        // the same logic for the paid filter: the pitch lands where the want is
+        // the same logic for every paid gate: the pitch lands where the want is
         if (m['code'] == 'needPlus') {
           final ctx = RivlrApp.navKey.currentContext;
           if (ctx != null) {
-            PlusScreen.push(ctx, reason: 'Choosing who you meet is part of Rivlr+.');
+            PlusScreen.push(ctx,
+                reason: m['where'] == 'oneOnOne'
+                    ? '1-on-1 rooms are part of Rivlr+ — Roulette and Groups are always free.'
+                    : 'Choosing who you meet is part of Rivlr+.');
           }
         }
         // content moderation rejected something server-side — say so wherever

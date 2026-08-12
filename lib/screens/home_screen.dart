@@ -14,6 +14,7 @@ import '../widgets/glass.dart';
 import '../widgets/notification_bell.dart';
 import '../widgets/portal_ring.dart';
 import '../widgets/self_view.dart';
+import 'plus_screen.dart';
 import 'settings_screen.dart';
 
 /// HOME — you, live, full bleed. The app is already on before you press
@@ -47,7 +48,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// 'hang' | 'roulette' — what TAP TO START launches. Groups is a door, not
   /// a lane: its chip navigates immediately and never becomes the selection.
-  String _mode = 'hang';
+  /// Defaults to Roulette — 1-on-1 is the Rivlr+ lane, and a brand-new
+  /// free user's very first tap must land on something they can actually do.
+  String _mode = 'roulette';
 
   @override
   void initState() {
@@ -61,6 +64,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final sp = await SharedPreferences.getInstance();
     final m = sp.getString('home.mode');
     if (!mounted || (m != 'hang' && m != 'roulette')) return;
+    // 1-on-1 is a Rivlr+ lane — a saved preference from before a
+    // subscription lapsed (or before this build shipped) must never land a
+    // free user straight on a paywall the instant they open the app
+    if (m == 'hang' && !AppSession.instance.plus) return;
     setState(() => _mode = m!);
   }
 
@@ -91,12 +98,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _select(String m) {
     if (m == _mode) return;
+    // 1-on-1 is a Rivlr+ lane — tapping the chip pitches it immediately
+    // instead of selecting a mode that would just bounce off the server.
+    // The server remains the real gate (this is a UX shortcut, not it).
+    if (m == 'hang' && !AppSession.instance.plus) {
+      Buzz.tick();
+      PlusScreen.push(context, reason: '1-on-1 rooms are part of Rivlr+ — Roulette and Groups are always free.');
+      return;
+    }
     Buzz.tick();
     setState(() => _mode = m);
     SharedPreferences.getInstance().then((sp) => sp.setString('home.mode', m));
   }
 
   void _start() {
+    if (_mode == 'hang' && !AppSession.instance.plus) {
+      Buzz.tick();
+      PlusScreen.push(context, reason: '1-on-1 rooms are part of Rivlr+ — Roulette and Groups are always free.');
+      return;
+    }
     Buzz.pop();
     if (_mode == 'roulette') {
       Sfx.match();
@@ -183,11 +203,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _ModeChip(
-                        emoji: '🎥',
-                        label: '1 on 1',
-                        selected: _mode == 'hang',
-                        onTap: () => _select('hang'),
+                      AnimatedBuilder(
+                        animation: AppSession.instance,
+                        builder: (context, _) => _ModeChip(
+                          emoji: '🎥',
+                          label: '1 on 1',
+                          selected: _mode == 'hang',
+                          locked: !AppSession.instance.plus,
+                          onTap: () => _select('hang'),
+                        ),
                       ),
                       const SizedBox(width: 10),
                       _ModeChip(
@@ -224,10 +248,12 @@ class _ModeChip extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.locked = false,
   });
   final String emoji;
   final String label;
   final bool selected;
+  final bool locked;
   final VoidCallback onTap;
 
   @override
@@ -253,6 +279,12 @@ class _ModeChip extends StatelessWidget {
             Text(emoji, style: const TextStyle(fontSize: 15)),
             const SizedBox(width: 7),
             Text(label, style: T.display(14).copyWith(letterSpacing: 0.8)),
+            // a quiet crown, not a scary padlock — this is an upsell, not a
+            // denial. Only shown while signed out of the entitlement.
+            if (locked) ...[
+              const SizedBox(width: 6),
+              Text('👑', style: TextStyle(fontSize: 12, height: 1, color: Colors.white.withOpacity(0.9))),
+            ],
           ],
         ),
       ),

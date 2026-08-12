@@ -1061,7 +1061,10 @@ mountIap(app, (uid, until) => {
   const u = store.userByUid(uid);
   if (!u) return;
   u.plusUntil = until;
-  if (!isPlus(u)) u.meet = 'Everyone'; // entitlement gone, filter goes with it
+  if (!isPlus(u)) {
+    u.meet = 'Everyone'; // entitlement gone, filter goes with it
+    if (u.mode === 'hang') u.mode = 'roulette'; // 1-on-1 goes with it too
+  }
   send(u, {
     t: 'plus',
     active: isPlus(u),
@@ -1267,10 +1270,26 @@ wss.on('connection', (ws, req) => {
       case 'play':
         // going live requires a real account — that's what makes a ban stick
         if (!canGoLive(user)) break;
+        // 1-on-1 is the paid lane — Roulette and Groups stay free. Gated
+        // here and nowhere else, same rule as meetPref above: the client's
+        // copy is a display of this decision, never the decision itself.
+        if (m.mode === 'hang' && !isPlus(user)) {
+          send(user, { t: 'err', code: 'needPlus', where: 'oneOnOne' });
+          break;
+        }
         if (m.mode === 'roulette' || m.mode === 'hang') user.mode = m.mode;
         leaveParty(id); leaveCell(user); enqueue(user);
         break;
-      case 'next': leaveCell(user); enqueue(user); break;
+      case 'next':
+        // re-queuing rides whatever user.mode already is — re-check here too,
+        // so a subscription that lapsed mid-session can't keep looping 1-on-1
+        // matches on the entitlement it no longer has
+        if (user.mode === 'hang' && !isPlus(user)) {
+          user.mode = 'roulette';
+          send(user, { t: 'err', code: 'needPlus', where: 'oneOnOne' });
+        }
+        leaveCell(user); enqueue(user);
+        break;
       case 'leave': dequeue(id); leaveCell(user); user.state = 'idle'; break;
       case 'host': {
         if (!canGoLive(user)) break;
