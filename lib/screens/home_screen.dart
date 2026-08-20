@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../config.dart';
 import '../core/analytics.dart';
@@ -6,25 +7,28 @@ import '../core/camera_service.dart';
 import '../core/haptics.dart';
 import '../core/sound.dart';
 import '../models/game.dart';
+import '../net/api_client.dart';
+import '../net/network_client.dart';
 import '../state/session.dart';
 import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/notification_bell.dart';
-import '../widgets/portal_ring.dart';
 import '../widgets/self_view.dart';
 import 'discover_screen.dart';
 import 'plus_screen.dart';
 import 'settings_screen.dart';
 
-/// HOME — you, live, full bleed. The app is already on before you press
-/// anything: your own camera is the stage, the world's headcount is at the
-/// top, and one huge TAP TO START floats in the middle — it always means
-/// Roulette, the free instant-chaos lane. 1-on-1 (Rivlr+) and Groups are
-/// two clear doors below it, not lanes to pick then press a separate button
-/// for — tapping either one goes straight there.
+/// HOME — deliberately NOT a viewfinder.
 ///
-/// A low number is never shown; a shown number is never invented.
+/// Every random-video app on the store is the same screen: your own camera
+/// blown up full-bleed with one button floating on it. That silhouette IS
+/// the genre, and it made Rivlr read as a clone of it at a glance. So the
+/// camera is demoted here to a small self-tile — you can still see you're
+/// framed and lit, which is the only job it ever actually had — and the
+/// screen becomes a composed, dark, editorial surface: who's on right now
+/// as real faces, what's playing tonight, and three unmistakably different
+/// doors. Content first, camera second.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
@@ -48,17 +52,48 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  StreamSubscription<Map<String, dynamic>>? _sub;
+  Timer? _poll;
+  List<_Face> _faces = const [];
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if (widget.active) CameraService.instance.ensure();
+    _sub = NetworkClient.instance.events.listen(_onNet);
+    if (AppConfig.isLive) {
+      _refreshFaces();
+      _poll = Timer.periodic(const Duration(seconds: 25), (_) => _refreshFaces());
+    }
+  }
+
+  void _refreshFaces() {
+    if (widget.active) NetworkClient.instance.explore();
+  }
+
+  void _onNet(Map<String, dynamic> m) {
+    if (!mounted) return;
+    if (m['t'] == 'explore') {
+      final list = ((m['people'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((p) => _Face.fromMap(p.cast<String, dynamic>()))
+          .where((f) => f.online && f.thumbId != null)
+          .take(12)
+          .toList();
+      setState(() => _faces = list);
+    } else if (m['t'] == 'faceFresh' || m['t'] == 'profileFresh') {
+      _refreshFaces();
+    }
   }
 
   @override
   void didUpdateWidget(HomeScreen old) {
     super.didUpdateWidget(old);
-    if (widget.active && !old.active) CameraService.instance.ensure();
+    if (widget.active && !old.active) {
+      CameraService.instance.ensure();
+      _refreshFaces();
+    }
     if (!widget.active && old.active) CameraService.instance.dispose();
   }
 
@@ -74,22 +109,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _sub?.cancel();
+    _poll?.cancel();
     // Leaving Home always releases the lens — finding, party and live rooms
     // (LiveKit / WebRTC) open their own capture session.
     CameraService.instance.dispose();
     super.dispose();
   }
 
-  /// The dial always means Roulette now — 1-on-1 moved to its own door
-  /// (Discover) since it's a browse-and-choose flow, not a press-and-wait one.
-  void _start() {
+  void _roulette() {
     Buzz.pop();
     Sfx.match();
     Track.event('home_start', {'mode': 'roulette'});
     widget.onPlay('roulette');
   }
 
-  void _openOneOnOne() {
+  void _oneOnOne() {
     if (!AppSession.instance.plus) {
       Buzz.tick();
       PlusScreen.push(context,
@@ -104,102 +139,99 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final r = Responsive.of(context);
     return Scaffold(
-      backgroundColor: C.black,
+      backgroundColor: C.char,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // the living stage — you, mirrored, width-fit for the full field of
-          // view (elegant placeholder when the camera is off or denied)
-          const SelfView(grade: true, fit: BoxFit.fitWidth),
-          // the whole stage is the start button
-          Positioned.fill(
-            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _start),
-          ),
-          // legibility scrim behind the chips + nav bar
-          const Positioned(
-            bottom: 0, left: 0, right: 0, height: 240,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter, end: Alignment.topCenter,
-                    colors: [Color(0xE6000000), Color(0x00000000)],
-                  ),
-                ),
-              ),
-            ),
-          ),
+          // a slow violet aurora instead of a camera wallpaper — the screen
+          // has depth and life without borrowing the genre's silhouette
+          const _Aurora(),
           SafeArea(
-            child: Column(
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(r.gutter, 4, r.gutter, 26),
+              physics: const BouncingScrollPhysics(),
               children: [
-                const SizedBox(height: 6),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: r.gutter),
-                  child: Row(
+                // ---- header: you, small. Not the wallpaper. ----------------
+                Row(
+                  children: [
+                    const _SelfTile(),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Wordmark(size: 26),
+                          const SizedBox(height: 3),
+                          AnimatedBuilder(
+                            animation: AppSession.instance,
+                            builder: (context, _) => Text(
+                              '@${AppSession.instance.myHandle}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: T.tiny.copyWith(fontSize: 12, color: C.tx3),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const NotificationBell(size: 36, iconSize: 18),
+                    const SizedBox(width: 8),
+                    _RoundBtn(
+                      icon: Icons.settings_rounded,
+                      onTap: () { Buzz.tick(); SettingsScreen.push(context, widget.onSignOut); },
+                    ),
+                  ],
+                ),
+                const _StorageBanner(),
+                const _FilterChip(),
+                _ChaosPill(onTap: _roulette),
+
+                const SizedBox(height: 20),
+                // ---- who is actually here, as faces ------------------------
+                const _LiveHeadline(),
+                if (_faces.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _FaceStrip(faces: _faces, onTap: _oneOnOne),
+                ],
+
+                const SizedBox(height: 22),
+                // ---- the hero: Roulette --------------------------------
+                _HeroCard(onTap: _roulette),
+
+                const SizedBox(height: 12),
+                // ---- the two other doors ------------------------------
+                AnimatedBuilder(
+                  animation: AppSession.instance,
+                  builder: (context, _) => Row(
                     children: [
-                      const Wordmark(size: 32),
-                      const Spacer(),
-                      const _LivePill(),
-                      const SizedBox(width: 8),
-                      const NotificationBell(size: 34, iconSize: 17),
-                      const SizedBox(width: 8),
-                      _RoundBtn(
-                        icon: Icons.settings_rounded,
-                        onTap: () { Buzz.tick(); SettingsScreen.push(context, widget.onSignOut); },
+                      Expanded(
+                        child: _DoorCard(
+                          emoji: '🎥',
+                          label: '1 on 1',
+                          sub: AppSession.instance.plus ? 'browse & pick' : 'Rivlr+',
+                          tagged: !AppSession.instance.plus,
+                          onTap: _oneOnOne,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _DoorCard(
+                          emoji: '👥',
+                          label: 'Groups',
+                          sub: 'your own room',
+                          onTap: () { Buzz.pop(); widget.onPlay('groups'); },
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const _StorageBanner(),
-                const _FilterChip(),
-                _ChaosPill(onTap: () => widget.onPlay('roulette')),
-                const Spacer(),
-                // the Portal — Rivlr's living mark; taps fall through to the
-                // stage. Always Roulette now: the one thing pressing the
-                // stage does, with 1-on-1 and Groups as their own doors below.
-                IgnorePointer(
-                  child: PortalRing(
-                    title: 'Tap to\nroll',
-                    line: 'no choices — games hit back to back',
-                    size: 246 * r.scale,
-                  ),
-                ),
-                const Spacer(),
-                // tonight's games — the billboard for what they don't have
-                _GameTicker(onTap: _start),
-                const SizedBox(height: 14),
-                // the two doors — deliberate destinations, never confused
-                // with the dial above. 1-on-1 carries its Rivlr+ tag right
-                // on the card, so the value is visible before anyone taps.
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: r.gutter),
-                  child: AnimatedBuilder(
-                    animation: AppSession.instance,
-                    builder: (context, _) => Row(
-                      children: [
-                        Expanded(
-                          child: _DoorCard(
-                            emoji: '🎥',
-                            label: '1 on 1',
-                            sub: AppSession.instance.plus ? 'choose who you meet' : 'Rivlr+',
-                            tagged: !AppSession.instance.plus,
-                            onTap: _openOneOnOne,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _DoorCard(
-                            emoji: '👥',
-                            label: 'Groups',
-                            sub: 'with your people',
-                            onTap: () { Buzz.pop(); widget.onPlay('groups'); },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
+
+                const SizedBox(height: 22),
+                // ---- tonight's games: the thing they don't have ----------
+                Text('PLAYING TONIGHT', style: T.eyebrow.copyWith(color: C.tx3, fontSize: 10.5)),
+                const SizedBox(height: 10),
+                _GameTicker(onTap: _roulette),
               ],
             ),
           ),
@@ -209,11 +241,262 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 }
 
-// ---- doors -----------------------------------------------------------------
+// ---- the stage lighting -----------------------------------------------------
 
-/// A deliberate destination, not a filter — visually distinct from the dial
-/// above it on purpose. Two equal cards, icon over label over one line of
-/// truth about what's behind it.
+/// Two slow violet blooms drifting behind everything. Replaces the camera as
+/// the thing that makes the screen feel alive.
+class _Aurora extends StatefulWidget {
+  const _Aurora();
+  @override
+  State<_Aurora> createState() => _AuroraState();
+}
+
+class _AuroraState extends State<_Aurora> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(seconds: 26))..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        final t = _c.value * 2 * math.pi;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: C.char,
+            gradient: RadialGradient(
+              center: Alignment(0.7 * math.sin(t), -0.75 + 0.25 * math.cos(t * 0.7)),
+              radius: 1.25,
+              colors: [C.sig.withOpacity(0.20), Colors.transparent],
+              stops: const [0.0, 0.75],
+            ),
+          ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(-0.8 * math.cos(t * 0.6), 0.85 + 0.12 * math.sin(t)),
+                radius: 1.1,
+                colors: [C.purpleDeep.withOpacity(0.22), Colors.transparent],
+                stops: const [0.0, 0.7],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// You, at thumbnail size. Enough to check your framing and lighting — which
+/// is the only thing the full-bleed viewfinder was ever really for.
+class _SelfTile extends StatelessWidget {
+  const _SelfTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 46,
+      height: 46,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: C.hair2),
+        boxShadow: [BoxShadow(color: C.sig.withOpacity(0.25), blurRadius: 14, spreadRadius: -6)],
+      ),
+      child: const SelfView(fit: BoxFit.cover),
+    );
+  }
+}
+
+/// The honest headcount, as a sentence rather than a badge.
+class _LiveHeadline extends StatelessWidget {
+  const _LiveHeadline();
+
+  String _fmt(int n) =>
+      n.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: AppSession.instance,
+      builder: (context, _) {
+        final s = AppSession.instance;
+        // an invented number must never reach a live build
+        if (AppConfig.isLive && !s.serverDriven) {
+          return Text('Warming up…', style: T.display(30));
+        }
+        final n = s.liveCount;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 9, height: 9,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: C.acid,
+                boxShadow: [BoxShadow(color: C.acidGlow, blurRadius: 8)],
+              ),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                n > 0 ? '${_fmt(n)} online now' : 'Quiet right now',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: T.display(27),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Real faces of real people who are on right now. Proof of life the moment
+/// the app opens — and the thing a camera wallpaper could never show.
+class _FaceStrip extends StatelessWidget {
+  const _FaceStrip({required this.faces, required this.onTap});
+  final List<_Face> faces;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 62,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: faces.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (context, i) {
+          final f = faces[i];
+          return Press(
+            haptic: false,
+            onTap: onTap,
+            child: Container(
+              width: 54,
+              height: 54,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: C.char3,
+                border: Border.all(color: C.acid.withOpacity(0.55), width: 1.5),
+              ),
+              child: f.thumbId != null && Api.ready
+                  ? Image.network(Api.mediaUrl(f.thumbId!), fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink())
+                  : const SizedBox.shrink(),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _Face {
+  _Face({required this.uid, this.thumbId, this.online = true});
+  factory _Face.fromMap(Map<String, dynamic> m) => _Face(
+        uid: (m['uid'] as String?) ?? '',
+        thumbId: (m['thumbId'] as num?)?.toInt(),
+        online: m['online'] != false,
+      );
+  final String uid;
+  final int? thumbId;
+  final bool online;
+}
+
+// ---- the doors --------------------------------------------------------------
+
+/// Roulette, as a proper piece of art rather than a floating button on a
+/// camera feed. Big, gradient, alive — and unmistakably a card, not a lens.
+class _HeroCard extends StatefulWidget {
+  const _HeroCard({required this.onTap});
+  final VoidCallback onTap;
+  @override
+  State<_HeroCard> createState() => _HeroCardState();
+}
+
+class _HeroCardState extends State<_HeroCard> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Press(
+      scale: 0.985,
+      onTap: widget.onTap,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) => Container(
+          padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
+          decoration: BoxDecoration(
+            gradient: C.gradSigHot,
+            borderRadius: BorderRadius.circular(R.card),
+            boxShadow: [
+              BoxShadow(
+                color: C.sigGlow,
+                blurRadius: 26 + 10 * _c.value,
+                spreadRadius: -8,
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('ROULETTE',
+                        style: T.eyebrow.copyWith(
+                            color: Colors.white.withOpacity(0.75), fontSize: 10.5)),
+                    const SizedBox(height: 6),
+                    Text('Spin me\nsomeone', style: T.display(30).copyWith(height: 1.05)),
+                    const SizedBox(height: 8),
+                    Text('no choosing · games hit back to back',
+                        style: T.tiny.copyWith(
+                            color: Colors.white.withOpacity(0.85), fontSize: 12)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              // the dial, small and spinning — a nod to the old portal without
+              // being a full-screen button
+              Transform.rotate(
+                angle: _c.value * 0.6,
+                child: Container(
+                  width: 58, height: 58,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.14),
+                    border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+                  ),
+                  child: const Icon(Icons.bolt_rounded, size: 30, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A deliberate destination. Visually a card, never a filter chip.
 class _DoorCard extends StatelessWidget {
   const _DoorCard({
     required this.emoji,
@@ -234,40 +517,38 @@ class _DoorCard extends StatelessWidget {
       haptic: false,
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        padding: const EdgeInsets.fromLTRB(16, 16, 14, 16),
         decoration: BoxDecoration(
-          color: const Color(0x59000000),
+          color: C.char2,
           borderRadius: BorderRadius.circular(R.card),
-          border: Border.all(color: C.hair2, width: 1),
+          border: Border.all(color: C.hair2),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 22)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Text(label, style: T.display(15).copyWith(letterSpacing: 0.4)),
-                      // a quiet crown, not a scary padlock — an upsell, not
-                      // a denial. Only shown while signed out of Rivlr+.
-                      if (tagged) ...[
-                        const SizedBox(width: 5),
-                        Text('👑', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.9))),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(sub,
+            Text(emoji, style: const TextStyle(fontSize: 24)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Flexible(
+                  child: Text(label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: T.tiny.copyWith(color: C.tx2, fontSize: 11.5, fontWeight: FontWeight.w600)),
+                      style: T.display(17).copyWith(letterSpacing: 0.3)),
+                ),
+                // a quiet crown, not a padlock — an upsell, not a denial
+                if (tagged) ...[
+                  const SizedBox(width: 5),
+                  const Text('👑', style: TextStyle(fontSize: 11)),
                 ],
-              ),
+              ],
             ),
+            const SizedBox(height: 3),
+            Text(sub,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: T.tiny.copyWith(color: C.tx2, fontSize: 11.5, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
@@ -279,8 +560,7 @@ class _DoorCard extends StatelessWidget {
 
 /// Shown ONLY when the server admits it cannot persist (no database, or a
 /// deploy older than the social layer). Silence here cost days of "why does
-/// nothing save" — never again: if friends/messages/photos can't save, the
-/// app says so on the front page.
+/// nothing save" — never again.
 class _StorageBanner extends StatelessWidget {
   const _StorageBanner();
 
@@ -293,7 +573,7 @@ class _StorageBanner extends StatelessWidget {
         final s = SocialState.instance;
         if (!s.welcomed || s.serverStorage) return const SizedBox.shrink();
         return Container(
-          margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+          margin: const EdgeInsets.only(top: 12),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           decoration: BoxDecoration(
             color: const Color(0x33FF3B5C),
@@ -319,60 +599,6 @@ class _StorageBanner extends StatelessWidget {
   }
 }
 
-/// The live headcount — acid dot + the actual number of people, owner's
-/// call. Nothing at all until the server has actually spoken (an invented
-/// number must never leak into a live build).
-class _LivePill extends StatelessWidget {
-  const _LivePill();
-
-  String _fmt(int n) =>
-      n.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: AppSession.instance,
-      builder: (context, _) {
-        final s = AppSession.instance;
-        if (AppConfig.isLive && !s.serverDriven) return const SizedBox.shrink();
-        return Container(
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: const Color(0x66000000),
-            borderRadius: BorderRadius.circular(R.chip),
-            border: Border.all(color: C.hair2),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 7, height: 7,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: C.acid,
-                  boxShadow: [BoxShadow(color: C.acidGlow, blurRadius: 6)],
-                ),
-              ),
-              const SizedBox(width: 7),
-              Text(
-                '${_fmt(s.liveCount)} ONLINE',
-                style: T.tiny.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
 class _RoundBtn extends StatelessWidget {
   const _RoundBtn({required this.icon, required this.onTap});
   final IconData icon;
@@ -382,10 +608,10 @@ class _RoundBtn extends StatelessWidget {
     return Press(
       onTap: onTap,
       child: Container(
-        width: 34, height: 34,
+        width: 36, height: 36,
         decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: const Color(0x66000000),
+            color: C.glass2,
             border: Border.all(color: C.hair2)),
         child: Icon(icon, size: 18, color: Colors.white),
       ),
@@ -395,9 +621,8 @@ class _RoundBtn extends StatelessWidget {
 
 // ---- chaos pill ------------------------------------------------------------
 
-/// The hourly ritual, now a slim pill that exists ONLY while it's on — the
-/// first five minutes of every hour, or a live seasonal event. The rest of
-/// the time Home stays pure camera.
+/// The hourly ritual — a slim pill that exists ONLY while it's on: the first
+/// five minutes of every hour, or a live seasonal event.
 class _ChaosPill extends StatefulWidget {
   const _ChaosPill({required this.onTap});
   final VoidCallback onTap;
@@ -448,11 +673,11 @@ class _ChaosPillState extends State<_ChaosPill> {
       clock = '$m:$s';
     }
     return Padding(
-      padding: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.only(top: 12),
       child: Press(
         onTap: () { Buzz.tick(); Track.event('chaos_banner_tap'); widget.onTap(); },
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(R.chip),
@@ -464,8 +689,7 @@ class _ChaosPillState extends State<_ChaosPill> {
                   style: T.tiny.copyWith(
                       color: Colors.black, fontWeight: FontWeight.w800, fontSize: 12)),
               const SizedBox(width: 8),
-              Text(clock,
-                  style: T.mono.copyWith(color: Colors.black, fontSize: 13)),
+              Text(clock, style: T.mono.copyWith(color: Colors.black, fontSize: 13)),
             ],
           ),
         ),
@@ -476,9 +700,8 @@ class _ChaosPillState extends State<_ChaosPill> {
 
 // ---- game ticker -----------------------------------------------------------
 
-/// A slim, endless marquee of tonight's games above the mode chips — the
-/// one-line billboard for the thing the camera-only apps don't have.
-/// Tapping it starts the selected mode.
+/// A slim, endless marquee of tonight's games — the one-line billboard for
+/// the thing the camera-only apps don't have.
 class _GameTicker extends StatefulWidget {
   const _GameTicker({required this.onTap});
   final VoidCallback onTap;
@@ -489,7 +712,7 @@ class _GameTicker extends StatefulWidget {
 
 class _GameTickerState extends State<_GameTicker> with SingleTickerProviderStateMixin {
   late final AnimationController _c =
-      AnimationController(vsync: this, duration: const Duration(seconds: 22))..repeat();
+      AnimationController(vsync: this, duration: const Duration(seconds: 26))..repeat();
 
   @override
   void dispose() {
@@ -497,20 +720,25 @@ class _GameTickerState extends State<_GameTicker> with SingleTickerProviderState
     super.dispose();
   }
 
-  Widget _cell(String emoji, String name, {Color? color}) {
+  Widget _cell(String emoji, String name) {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 11.5)),
-          const SizedBox(width: 5),
-          Text(name,
-              style: T.display(11.5).copyWith(
-                  color: color ?? Colors.white.withOpacity(0.55), letterSpacing: 1.4)),
-          const SizedBox(width: 8),
-          Text('·', style: TextStyle(color: Colors.white.withOpacity(0.22), fontSize: 12)),
-        ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: C.char2,
+          borderRadius: BorderRadius.circular(R.chip),
+          border: Border.all(color: C.hair),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 13)),
+            const SizedBox(width: 6),
+            Text(name,
+                style: T.display(12).copyWith(color: C.tx2, letterSpacing: 0.9)),
+          ],
+        ),
       ),
     );
   }
@@ -520,16 +748,13 @@ class _GameTickerState extends State<_GameTicker> with SingleTickerProviderState
     // one strip, drawn twice — translating by exactly half loops seamlessly
     final strip = Row(
       mainAxisSize: MainAxisSize.min,
-      children: [
-        _cell('⚡', 'tonight', color: C.acid),
-        for (final d in SeqDef.ten) _cell(d.icon, d.name.toLowerCase()),
-      ],
+      children: [for (final d in SeqDef.ten) _cell(d.icon, d.name.toLowerCase())],
     );
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onTap,
       child: SizedBox(
-        height: 24,
+        height: 38,
         width: double.infinity,
         child: ClipRect(
           child: OverflowBox(
@@ -566,28 +791,31 @@ class _FilterChip extends StatelessWidget {
         if (meet == 'Everyone') return const SizedBox.shrink();
         final word = meet == 'Women' ? 'women only' : 'men only';
         return Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Press(
-            onTap: () {
-              Buzz.tick();
-              SettingsScreen.push(context, () {});
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-              decoration: BoxDecoration(
-                gradient: C.gradSig,
-                borderRadius: BorderRadius.circular(R.chip),
-                boxShadow: C.glowSig(blur: 14, spread: -5),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.tune_rounded, size: 13, color: Colors.white),
-                  const SizedBox(width: 6),
-                  Text(word,
-                      style: T.tiny.copyWith(
-                          color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
-                ],
+          padding: const EdgeInsets.only(top: 12),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Press(
+              onTap: () {
+                Buzz.tick();
+                SettingsScreen.push(context, () {});
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+                decoration: BoxDecoration(
+                  gradient: C.gradSig,
+                  borderRadius: BorderRadius.circular(R.chip),
+                  boxShadow: C.glowSig(blur: 14, spread: -5),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.tune_rounded, size: 13, color: Colors.white),
+                    const SizedBox(width: 6),
+                    Text(word,
+                        style: T.tiny.copyWith(
+                            color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
+                  ],
+                ),
               ),
             ),
           ),
