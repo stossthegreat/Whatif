@@ -978,12 +978,13 @@ setInterval(() => {
       try { u.ws.send(payload); } catch { /* ignore */ }
     }
   }
-  // Anyone waiting behind a paid filter gets the honest number of people
-  // their filter can actually reach. Only computed for filtered users who
-  // are actually queued — a tiny set — so the O(n) scan stays cheap.
+  // Everyone queued gets an honest read on how many people they could
+  // actually be matched with — not just filtered users. An unfiltered
+  // solo tester at 4am deserves to know "nobody's around" exists as a real
+  // state, not just spin forever with zero signal from the server.
   for (const id of store.queue) {
     const u = store.users.get(id);
-    if (u && u.meet !== 'Everyone') sendQueueHint(u);
+    if (u) sendQueueHint(u);
   }
 }, 4000);
 

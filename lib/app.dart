@@ -662,7 +662,7 @@ class _RootState extends State<_Root> {
             _partyInviteUid = null;
             _to(_Step.home);
           }),
-      _Step.finding => FindingScreen(onDone: _dropSimulated, waitForExternal: live),
+      _Step.finding => FindingScreen(onDone: _dropSimulated, waitForExternal: live, onCancel: _leave),
       _Step.live => LiveScreen(
           key: ValueKey(_drop),
           cell: _cell!,

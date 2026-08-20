@@ -14,11 +14,16 @@ import '../widgets/glass.dart';
 /// with ticking haptics, and lands on a face — CLICK. "MATCHED." This is the
 /// dopamine hit before the drop.
 class FindingScreen extends StatefulWidget {
-  const FindingScreen({super.key, required this.onDone, this.waitForExternal = false});
+  const FindingScreen({super.key, required this.onDone, this.waitForExternal = false, this.onCancel});
   final VoidCallback onDone;
 
   /// Live mode: keep spinning until the server delivers a match (parent swaps us).
   final bool waitForExternal;
+
+  /// Leave the search and go home. Without this, an empty queue (quiet
+  /// hours, or an App Review session with no other real user online) was a
+  /// dead end — the reel spins forever with no way back except force-quitting.
+  final VoidCallback? onCancel;
 
   @override
   State<FindingScreen> createState() => _FindingScreenState();
@@ -41,6 +46,8 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
   String _meet = 'Everyone';
   int _reach = 0;
   bool _offeredWiden = false;
+  // ---- the general "nobody's around" case — no filter involved at all ----
+  bool _offeredEmpty = false;
 
   @override
   void initState() {
@@ -54,14 +61,69 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
         _meet = (m['meet'] as String?) ?? 'Everyone';
         _reach = ((m['reach'] as num?) ?? 0).toInt();
       });
+      final waited = ((m['waitedMs'] as num?) ?? 0).toInt();
       // A filter someone PAID for is never relaxed behind their back. After
       // a long wait we ask — and they decide.
-      final waited = ((m['waitedMs'] as num?) ?? 0).toInt();
       if (!_offeredWiden && _meet != 'Everyone' && waited > 25000) {
         _offeredWiden = true;
         _askToWiden();
       }
+      // The unfiltered case: genuinely nobody online to match with. This
+      // used to have no server signal at all and no way out — the reel just
+      // spun. Now it's an honest message and a real door, same courtesy the
+      // paid filter always got.
+      if (!_offeredEmpty && _meet == 'Everyone' && _reach == 0 && waited > 20000) {
+        _offeredEmpty = true;
+        _showNobodyAround();
+      }
     });
+  }
+
+  void _showNobodyAround() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isDismissible: true,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(12),
+        child: Glass(
+          radius: R.sheet,
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Quiet right now', style: T.display(21)),
+              const SizedBox(height: 8),
+              Text(
+                'Nobody’s free to match with this second — we’ll keep looking, '
+                'or come back in a bit.',
+                style: T.body.copyWith(fontSize: 14.5, height: 1.45),
+              ),
+              const SizedBox(height: 20),
+              if (widget.onCancel != null)
+                Cta(
+                  label: 'Leave',
+                  onTap: () { Buzz.tick(); Navigator.pop(ctx); widget.onCancel!(); },
+                ),
+              const SizedBox(height: 10),
+              Center(
+                child: Press(
+                  haptic: false,
+                  onTap: () { Buzz.tick(); Navigator.pop(ctx); },
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Text('Keep waiting',
+                        style: T.body.copyWith(
+                            color: C.tx2, fontSize: 14, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   String get _meetWord => _meet == 'Women' ? 'women' : 'men';
@@ -278,6 +340,28 @@ class _FindingScreenState extends State<FindingScreen> with SingleTickerProvider
                         ],
                       ),
               ),
+              // the way out — quiet hours, a review session with nobody else
+              // online, or just a change of mind must never be a dead end
+              if (widget.onCancel != null && !_matched)
+                Positioned(
+                  top: 0, left: 0,
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Press(
+                        onTap: () { Buzz.tick(); widget.onCancel!(); },
+                        child: Container(
+                          width: 38, height: 38,
+                          decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0x66000000),
+                              border: Border.all(color: C.hair2)),
+                          child: const Icon(Icons.close_rounded, size: 19, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           );
         },
