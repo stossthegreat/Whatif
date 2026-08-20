@@ -8,6 +8,7 @@ import '../theme/tokens.dart';
 import '../widgets/glass.dart';
 import '../widgets/notification_bell.dart';
 import '../widgets/person_card.dart' show flagEmoji;
+import 'plus_screen.dart';
 
 /// DISCOVER — the 1-on-1 door. One face at a time, full screen: skip past
 /// people who don't interest you, invite the ones who do. This is the SAME
@@ -37,6 +38,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   int _i = 0;
   bool _loaded = false;
   String? _ringingUid; // set while an invite is out; blocks a second one
+  /// Free accounts get a daily allowance of invites; null until the server
+  /// has actually said a number (Plus never receives one — unlimited).
+  int? _left;
 
   @override
   void initState() {
@@ -82,6 +86,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           setState(() => _ringingUid = null);
           _toast(st == 'busy' ? 'they’re in a room right now' : 'no answer — next up');
           _skip();
+        }
+      case 'meetQuota':
+        setState(() => _left = (m['left'] as num?)?.toInt());
+      case 'err':
+        // out of free invites for today — the pitch lands exactly where the
+        // want is, which is the only place it ever works
+        if (m['code'] == 'meetLimit') {
+          setState(() { _ringingUid = null; _left = 0; });
+          final per = (m['per'] as num?)?.toInt() ?? 10;
+          PlusScreen.push(context,
+              reason: 'That’s your $per invites for today. Rivlr+ makes them unlimited — '
+                  'and lets you choose who you meet.');
         }
       case 'cell':
         // the invite landed — a real room is forming. This screen's job is
@@ -137,6 +153,29 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   const SizedBox(width: 12),
                   Text('1 on 1', style: T.display(22)),
                   const Spacer(),
+                  // free accounts see what's left; Plus never gets a number
+                  if (_left != null) ...[
+                    Press(
+                      haptic: false,
+                      onTap: () => PlusScreen.push(context,
+                          reason: 'Rivlr+ makes invites unlimited — and lets you '
+                              'choose who you meet.'),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: C.glass2,
+                          borderRadius: BorderRadius.circular(R.chip),
+                          border: Border.all(color: C.hair2),
+                        ),
+                        child: Text('$_left left today',
+                            style: T.tiny.copyWith(
+                                color: _left! > 0 ? C.tx2 : C.live,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   const NotificationBell(size: 34, iconSize: 17),
                 ],
               ),

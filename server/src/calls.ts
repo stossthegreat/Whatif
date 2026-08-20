@@ -24,6 +24,37 @@ interface Ring {
 }
 const rings = new Map<string, Ring>();
 
+/// Free users get a real daily allowance of Explore/Discover invites —
+/// enough to genuinely use the feature every day, few enough that the people
+/// who live in it convert. Plus is unlimited.
+///
+/// In memory, keyed by UTC day: a redeploy handing someone a fresh allowance
+/// is a harmless generosity, and this needs no migration or write path. The
+/// map is pruned rather than grown forever.
+const FREE_MEET_INVITES_PER_DAY = 10;
+const meetUsed = new Map<string, { day: string; n: number }>();
+const MEET_MAP_CAP = 50_000;
+
+const utcDay = (): string => new Date().toISOString().slice(0, 10);
+
+export function meetInvitesLeft(uid: string): number {
+  const cur = meetUsed.get(uid);
+  if (!cur || cur.day !== utcDay()) return FREE_MEET_INVITES_PER_DAY;
+  return Math.max(0, FREE_MEET_INVITES_PER_DAY - cur.n);
+}
+
+function noteMeetInvite(uid: string): void {
+  const day = utcDay();
+  const cur = meetUsed.get(uid);
+  if (!cur || cur.day !== day) {
+    // blunt but bounded — yesterday's rows are dead weight either way
+    if (meetUsed.size > MEET_MAP_CAP) meetUsed.clear();
+    meetUsed.set(uid, { day, n: 1 });
+  } else {
+    cur.n += 1;
+  }
+}
+
 /// Which video-ness the cell got — read by index.ts when logging the call DM.
 export const cellVideo = new Map<string, boolean>(); // cellId placeholder set at accept
 
@@ -44,9 +75,9 @@ async function missedCallDm(fromUser: User, toUid: string, video: boolean): Prom
 ///     always free — calling people you've already met is never paywalled
 ///   • an Explore/Discover MEET (origin 'explore') — a specific stranger,
 ///     forms a normal 'hang' room so games and P2P work exactly like a
-///     matched room. This is the same "1-on-1 with a specific person" thing
-///     Roulette's random queue gates behind Rivlr+, so it's gated here too —
-///     otherwise Explore's grid would be a free side door around that gate.
+///     matched room. Free, with a daily allowance: picking a specific person
+///     is the premium motion, but locking it outright starves the room, and
+///     an empty room is worth nothing to anyone.
 /// Everything else — blocked check, busy/idle guard, 30s timeout, missed-call
 /// DM — is identical, which is the whole reason to reuse it.
 export async function invite(user: User, m: Record<string, unknown>): Promise<void> {
@@ -57,8 +88,8 @@ export async function invite(user: User, m: Record<string, unknown>): Promise<vo
   if (!to || to === user.uid) return;
   if (store.isBlocked(user.uid, to)) return;
   if (social.isNeverPair(user.uid, to)) return;
-  if (meet && !isPlus(user)) {
-    return send(user, { t: 'err', code: 'needPlus', where: 'oneOnOne' });
+  if (meet && !isPlus(user) && meetInvitesLeft(user.uid) <= 0) {
+    return send(user, { t: 'err', code: 'meetLimit', per: FREE_MEET_INVITES_PER_DAY });
   }
   if (!meet && (await dbs.friendState(user.uid, to)) !== 'friends') {
     return send(user, { t: 'err', code: 'notFriends' });
@@ -81,6 +112,12 @@ export async function invite(user: User, m: Record<string, unknown>): Promise<vo
     void missedCallDm(user, to, video);
   }, 30_000);
   rings.set(callId, { from: user.uid, to, video, timer, meet });
+  // charged only once the ring actually goes out — a missed/busy/offline
+  // target above returns before this, so a wasted tap never costs an invite
+  if (meet && !isPlus(user)) {
+    noteMeetInvite(user.uid);
+    send(user, { t: 'meetQuota', left: meetInvitesLeft(user.uid), per: FREE_MEET_INVITES_PER_DAY });
+  }
   state(user, callId, 'ringing');
   send(target, { t: 'call', callId, video, meet,
     from: { uid: user.uid, name: user.name, hue: user.hue } });

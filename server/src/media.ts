@@ -137,20 +137,37 @@ export function mountMedia(app: Express): void {
       // small derivative with this kind — that's what silently destroyed
       // every full-size avatar before build 61 (the thumb re-entered here,
       // repointed photo_media_id and deleted the photo it belonged to).
-      const prev = await run('SELECT photo_media_id FROM users WHERE uid=$1', [uid]);
-      await run('UPDATE users SET photo_media_id=$2 WHERE uid=$1', [uid, id]);
-      const old = prev?.rows?.[0]?.photo_media_id;
-      if (old != null) {
-        dropAvatarCache(Number(old));
-        void run('DELETE FROM media WHERE id=$1 AND owner=$2', [old, uid]);
+      //
+      // photo_thumb_id is repointed at the SAME id, provisionally. The small
+      // derivative is a separate, fire-and-forget upload that can fail (bad
+      // network, app backgrounded, compressor returning nothing) — and when
+      // it did, the grid was left pointing at the PREVIOUS thumb, whose blob
+      // this same request had every right to delete. That is the "photo shows
+      // on my profile but not in Explore" bug: the full avatar was fine,
+      // the grid pointer was dangling. Pointing both at the new full image
+      // means the grid is correct the instant the avatar lands; the real
+      // thumbnail simply replaces it moments later as an optimisation.
+      const prev = await run('SELECT photo_media_id, photo_thumb_id FROM users WHERE uid=$1', [uid]);
+      await run('UPDATE users SET photo_media_id=$2, photo_thumb_id=$2 WHERE uid=$1', [uid, id]);
+      for (const col of ['photo_media_id', 'photo_thumb_id']) {
+        const old = prev?.rows?.[0]?.[col];
+        // never delete what we just pointed at (both columns can hold it)
+        if (old != null && Number(old) !== Number(id)) {
+          dropAvatarCache(Number(old));
+          void run('DELETE FROM media WHERE id=$1 AND owner=$2', [old, uid]);
+        }
       }
-      broadcastFaceFresh(uid, { photoId: Number(id) });
+      broadcastFaceFresh(uid, { photoId: Number(id), thumbId: Number(id) });
     } else if (kind === 'thumb') {
       // the grid derivative: swaps ONLY the thumb pointer, full photo untouched
-      const prev = await run('SELECT photo_thumb_id FROM users WHERE uid=$1', [uid]);
+      const prev = await run('SELECT photo_thumb_id, photo_media_id FROM users WHERE uid=$1', [uid]);
       await run('UPDATE users SET photo_thumb_id=$2 WHERE uid=$1', [uid, id]);
       const old = prev?.rows?.[0]?.photo_thumb_id;
-      if (old != null) {
+      const currentPhoto = prev?.rows?.[0]?.photo_media_id;
+      // the avatar branch above parks the FULL image in photo_thumb_id until
+      // this arrives — so "the old thumb" is very often the live avatar.
+      // Deleting it here would destroy the profile photo outright.
+      if (old != null && Number(old) !== Number(id) && Number(old) !== Number(currentPhoto)) {
         dropAvatarCache(Number(old));
         void run('DELETE FROM media WHERE id=$1 AND owner=$2', [old, uid]);
       }
