@@ -125,12 +125,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _oneOnOne() {
-    if (!AppSession.instance.plus) {
-      Buzz.tick();
-      PlusScreen.push(context,
-          reason: '1-on-1 rooms are part of Rivlr+ — Roulette and Groups are always free.');
-      return;
-    }
     Buzz.pop();
     DiscoverScreen.push(context);
   }
@@ -201,30 +195,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
                 const SizedBox(height: 12),
                 // ---- the two other doors ------------------------------
-                AnimatedBuilder(
-                  animation: AppSession.instance,
-                  builder: (context, _) => Row(
-                    children: [
-                      Expanded(
-                        child: _DoorCard(
-                          emoji: '🎥',
-                          label: '1 on 1',
-                          sub: AppSession.instance.plus ? 'browse & pick' : 'Rivlr+',
-                          tagged: !AppSession.instance.plus,
-                          onTap: _oneOnOne,
-                        ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _DoorCard(
+                        emoji: '🎥',
+                        label: '1 on 1',
+                        sub: 'browse & pick',
+                        onTap: _oneOnOne,
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _DoorCard(
-                          emoji: '👥',
-                          label: 'Groups',
-                          sub: 'your own room',
-                          onTap: () { Buzz.pop(); widget.onPlay('groups'); },
-                        ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _DoorCard(
+                        emoji: '👥',
+                        label: 'Groups',
+                        sub: 'your own room',
+                        onTap: () { Buzz.pop(); widget.onPlay('groups'); },
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
 
                 const SizedBox(height: 22),

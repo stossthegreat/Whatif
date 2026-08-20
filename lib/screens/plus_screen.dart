@@ -157,23 +157,22 @@ class _PlusScreenState extends State<PlusScreen> {
                     const SizedBox(height: 8),
                     Center(
                       child: Text(
-                        widget.reason ?? 'One-on-one rooms, your way, and see who wants you back.',
+                        widget.reason ?? 'Choose who you meet, and see who wants you back.',
                         textAlign: TextAlign.center,
                         style: T.body.copyWith(fontSize: 15, height: 1.45),
                       ),
                     ),
                     const SizedBox(height: 26),
                     const _Perk(
-                      emoji: '🎥',
-                      title: '1-on-1 rooms',
-                      line: 'Meet one person at a time instead of the group '
-                          'shuffle — Roulette and Groups stay free either way.',
-                    ),
-                    const _Perk(
                       emoji: '♀︎♂︎',
                       title: 'Choose who you meet',
                       line: 'Match with women only, men only, or everyone — '
                           'switch any time.',
+                    ),
+                    const _Perk(
+                      emoji: '♾️',
+                      title: 'Unlimited 1-on-1 invites',
+                      line: 'Free accounts get 10 a day. Plus never runs out.',
                     ),
                     const _Perk(
                       emoji: '💜',
