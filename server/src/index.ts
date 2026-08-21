@@ -1,4 +1,4 @@
-// Rivlr — live social backend.
+// Rivler — live social backend.
 //
 // One PLAY → an unpredictable, preference-aware, block-aware cell → LiveKit
 // video tokens → relayed game events. Real Sparks (mutual + "they're live"),
@@ -42,10 +42,34 @@ const LIVE_BASELINE = Number(process.env.LIVE_BASELINE || 0);
 /// that works every time beats a free one that works most of the time — the
 /// saving is worth nothing if people can't see each other. Set P2P=true to
 /// turn it back on once it has been proven on real devices.
-const P2P_ENABLED = process.env.P2P === 'true';
+// LiveKit is for GROUPS ONLY. Every 2-person room — stranger match, 1-on-1
+// pick, or a friend call — goes phone-to-phone, which costs nothing and is
+// lower latency than relaying through a server. Default ON; set P2P=false to
+// kill-switch it if a network problem ever needs ruling out.
+//
+// Safe by construction: the client gives the direct connection a 6s window
+// and falls back to LiveKit if it can't carry the room. Only STUN is
+// configured (no TURN relay), so the ~15% of connections behind strict NAT
+// still land on LiveKit — that's the safety net doing its job, not a bug.
+const P2P_ENABLED = (process.env.P2P ?? 'true') === 'true';
 // Sign-in gate for going live. Off by default so a misconfigured deploy can
 // never lock every user out; Railway sets REQUIRE_ACCOUNT=true.
-const REQUIRE_ACCOUNT = (process.env.REQUIRE_ACCOUNT ?? 'false') === 'true';
+// The app has NO guest path any more — the sign-in screen offers Apple and
+// Google and nothing else — so the server defaults to enforcing it rather
+// than trusting every client to be an honest one. Set REQUIRE_ACCOUNT=false
+// only to deliberately reopen guest access.
+const REQUIRE_ACCOUNT = (process.env.REQUIRE_ACCOUNT ?? 'true') === 'true';
+// Apple verification always works (APPLE_BUNDLE_ID has a sane default), but
+// Google's audience has none: without GOOGLE_CLIENT_ID every Google token
+// fails to verify, so with enforcement on, ANDROID USERS CANNOT GO LIVE AT
+// ALL. That is a silent, total outage for one platform, so it gets shouted
+// at boot rather than discovered through support messages.
+if (REQUIRE_ACCOUNT && !process.env.GOOGLE_CLIENT_ID) {
+  console.error(
+    '[auth] ❌ REQUIRE_ACCOUNT is on but GOOGLE_CLIENT_ID is unset — Google ' +
+    'sign-ins cannot be verified, so Android users will be blocked from going ' +
+    'live. Set GOOGLE_CLIENT_ID to the WEB OAuth client id.');
+}
 
 const NAMES = ['kai', 'noor', 'remy', 'sasha', 'theo', 'luca', 'emi', 'dro', 'wren',
   'max', 'ira', 'jae', 'nova', 'sol', 'zed', 'fin', 'ash', 'juno'];
@@ -99,7 +123,7 @@ function canGoLive(u: User): boolean {
   return false;
 }
 
-/// Rivlr+ — hydrated from Postgres on hello and refreshed by the RevenueCat
+/// Rivler+ — hydrated from Postgres on hello and refreshed by the RevenueCat
 /// webhook. Never taken from anything the client says.
 function isPlus(u: User): boolean {
   return !!u.plusUntil && u.plusUntil.getTime() > Date.now();
@@ -774,7 +798,8 @@ async function formCell(memberIds: string[], modeOverride?: 'call') {
     send(u, { t: 'cell', room, url: LIVEKIT_URL, token, people: others,
       game: rounds[0], rounds, golden: cell.golden, luckyId: cell.luckyId, mode,
       // exactly-two stranger rooms may go phone-to-phone; groups/calls never
-      p2p: P2P_ENABLED && mode !== 'call' && live.length === 2 });
+      // every 2-person room, calls included — LiveKit is groups only now
+      p2p: P2P_ENABLED && live.length === 2 });
   }
 
   // talk-first: the room opens as a hang. In HANG mode games start when the
@@ -910,7 +935,7 @@ function notifyLive(u: User) {
       if (store.userByUid(t.uid)) continue;
       if (now - (lastPushAt.get(t.uid) ?? 0) < PUSH_COOLDOWN_MS) continue;
       lastPushAt.set(t.uid, now);
-      sendPush(t.token, `${u.name} is live on Rivlr`, 'drop in while they’re on 🎥');
+      sendPush(t.token, `${u.name} is live on Rivler`, 'drop in while they’re on 🎥');
     }
   });
 }
@@ -1056,7 +1081,7 @@ app.get('/rules', (_req, res) => res.type('html').send(legal.page('House Rules',
 app.get('/delete-account', (_req, res) => res.type('html').send(legal.page('Delete your account', legal.deleteAccount)));
 mountMedia(app);
 mountAdmin(app);
-// Rivlr+ — the webhook and the app's "check my subscription now" endpoint.
+// Rivler+ — the webhook and the app's "check my subscription now" endpoint.
 // Both need to reach a connected user, so we hand them a sender.
 mountIap(app, (uid, until) => {
   const u = store.userByUid(uid);
@@ -1268,18 +1293,34 @@ wss.on('connection', (ws, req) => {
         break;
       }
       case 'play':
-        // going live requires a real account — that's what makes a ban stick.
-        // Every MODE is free: gating a whole lane starves the room, and an
-        // empty room is worth nothing to anyone. Rivlr+ sells control over
-        // WHO you meet (the filter), never the door itself.
+        // going live requires a real account — that's what makes a ban stick
         if (!canGoLive(user)) break;
+        // THE MODEL: 1-on-1 (mode 'hang') is the free taste — browse, pick,
+        // meet. Roulette is Pro. Gated here and nowhere else; the client's
+        // crown is a display of this decision, never the decision itself.
+        if (m.mode === 'roulette' && !isPlus(user)) {
+          send(user, { t: 'err', code: 'needPlus', where: 'roulette' });
+          break;
+        }
         if (m.mode === 'roulette' || m.mode === 'hang') user.mode = m.mode;
         leaveParty(id); leaveCell(user); enqueue(user);
         break;
-      case 'next': leaveCell(user); enqueue(user); break;
+      case 'next':
+        // re-queuing rides whatever user.mode already is, so a subscription
+        // that lapsed mid-session can't keep looping roulette on an
+        // entitlement that's gone
+        if (user.mode === 'roulette' && !isPlus(user)) {
+          user.mode = 'hang';
+          send(user, { t: 'err', code: 'needPlus', where: 'roulette' });
+          break;
+        }
+        leaveCell(user); enqueue(user);
+        break;
       case 'leave': dequeue(id); leaveCell(user); user.state = 'idle'; break;
       case 'host': {
         if (!canGoLive(user)) break;
+        // Groups is Pro — hosting a room for your people is a paid feature
+        if (!isPlus(user)) { send(user, { t: 'err', code: 'needPlus', where: 'groups' }); break; }
         // Your code is PERMANENT: minted once in the DB, identical across
         // reopens, reconnects and server restarts. An invite shared last week
         // still points at your room the moment you press Groups again.
@@ -1385,6 +1426,14 @@ wss.on('connection', (ws, req) => {
         // The auto-chain resumes on its own after the picked game ends.
         if (!cell) { console.log(`[game] pick ignored: ${user.uid} not in a cell`); break; }
         if (cell.inRound) { console.log(`[game] pick ignored: cell ${cell.id} mid-round`); break; }
+        // The party games ARE the product — Spin the Bottle, Truth or Dare,
+        // the lot. Anyone in the room can start one as long as SOMEONE in it
+        // is Pro: a subscriber's room is a full room for everyone in it,
+        // which is what makes buying it worth telling your friends about.
+        if (!cell.members.some((mid) => { const u2 = store.users.get(mid); return !!u2 && isPlus(u2); })) {
+          send(user, { t: 'err', code: 'needPlus', where: 'games' });
+          break;
+        }
         if (m.name === 'Impostor') startImpostor(cell);
         else if (m.name === 'Who Am I') startWhoAmI(cell);
         else if (m.name === 'Judge Says') startJudgeSays(cell);
@@ -1673,7 +1722,7 @@ wss.on('connection', (ws, req) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Rivlr server on :${PORT}  (livekit ${LIVEKIT_URL ? 'ON' : 'OFF'}, solo ${ALLOW_SOLO}, db ${db.dbEnabled ? 'ON' : 'OFF'})`);
+  console.log(`Rivler server on :${PORT}  (livekit ${LIVEKIT_URL ? 'ON' : 'OFF'}, solo ${ALLOW_SOLO}, db ${db.dbEnabled ? 'ON' : 'OFF'})`);
 });
 
 social.init(send);

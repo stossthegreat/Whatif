@@ -10,7 +10,7 @@ import '../widgets/glass.dart';
 
 /// Position your face in the circle.
 ///
-/// Your photo shows as a circle almost everywhere in Rivlr, and phone photos
+/// Your photo shows as a circle almost everywhere in Rivler, and phone photos
 /// are rarely framed for one — heads end up cropped off. So the picked image
 /// is pannable and zoomable inside the exact circle it will appear in, and
 /// what you see is literally what gets uploaded: we capture the framed square

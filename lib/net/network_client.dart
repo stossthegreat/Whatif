@@ -91,7 +91,7 @@ class NetworkClient {
             if (photo != null) {
               AppSession.instance.healPhotoId((photo['id'] as num?)?.toInt());
             }
-            // Rivlr+ — the server is the only authority on what you've paid
+            // Rivler+ — the server is the only authority on what you've paid
             // for and which filter is switched on
             final plus = (m['plus'] as Map?)?.cast<String, dynamic>();
             if (plus != null) {

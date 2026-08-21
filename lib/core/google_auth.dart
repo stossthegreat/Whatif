@@ -9,7 +9,7 @@ import 'analytics.dart';
 /// anonymous identifier, exactly as with Apple.
 ///
 /// The identity model is identical: your uid never changes; Google links to
-/// it as a recovery key. If this Google account already belongs to a Rivlr
+/// it as a recovery key. If this Google account already belongs to a Rivler
 /// account (reinstall / new phone), the server's welcome hands back the
 /// canonical uid and the whole graph returns.
 ///
@@ -24,6 +24,13 @@ Future<bool> googleSignIn() async {
       // the WEB client id — Google mints the idToken's audience for this,
       // which is what the server's GOOGLE_CLIENT_ID verifies against
       serverClientId: AppConfig.googleServerClientId,
+      // iOS needs its OWN client id as well. Passing it here keeps the Dart
+      // define authoritative instead of depending on a GIDClientID in
+      // Info.plist being kept in sync by hand. (Android ignores this — it
+      // identifies the app by package name + SHA-1 instead.)
+      clientId: AppConfig.googleIosClientId.isEmpty
+          ? null
+          : AppConfig.googleIosClientId,
     );
     final account = await g.signIn();
     if (account == null) return false; // user closed the sheet

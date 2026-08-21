@@ -23,7 +23,7 @@ import 'settings_screen.dart';
 ///
 /// Every random-video app on the store is the same screen: your own camera
 /// blown up full-bleed with one button floating on it. That silhouette IS
-/// the genre, and it made Rivlr read as a clone of it at a glance. So the
+/// the genre, and it made Rivler read as a clone of it at a glance. So the
 /// camera is demoted here to a small self-tile — you can still see you're
 /// framed and lit, which is the only job it ever actually had — and the
 /// screen becomes a composed, dark, editorial surface: who's on right now
@@ -117,16 +117,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  /// Roulette is Pro — the client pitches immediately rather than letting the
+  /// tap bounce off the server. The server stays the real gate either way.
   void _roulette() {
+    if (!AppSession.instance.plus) {
+      Buzz.tick();
+      PlusScreen.push(context,
+          reason: 'Roulette, Groups and every party game are part of Rivler Pro. '
+              '1-on-1 stays free.');
+      return;
+    }
     Buzz.pop();
     Sfx.match();
     Track.event('home_start', {'mode': 'roulette'});
     widget.onPlay('roulette');
   }
 
+  /// The free lane — browse real people and pick who you meet.
   void _oneOnOne() {
     Buzz.pop();
     DiscoverScreen.push(context);
+  }
+
+  void _groups() {
+    if (!AppSession.instance.plus) {
+      Buzz.tick();
+      PlusScreen.push(context,
+          reason: 'Your own room with your people is part of Rivler Pro. '
+              '1-on-1 stays free.');
+      return;
+    }
+    Buzz.pop();
+    widget.onPlay('groups');
   }
 
   @override
@@ -141,10 +163,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           // has depth and life without borrowing the genre's silhouette
           const _Aurora(),
           SafeArea(
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(r.gutter, 4, r.gutter, 26),
-              physics: const BouncingScrollPhysics(),
-              children: [
+            // the screen is a fixed composition, not a feed: it should FILL
+            // the phone, not stack at the top and leave a slab of dead black
+            // under it. LayoutBuilder + IntrinsicHeight lets the spacers
+            // breathe on a big phone while still scrolling on a small one.
+            child: LayoutBuilder(
+              builder: (context, box) => SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: box.maxHeight),
+                  // IntrinsicHeight is load-bearing: Spacer/Expanded inside a
+                  // scroll view throws on unbounded height without it
+                  child: IntrinsicHeight(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(r.gutter, 4, r.gutter, 18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
                 // ---- header: you, small. Not the wallpaper. ----------------
                 Row(
                   children: [
@@ -181,48 +216,74 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 const _FilterChip(),
                 _ChaosPill(onTap: _roulette),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 22),
                 // ---- who is actually here, as faces ------------------------
                 const _LiveHeadline(),
                 if (_faces.isNotEmpty) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   _FaceStrip(faces: _faces, onTap: _oneOnOne),
                 ],
 
-                const SizedBox(height: 22),
+                // elastic: on a tall phone this opens up and the composition
+                // sits centred instead of hugging the status bar
+                const Spacer(flex: 2),
                 // ---- the hero: Roulette --------------------------------
-                _HeroCard(onTap: _roulette),
-
-                const SizedBox(height: 12),
-                // ---- the two other doors ------------------------------
-                Row(
-                  children: [
-                    Expanded(
-                      child: _DoorCard(
-                        emoji: '🎥',
-                        label: '1 on 1',
-                        sub: 'browse & pick',
-                        onTap: _oneOnOne,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _DoorCard(
-                        emoji: '👥',
-                        label: 'Groups',
-                        sub: 'your own room',
-                        onTap: () { Buzz.pop(); widget.onPlay('groups'); },
-                      ),
-                    ),
-                  ],
+                AnimatedBuilder(
+                  animation: AppSession.instance,
+                  builder: (context, _) =>
+                      _HeroCard(onTap: _roulette, locked: !AppSession.instance.plus),
                 ),
 
-                const SizedBox(height: 22),
+                const SizedBox(height: 14),
+                // ---- the two other doors ------------------------------
+                AnimatedBuilder(
+                  animation: AppSession.instance,
+                  builder: (context, _) {
+                    final pro = AppSession.instance.plus;
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: _DoorCard(
+                            emoji: '🎥',
+                            label: '1 on 1',
+                            sub: 'free · browse & pick',
+                            onTap: _oneOnOne,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _DoorCard(
+                            emoji: '👥',
+                            label: 'Groups',
+                            sub: pro ? 'your own room' : 'Rivler Pro',
+                            tagged: !pro,
+                            onTap: _groups,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+
+                const Spacer(flex: 3),
                 // ---- tonight's games: the thing they don't have ----------
-                Text('PLAYING TONIGHT', style: T.eyebrow.copyWith(color: C.tx3, fontSize: 10.5)),
+                Row(
+                  children: [
+                    Text('PLAYING TONIGHT',
+                        style: T.eyebrow.copyWith(color: C.tx3, fontSize: 10.5)),
+                    const Spacer(),
+                    Text('${SeqDef.ten.length} games',
+                        style: T.tiny.copyWith(color: C.tx3, fontSize: 10.5)),
+                  ],
+                ),
                 const SizedBox(height: 10),
                 _GameTicker(onTap: _roulette),
-              ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -408,8 +469,9 @@ class _Face {
 /// Roulette, as a proper piece of art rather than a floating button on a
 /// camera feed. Big, gradient, alive — and unmistakably a card, not a lens.
 class _HeroCard extends StatefulWidget {
-  const _HeroCard({required this.onTap});
+  const _HeroCard({required this.onTap, this.locked = false});
   final VoidCallback onTap;
+  final bool locked;
   @override
   State<_HeroCard> createState() => _HeroCardState();
 }
@@ -451,9 +513,17 @@ class _HeroCardState extends State<_HeroCard> with SingleTickerProviderStateMixi
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('ROULETTE',
-                        style: T.eyebrow.copyWith(
-                            color: Colors.white.withOpacity(0.75), fontSize: 10.5)),
+                    Row(
+                      children: [
+                        Text('ROULETTE',
+                            style: T.eyebrow.copyWith(
+                                color: Colors.white.withOpacity(0.75), fontSize: 10.5)),
+                        if (widget.locked) ...[
+                          const SizedBox(width: 6),
+                          const Text('👑', style: TextStyle(fontSize: 11)),
+                        ],
+                      ],
+                    ),
                     const SizedBox(height: 6),
                     Text('Spin me\nsomeone', style: T.display(30).copyWith(height: 1.05)),
                     const SizedBox(height: 8),

@@ -24,7 +24,7 @@ val cmKeystorePath: String? = System.getenv("CM_KEYSTORE_PATH")
 val hasReleaseKeys = keystorePropertiesFile.exists() || cmKeystorePath != null
 
 android {
-    namespace = "com.rivlr.app"
+    namespace = "com.rivler.app"
     // Pinned, not inherited: Play requires targeting Android 15 (API 35),
     // and the 16 KB page-size requirement applies to apps targeting 35+.
     // Inheriting flutter.targetSdkVersion made compliance depend on whatever
@@ -42,7 +42,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.rivlr.app"
+        applicationId = "com.rivler.app"
         minSdk = flutter.minSdkVersion
         targetSdk = 35
         versionCode = flutter.versionCode

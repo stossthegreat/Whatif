@@ -4,7 +4,7 @@ import 'package:flutter/physics.dart';
 import '../core/haptics.dart';
 import '../theme/tokens.dart';
 
-/// The Rivlr wordmark — spaced-out display face, purple bookends: the first
+/// The Rivler wordmark — spaced-out display face, purple bookends: the first
 /// R and the last r both carry the accent, everything between stays clean.
 class Wordmark extends StatelessWidget {
   const Wordmark({super.key, this.size = 28, this.color = C.tx});
@@ -18,7 +18,7 @@ class Wordmark extends StatelessWidget {
         style: T.display(size).copyWith(color: color, letterSpacing: size * 0.12),
         children: const [
           TextSpan(text: 'R', style: TextStyle(color: C.sig)),
-          TextSpan(text: 'ivl'),
+          TextSpan(text: 'ivle'),
           TextSpan(text: 'r', style: TextStyle(color: C.sig)),
         ],
       ),

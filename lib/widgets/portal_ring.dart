@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../theme/tokens.dart';
 
-/// The Portal — Rivlr's living mark and the Home hero. A breathing ring
+/// The Portal — Rivler's living mark and the Home hero. A breathing ring
 /// stroked in the signature gradient with an acid comet orbiting it; the
 /// call to action sits inside. Nobody else has this: it's a doorway, not a
 /// button, and it's always moving.

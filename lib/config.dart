@@ -1,6 +1,8 @@
+import 'dart:io' show Platform;
+
 /// App configuration.
 ///
-/// [backend] is empty by default, which runs Rivlr in **simulated mode** (the
+/// [backend] is empty by default, which runs Rivler in **simulated mode** (the
 /// people, matches and games are generated locally — perfect for a solo
 /// TestFlight demo, no servers needed). Point it at your deployed Railway server
 /// to go **live** with real strangers + LiveKit video:
@@ -27,5 +29,20 @@ class AppConfig {
   ///   --dart-define=GOOGLE_SERVER_CLIENT_ID=xxxx.apps.googleusercontent.com
   static const String googleServerClientId =
       String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID', defaultValue: '');
-  static bool get googleEnabled => googleServerClientId.isNotEmpty;
+
+  /// The iOS OAuth client id. Google Sign-In on iOS ALSO needs native config
+  /// the Dart layer can't supply — a GIDClientID and a matching reversed-id
+  /// URL scheme in Info.plist. Without those the sheet opens and dies, which
+  /// is a dead button in front of a reviewer. So the iOS Google button only
+  /// appears once this is set, and setting it is the same moment you add the
+  /// plist entries. Android needs none of this.
+  ///   --dart-define=GOOGLE_IOS_CLIENT_ID=xxxx.apps.googleusercontent.com
+  static const String googleIosClientId =
+      String.fromEnvironment('GOOGLE_IOS_CLIENT_ID', defaultValue: '');
+
+  /// Google sign-in is offerable at all: the server can verify the token
+  /// (server client id) AND, on iOS only, the native side is configured too.
+  static bool get googleEnabled =>
+      googleServerClientId.isNotEmpty &&
+      (!Platform.isIOS || googleIosClientId.isNotEmpty);
 }

@@ -237,7 +237,7 @@ class _ShareCardScreenState extends State<ShareCardScreen> {
       await file.writeAsBytes(bytes.buffer.asUint8List());
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'image/png')],
-        text: 'the room decided 😂 — Rivlr',
+        text: 'the room decided 😂 — Rivler',
       );
       Track.event('share_card');
     } catch (_) {

@@ -38,7 +38,7 @@ export async function initSocial(): Promise<void> {
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_thumb_id BIGINT',
     // your room code — minted once, yours forever (b61)
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS room_code TEXT',
-    // Rivlr+ entitlement (b63). NULL or past = free. The server is the only
+    // Rivler+ entitlement (b63). NULL or past = free. The server is the only
     // authority here; the client never asserts its own plan.
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS plus_until TIMESTAMPTZ',
   ];
@@ -82,6 +82,11 @@ export async function initSocial(): Promise<void> {
   await run('ALTER TABLE media DROP CONSTRAINT IF EXISTS media_kind_check');
   await run(`ALTER TABLE media ADD CONSTRAINT media_kind_check
              CHECK (kind IN ('photo','voice','avatar','thumb'))`);
+  // b90: bytes now live in Supabase Storage. storage_key holds the object
+  // path; bytes stays for every row uploaded before that and must therefore
+  // become NULLABLE — a new row sets one or the other, never both.
+  await run('ALTER TABLE media ADD COLUMN IF NOT EXISTS storage_key TEXT');
+  await run('ALTER TABLE media ALTER COLUMN bytes DROP NOT NULL');
 
   await run(`CREATE TABLE IF NOT EXISTS friendships (
     a TEXT NOT NULL, b TEXT NOT NULL,
@@ -712,6 +717,20 @@ export async function accountState(uid: string): Promise<{
   plusUntil: Date | null; meet: string | null;
 } | null> {
   if (!dbEnabled) return null;
+  // SELF-HEAL, on every connect. Build 85 stopped NEW breakage (the avatar
+  // upload now claims both pointers) but did nothing for rows already broken
+  // — and those stay broken forever, which is exactly what "my photo still
+  // isn't on Explore" looks like. Explore reads the thumb, so a thumb
+  // pointer that is null, or aimed at a media row that no longer exists,
+  // renders the letter placeholder while the profile (which reads the full
+  // photo) looks perfectly fine. Point it back at the real avatar.
+  await run(
+    `UPDATE users SET photo_thumb_id = photo_media_id
+      WHERE uid = $1
+        AND photo_media_id IS NOT NULL
+        AND (photo_thumb_id IS NULL
+             OR NOT EXISTS (SELECT 1 FROM media m WHERE m.id = users.photo_thumb_id))`,
+    [uid]);
   const r = await run(
     'SELECT photo_media_id, photo_thumb_id, plus_until, meet FROM users WHERE uid=$1', [uid]);
   const x = r?.rows?.[0];
@@ -724,7 +743,7 @@ export async function accountState(uid: string): Promise<{
   };
 }
 
-// ---- Rivlr+ entitlement ----------------------------------------------------
+// ---- Rivler+ entitlement ----------------------------------------------------
 
 /// The entitlement write. `until` null revokes (refund / expiry).
 export function setPlusUntil(uid: string, until: Date | null): void {
@@ -927,7 +946,17 @@ export function deleteSocial(uid: string): void {
   void run('DELETE FROM personality_votes WHERE voter=$1 OR target=$1', [uid]);
   void run('DELETE FROM messages WHERE sender=$1', [uid]);
   void run('DELETE FROM chat_state WHERE uid=$1 OR peer=$1', [uid]);
-  void run('DELETE FROM media WHERE owner=$1', [uid]);
+  // account deletion must empty the bucket too, or a deleted account's
+  // photos live on as objects nothing references and nothing will ever find
+  void (async () => {
+    const r = await run('DELETE FROM media WHERE owner=$1 RETURNING storage_key', [uid]);
+    const keys = (r?.rows ?? [])
+      .map((x) => x.storage_key as string | null)
+      .filter((k): k is string => !!k);
+    if (!keys.length) return;
+    const { deleteObject } = await import('./storage.js');
+    for (const k of keys) await deleteObject(k);
+  })();
   void run('DELETE FROM user_stats WHERE uid=$1', [uid]);
   void run('DELETE FROM user_badges WHERE uid=$1', [uid]);
 }

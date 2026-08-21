@@ -233,7 +233,7 @@ class _LikesScreenState extends State<LikesScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Rivlr+ shows you exactly who — before you decide about them.',
+                  'Rivler+ shows you exactly who — before you decide about them.',
                   textAlign: TextAlign.center,
                   style: T.body.copyWith(fontSize: 14.5, height: 1.45),
                 ),

@@ -24,14 +24,21 @@ interface Ring {
 }
 const rings = new Map<string, Ring>();
 
-/// Free users get a real daily allowance of Explore/Discover invites —
-/// enough to genuinely use the feature every day, few enough that the people
-/// who live in it convert. Plus is unlimited.
+/// Daily allowance of Explore/Discover invites for free accounts.
+///
+/// CURRENTLY DISABLED (0 = unlimited): while the app is growing, every free
+/// account gets unlimited invites. Rationing the room starves the thing that
+/// makes the app worth opening, and a room nobody is in cannot be sold.
+/// Rivler+ is sold on the gender filter and the premium games instead.
+///
+/// The counting machinery below is kept live and wired so switching this to
+/// a real number (10, say) re-enables the limit with no other change: the
+/// client already renders "N left today" whenever the server sends a quota,
+/// and already opens the paywall on a meetLimit error.
 ///
 /// In memory, keyed by UTC day: a redeploy handing someone a fresh allowance
-/// is a harmless generosity, and this needs no migration or write path. The
-/// map is pruned rather than grown forever.
-const FREE_MEET_INVITES_PER_DAY = 10;
+/// is a harmless generosity, and this needs no migration or write path.
+const FREE_MEET_INVITES_PER_DAY = 0; // 0 = unlimited
 const meetUsed = new Map<string, { day: string; n: number }>();
 const MEET_MAP_CAP = 50_000;
 
@@ -88,9 +95,8 @@ export async function invite(user: User, m: Record<string, unknown>): Promise<vo
   if (!to || to === user.uid) return;
   if (store.isBlocked(user.uid, to)) return;
   if (social.isNeverPair(user.uid, to)) return;
-  if (meet && !isPlus(user) && meetInvitesLeft(user.uid) <= 0) {
-    return send(user, { t: 'err', code: 'meetLimit', per: FREE_MEET_INVITES_PER_DAY });
-  }
+  // NO LIMIT while we're growing — see FREE_MEET_INVITES_PER_DAY. Rivler+ is
+  // sold on the gender filter and the games, never on rationing the room.
   if (!meet && (await dbs.friendState(user.uid, to)) !== 'friends') {
     return send(user, { t: 'err', code: 'notFriends' });
   }
@@ -113,8 +119,10 @@ export async function invite(user: User, m: Record<string, unknown>): Promise<vo
   }, 30_000);
   rings.set(callId, { from: user.uid, to, video, timer, meet });
   // charged only once the ring actually goes out — a missed/busy/offline
-  // target above returns before this, so a wasted tap never costs an invite
-  if (meet && !isPlus(user)) {
+  // target above returns before this, so a wasted tap never costs an invite.
+  // Silent while the allowance is disabled: no counter, no quota message, so
+  // the client shows nothing rather than a meaningless "0 left".
+  if (meet && !isPlus(user) && FREE_MEET_INVITES_PER_DAY > 0) {
     noteMeetInvite(user.uid);
     send(user, { t: 'meetQuota', left: meetInvitesLeft(user.uid), per: FREE_MEET_INVITES_PER_DAY });
   }

@@ -96,7 +96,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           setState(() { _ringingUid = null; _left = 0; });
           final per = (m['per'] as num?)?.toInt() ?? 10;
           PlusScreen.push(context,
-              reason: 'That’s your $per invites for today. Rivlr+ makes them unlimited — '
+              reason: 'That’s your $per invites for today. Rivler+ makes them unlimited — '
                   'and lets you choose who you meet.');
         }
       case 'cell':
@@ -158,7 +158,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     Press(
                       haptic: false,
                       onTap: () => PlusScreen.push(context,
-                          reason: 'Rivlr+ makes invites unlimited — and lets you '
+                          reason: 'Rivler+ makes invites unlimited — and lets you '
                               'choose who you meet.'),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),

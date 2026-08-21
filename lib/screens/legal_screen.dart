@@ -54,23 +54,23 @@ class LegalScreen extends StatelessWidget {
   }
 }
 
-/// Rivlr legal + info copy. The SAME text is served publicly by the server at
+/// Rivler legal + info copy. The SAME text is served publicly by the server at
 /// /privacy, /terms, /rules and /delete-account (server/src/legal.ts) — if you
 /// change one, change both.
 class LegalCopy {
   LegalCopy._();
 
   static const privacy = '''PRIVACY POLICY
-Rivlr — live social video
+Rivler — live social video
 Effective date: 11 August 2026 · Version 4.1
 
-This Privacy Policy explains what Rivlr ("Rivlr", "we", "us", "our") collects, why we collect it, how long we keep it, who we share it with, and every choice you have. Please read it carefully — by using Rivlr you agree to the practices described here. Capitalised terms not defined here have the meanings given in our Terms of Service. This policy is also available at any time from Settings → Privacy Policy in the app, and on the web.
+This Privacy Policy explains what Rivler ("Rivler", "we", "us", "our") collects, why we collect it, how long we keep it, who we share it with, and every choice you have. Please read it carefully — by using Rivler you agree to the practices described here. Capitalised terms not defined here have the meanings given in our Terms of Service. This policy is also available at any time from Settings → Privacy Policy in the app, and on the web.
 
 1. WHO WE ARE AND WHAT THIS POLICY COVERS
-Rivlr is the data controller for the personal information described in this policy. Contact: m2mb@info.com. This policy covers our handling of information collected through the Rivlr app and service. It does not cover the practices of third parties we do not own or control — including other users, the app stores you install Rivlr from, or external services you reach through Rivlr — and we encourage you to review their policies separately.
+Rivler is the data controller for the personal information described in this policy. Contact: m2mb@info.com. This policy covers our handling of information collected through the Rivler app and service. It does not cover the practices of third parties we do not own or control — including other users, the app stores you install Rivler from, or external services you reach through Rivler — and we encourage you to review their policies separately.
 
 2. THE SERVICE, IN ONE LINE
-Rivlr pairs people into live video rooms with games, lets you browse who is online and ask them to meet, and lets people who chose each other stay connected: friends, messaging, and calls. This policy is written around exactly that — nothing more is collected than the product needs.
+Rivler pairs people into live video rooms with games, lets you browse who is online and ask them to meet, and lets people who chose each other stay connected: friends, messaging, and calls. This policy is written around exactly that — nothing more is collected than the product needs.
 
 3. INFORMATION YOU PROVIDE
 • A handle you choose (no real name required — and we ask you NOT to use one)
@@ -81,10 +81,10 @@ Rivlr pairs people into live video rooms with games, lets you browse who is onli
 • Anything you include when you contact us at m2mb@info.com
 
 4. SIGNING IN — APPLE OR GOOGLE, REQUIRED
-Rivlr requires an account: Sign in with Apple on iOS, Sign in with Google on Android. There is no guest mode — a real, verifiable identity is what makes suspensions actually stick, and it is why your friends, messages and profile survive a reinstall. Whichever you use, we receive and store ONLY the anonymous user identifier that provider issues for Rivlr — a random string. We do not request, read, or store your name or email address from Apple or from Google.
+Rivler requires an account: Sign in with Apple on iOS, Sign in with Google on Android. There is no guest mode — a real, verifiable identity is what makes suspensions actually stick, and it is why your friends, messages and profile survive a reinstall. Whichever you use, we receive and store ONLY the anonymous user identifier that provider issues for Rivler — a random string. We do not request, read, or store your name or email address from Apple or from Google.
 
 5. CAMERA AND MICROPHONE — NEVER RECORDED
-WE DO NOT RECORD, STORE, OR ANALYSE YOUR VIDEO OR AUDIO. When a room ends, the stream ends. There is no archive, no server-side capture, no face or voice analysis, and no use of your video or audio to train AI systems. In most one-to-one rooms your video travels directly between the two phones and never touches our servers at all; in group rooms and when a direct connection isn't possible, it is relayed in real time by our video provider without being recorded. This is the foundation of Rivlr and it does not change.
+WE DO NOT RECORD, STORE, OR ANALYSE YOUR VIDEO OR AUDIO. When a room ends, the stream ends. There is no archive, no server-side capture, no face or voice analysis, and no use of your video or audio to train AI systems. In most one-to-one rooms your video travels directly between the two phones and never touches our servers at all; in group rooms and when a direct connection isn't possible, it is relayed in real time by our video provider without being recorded. This is the foundation of Rivler and it does not change.
 
 6. MESSAGES AND MEDIA YOU SEND
 When you and another person become friends, you can message each other. To deliver messages across devices and sessions, we store on our servers:
@@ -130,7 +130,7 @@ the things we do hold are listed in sections 3, 6 and 7; the automated
 screen every upload passes through is in section 12a, and the places a
 human may look at your content are listed in section 12b.
 12a. AUTOMATED SCREENING, BEFORE ANYTHING IS EVEN POSTED
-On top of report + block, Rivlr runs an automated content-safety filter over
+On top of report + block, Rivler runs an automated content-safety filter over
 photos and text at the moment you submit them — profile photos, chat photos,
 your handle, your bio, and messages — and blocks the worst of it outright,
 before it is ever stored or shown to anyone. This is automated pattern
@@ -152,7 +152,7 @@ Live room video and audio are never in any of this, because they are never
 captured in the first place.
 
 12c. DISCOVERY — WHO CAN SEE YOU
-Rivlr has an Explore tab: a grid of people who are online right now, so the
+Rivler has an Explore tab: a grid of people who are online right now, so the
 app still works when the matching queue is quiet.
 • While you are online and signed in, other signed-in adults may see a CARD:
   your handle, your avatar, your title if you have one, your country, and any
@@ -166,12 +166,12 @@ app still works when the matching queue is quiet.
   rings, exactly like a call, and nothing happens unless you accept.
 • You can switch this off completely: Settings → Discovery → "Show me in
   Explore". With it off you disappear from the grid entirely and can still
-  play, message, and use every other part of Rivlr.
+  play, message, and use every other part of Rivler.
 People you have blocked, and people either of you answered "never again"
 about, never see each other in Explore.
 
 13. HOW WE USE INFORMATION
-To run the service you asked for (matching, rooms, games, friends, messaging, calls); to keep the community safe (report handling, blocks, abuse prevention, under-18 removal); to maintain and improve Rivlr using aggregate statistics; and to communicate service messages. We do not use your information for marketing to third parties.
+To run the service you asked for (matching, rooms, games, friends, messaging, calls); to keep the community safe (report handling, blocks, abuse prevention, under-18 removal); to maintain and improve Rivler using aggregate statistics; and to communicate service messages. We do not use your information for marketing to third parties.
 
 14. LEGAL BASES (EEA / UK)
 Where GDPR / UK GDPR applies we rely on: performance of a contract (running the service — matching, games, friends, messaging); legitimate interests (safety, security, abuse prevention, aggregate analytics); and consent (camera/microphone access, push notifications, optional profile details — each revocable at any time in device Settings or by removing the details). We do not use automated decision-making producing legal effects; the only automated action is removal after repeated community reports, which you can contest at m2mb@info.com. California residents: we do not "sell" or "share" personal information as defined by the CCPA/CPRA, and we honour access and deletion requests as described below.
@@ -186,7 +186,7 @@ We share personal data only with the processors that make the service run, each 
 • Apple — Sign in with Apple and push delivery
 • Google — Sign in with Google
 • Tenor (Google) — GIF search results (receives your search text only)
-We may also disclose information: with your consent; to comply with law or valid legal process; to enforce our Terms or protect the rights, property, or safety of Rivlr, our users, or the public; and as aggregate, anonymised statistics that identify no one. If Rivlr is involved in a merger, acquisition, or sale of assets, user information may be part of the transferred assets — we will notify you (in-app and/or on this page) of any change in ownership or in how your information is handled.
+We may also disclose information: with your consent; to comply with law or valid legal process; to enforce our Terms or protect the rights, property, or safety of Rivler, our users, or the public; and as aggregate, anonymised statistics that identify no one. If Rivler is involved in a merger, acquisition, or sale of assets, user information may be part of the transferred assets — we will notify you (in-app and/or on this page) of any change in ownership or in how your information is handled.
 
 16. GOVERNMENT AND LAW-ENFORCEMENT REQUESTS
 We review every government or law-enforcement request individually and require valid legal process that states its legal basis and identifies the account concerned. We may narrow or reject requests that are overbroad. Where permitted, we may notify affected users. If we receive information giving us a good-faith belief of an emergency involving danger of death or serious physical injury, we may disclose the limited information necessary to prevent that harm — remember that we hold no video or audio of anyone.
@@ -209,7 +209,7 @@ In-app: Settings → Delete account removes your device data AND instructs our s
 Depending on where you live, you may have the right to access, correct, export, restrict, object to processing of, or delete your personal data, and to withdraw consent at any time. Exercise any of them by emailing m2mb@info.com — we answer within 30 days and may ask you to verify control of the account first (a safeguard, not an obstacle). If you are in the EEA or UK you may also complain to your data-protection authority (in the UK, the ICO at ico.org.uk).
 
 20. CHILDREN
-Rivlr is strictly 18+. We do not knowingly collect data from anyone under 18. Discovery of an under-18 account leads to removal and deletion of its data. Report one: m2mb@info.com.
+Rivler is strictly 18+. We do not knowingly collect data from anyone under 18. Discovery of an under-18 account leads to removal and deletion of its data. Report one: m2mb@info.com.
 
 21. SECURITY
 All traffic is encrypted in transit (TLS). Media access is token-protected. Access to production systems is restricted and logged. In most one-to-one rooms your video never touches a server at all. No internet service can promise absolute security, but our best protection is structural: we simply do not hold your video, audio, real name, email, or precise location.
@@ -224,30 +224,30 @@ If we make material changes we will post the new version here and flag it in the
 Questions, requests, complaints: m2mb@info.com. We read everything.''';
 
   static const terms = '''TERMS OF SERVICE & END USER LICENCE AGREEMENT
-Rivlr — live social video
+Rivler — live social video
 Effective date: 11 August 2026 · Version 4.1
 
-These Terms are a binding contract between you and Rivlr ("Rivlr", "we", "us"). They incorporate our Privacy Policy and House Rules by reference. By creating an account, ticking the boxes at sign-in, or using Rivlr in any way, you agree to all of them; if you do not agree, do not use the service. If we publish additional rules for specific features ("Additional Terms"), those apply too.
+These Terms are a binding contract between you and Rivler ("Rivler", "we", "us"). They incorporate our Privacy Policy and House Rules by reference. By creating an account, ticking the boxes at sign-in, or using Rivler in any way, you agree to all of them; if you do not agree, do not use the service. If we publish additional rules for specific features ("Additional Terms"), those apply too.
 
 1. ELIGIBILITY
-You must be at least 18 years old and legally able to enter this agreement. By using Rivlr you warrant that you are. We cannot independently verify every user's age, and we accept no liability where information you provide is untruthful — but discovery of an under-18 user leads to immediate, permanent removal. IF YOU ARE UNDER 18, DO NOT ATTEMPT TO REGISTER OR USE THE SERVICE. You may hold one account, for your own personal, non-commercial use only.
+You must be at least 18 years old and legally able to enter this agreement. By using Rivler you warrant that you are. We cannot independently verify every user's age, and we accept no liability where information you provide is untruthful — but discovery of an under-18 user leads to immediate, permanent removal. IF YOU ARE UNDER 18, DO NOT ATTEMPT TO REGISTER OR USE THE SERVICE. You may hold one account, for your own personal, non-commercial use only.
 
 2. THE SERVICE
-Rivlr connects you into live video rooms with people you don't know (always one-to-one for strangers), lets you browse people who are online and invite them to meet (they choose whether to accept), supports rooms you create with friends, and — when two people choose each other — friendships with messaging and calls. Games run inside rooms. We may add, change, or remove features at any time as the service evolves.
+Rivler connects you into live video rooms with people you don't know (always one-to-one for strangers), lets you browse people who are online and invite them to meet (they choose whether to accept), supports rooms you create with friends, and — when two people choose each other — friendships with messaging and calls. Games run inside rooms. We may add, change, or remove features at any time as the service evolves.
 
 3. YOUR ACCOUNT AND SECURITY
-Rivlr requires an account — Sign in with Apple on iOS, Sign in with Google on Android. There is no guest mode: a real, verifiable identity is what lets suspensions actually stick, and it is why the graph of friends and messages survives a reinstall. Your account is yours alone: do not sell, transfer, or share it, and do not let anyone else use it. You may not choose a handle you have no right to use or one intended to impersonate another person. You are responsible for activity on your account. If we must resolve a dispute over who owns an account, our determination (which may include suspension or termination) is final. Tell us immediately at m2mb@info.com about any unauthorised use.
+Rivler requires an account — Sign in with Apple on iOS, Sign in with Google on Android. There is no guest mode: a real, verifiable identity is what lets suspensions actually stick, and it is why the graph of friends and messages survives a reinstall. Your account is yours alone: do not sell, transfer, or share it, and do not let anyone else use it. You may not choose a handle you have no right to use or one intended to impersonate another person. You are responsible for activity on your account. If we must resolve a dispute over who owns an account, our determination (which may include suspension or termination) is final. Tell us immediately at m2mb@info.com about any unauthorised use.
 
-4. FREE SERVICE AND RIVLR+ SUBSCRIPTIONS
-Rivlr is free to use. Meeting strangers, messaging, rooms and games cost nothing and always will — every way into a room is open to every account.
+4. FREE SERVICE AND RIVLER PRO SUBSCRIPTIONS
+Rivler is free to use. Meeting strangers, messaging, rooms and games cost nothing and always will — every way into a room is open to every account.
 
-Rivlr+ is an optional paid subscription that unlocks: choosing which gender of people you are matched with; unlimited 1-on-1 invites (free accounts can invite up to 10 specific people to a room each day, which resets daily); seeing the list of people who said they would meet you again; and priority position in the matching queue. Nothing about safety, moderation, friends you have already made, or your ability to talk to people you have already met is ever placed behind payment.
+Rivler Pro is an optional paid subscription that unlocks: choosing which gender of people you are matched with; seeing the list of people who said they would meet you again; and priority position in the matching queue. Nothing about safety, moderation, friends you have already made, or your ability to talk to people you have already met is ever placed behind payment.
 
-Subscriptions are sold through the app store you installed Rivlr from — the App Store on iOS, Google Play on Android. The exact price and billing period are shown to you inside the app before you buy, in your own currency, and payment is charged to your Apple ID or Google Play account on confirmation. A subscription renews automatically for the same period at the same price unless you cancel at least 24 hours before the current period ends. Cancel any time in your Apple ID or Google Play subscription settings; cancelling stops future renewals and you keep access until the paid period runs out. We do not charge you separately and we never store your card details — your app store handles all billing.
+Subscriptions are sold through the app store you installed Rivler from — the App Store on iOS, Google Play on Android. The exact price and billing period are shown to you inside the app before you buy, in your own currency, and payment is charged to your Apple ID or Google Play account on confirmation. A subscription renews automatically for the same period at the same price unless you cancel at least 24 hours before the current period ends. Cancel any time in your Apple ID or Google Play subscription settings; cancelling stops future renewals and you keep access until the paid period runs out. We do not charge you separately and we never store your card details — your app store handles all billing.
 
-Refunds are handled by Apple or Google under their own policies, not by us; we cannot issue or refuse them, though we will help you contact them. Except where the law requires otherwise, part-used periods are not refunded. If your subscription lapses or is refunded, paid features switch off — any filter you had set returns to meeting everyone, and 1-on-1 invites return to the daily free allowance — and everything free about your account, including your friends and messages, is unaffected.
+Refunds are handled by Apple or Google under their own policies, not by us; we cannot issue or refuse them, though we will help you contact them. Except where the law requires otherwise, part-used periods are not refunded. If your subscription lapses or is refunded, paid features switch off — any filter you had set returns to meeting everyone — and everything free about your account, including your friends and messages, is unaffected.
 
-We may change what Rivlr+ includes or what it costs. Price rises and material reductions take effect only for periods beginning after we have told you, and your app store will ask you to agree to a price increase before it is charged. If a paid feature depends on other people being online — the matching filter especially — we cannot promise anyone will be available at a given moment; the app shows you honest live numbers so you can judge for yourself.
+We may change what Rivler Pro includes or what it costs. Price rises and material reductions take effect only for periods beginning after we have told you, and your app store will ask you to agree to a price increase before it is charged. If a paid feature depends on other people being online — the matching filter especially — we cannot promise anyone will be available at a given moment; the app shows you honest live numbers so you can judge for yourself.
 
 5. HOUSE RULES — ZERO TOLERANCE FOR OBJECTIONABLE CONTENT
 You agree that you will NOT, in any room, message, profile, or other content:
@@ -257,7 +257,7 @@ You agree that you will NOT, in any room, message, profile, or other content:
 (d) be, solicit, or in any way sexualise anyone under 18 — this results in an immediate permanent ban and a report to authorities
 (e) impersonate any person or entity, or misrepresent your affiliation with anyone
 (f) record, screenshot, screen-capture, or redistribute ANY portion of a room or anyone's face, voice, or messages without the express consent of everyone involved
-(g) share anything another user asked to keep private, on Rivlr or anywhere else
+(g) share anything another user asked to keep private, on Rivler or anywhere else
 (h) spam, advertise, solicit for commercial purposes, or promote pyramid schemes, gambling, or "get rich" ventures
 (i) harvest, scrape, or collect other users' information, or solicit personal information from anyone
 (j) upload malware or any code designed to disrupt the service, probe or overload our systems, or access anything not intentionally made available to you
@@ -283,37 +283,37 @@ Feedback: if you send us ideas or suggestions, we may use them without obligatio
 You represent that you have all rights needed to share whatever you share, and that it complies with these Terms. Be aware that recipients of your messages can save or copy them outside the app; share accordingly.
 
 8. MEETING PEOPLE; YOUR SAFETY
-Rivlr connects strangers by design. We do not run background checks and cannot verify the identity, intentions, honesty, or age of any user. Exercise the same judgement you would meeting anyone new: never share your address, financial details, or identifying documents; be cautious about arranging in-person meetings; and use report and block freely — they exist for you. Any interaction, exchange, or in-person meeting between you and another user is solely between the two of you. Rivlr is not an emergency service; if you are in danger, contact local emergency services.
+Rivler connects strangers by design. We do not run background checks and cannot verify the identity, intentions, honesty, or age of any user. Exercise the same judgement you would meeting anyone new: never share your address, financial details, or identifying documents; be cautious about arranging in-person meetings; and use report and block freely — they exist for you. Any interaction, exchange, or in-person meeting between you and another user is solely between the two of you. Rivler is not an emergency service; if you are in danger, contact local emergency services.
 
 9. USER DISPUTES
-If you have a dispute with another user, we are under no obligation to become involved, though we may act on reports under Section 6. To the maximum extent permitted by law, you release Rivlr and its personnel from claims, demands, and damages of every kind arising out of or connected with such disputes.
+If you have a dispute with another user, we are under no obligation to become involved, though we may act on reports under Section 6. To the maximum extent permitted by law, you release Rivler and its personnel from claims, demands, and damages of every kind arising out of or connected with such disputes.
 
 10. THIRD-PARTY SERVICES
 The service uses third-party providers (video relay, hosting, database, analytics, push delivery, GIF search, automated content moderation) and may contain links or content from services we do not control. We are not responsible for third-party services, their content, or their privacy practices, and your dealings with any third party are between you and them. GIFs are provided by Tenor and subject to its terms.
 
 11. APP LICENCE
-We grant you a personal, revocable, non-exclusive, non-transferable licence to install and use the Rivlr app on devices you own or control, for your personal use, subject to these Terms and the app store's rules. You may not copy, modify, distribute, sell, lease, reverse-engineer, or create derivative works from the app or service except where the law expressly permits.
+We grant you a personal, revocable, non-exclusive, non-transferable licence to install and use the Rivler app on devices you own or control, for your personal use, subject to these Terms and the app store's rules. You may not copy, modify, distribute, sell, lease, reverse-engineer, or create derivative works from the app or service except where the law expressly permits.
 
 12. INTELLECTUAL PROPERTY
-The service — including its code, design, graphics, sounds, game formats, and trademarks — is owned by Rivlr or its licensors and protected by intellectual-property law. Apart from the licences expressly granted here, no rights are transferred to you. You agree not to use, reproduce, or exploit any part of the service or any content that is not yours without permission.
+The service — including its code, design, graphics, sounds, game formats, and trademarks — is owned by Rivler or its licensors and protected by intellectual-property law. Apart from the licences expressly granted here, no rights are transferred to you. You agree not to use, reproduce, or exploit any part of the service or any content that is not yours without permission.
 
 13. APPLE-SPECIFIC TERMS
-These Terms are between you and Rivlr, not Apple. Apple has no obligation to furnish maintenance or support, and no warranty obligation beyond refunding any purchase price, if any. Apple is not responsible for claims relating to the app (product liability, legal compliance, consumer protection, IP). Apple and its subsidiaries are third-party beneficiaries of these Terms and may enforce them against you. You warrant you are not in an embargoed country or on any restricted-parties list, and you will comply with applicable third-party agreements (e.g. your data plan).
+These Terms are between you and Rivler, not Apple. Apple has no obligation to furnish maintenance or support, and no warranty obligation beyond refunding any purchase price, if any. Apple is not responsible for claims relating to the app (product liability, legal compliance, consumer protection, IP). Apple and its subsidiaries are third-party beneficiaries of these Terms and may enforce them against you. You warrant you are not in an embargoed country or on any restricted-parties list, and you will comply with applicable third-party agreements (e.g. your data plan).
 
 14. GOOGLE PLAY-SPECIFIC TERMS
 Where you obtained the app from Google Play, Google is not a party to these Terms, provides no warranty or support for the app, and has no liability for it; your use also complies with the Google Play Terms of Service.
 
 15. SUSPENSION AND TERMINATION
-You may stop using Rivlr and delete your account at any time (Settings → Delete account, or /delete-account). We may suspend or terminate your access at any time, with or without notice, if we reasonably believe you have broken these Terms or the House Rules, or to protect the service or its users. On termination your licences end and your data is handled as described in the Privacy Policy. Sections that by their nature survive termination (content licences already exercised, disclaimers, liability limits, indemnity, disputes) survive.
+You may stop using Rivler and delete your account at any time (Settings → Delete account, or /delete-account). We may suspend or terminate your access at any time, with or without notice, if we reasonably believe you have broken these Terms or the House Rules, or to protect the service or its users. On termination your licences end and your data is handled as described in the Privacy Policy. Sections that by their nature survive termination (content licences already exercised, disclaimers, liability limits, indemnity, disputes) survive.
 
 16. EARLY ACCESS; DISCLAIMER OF WARRANTIES
-Rivlr is a young, evolving service. THE SERVICE AND ALL CONTENT ARE PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, OR THAT THE SERVICE WILL BE UNINTERRUPTED, SECURE, OR ERROR-FREE. WE MAKE NO WARRANTY ABOUT ANY CONTENT, USER, OR IDENTITY, AND YOU ACCESS ALL OF IT AT YOUR OWN RISK. Nothing in these Terms limits rights that consumer law grants you that cannot be limited.
+Rivler is a young, evolving service. THE SERVICE AND ALL CONTENT ARE PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, OR THAT THE SERVICE WILL BE UNINTERRUPTED, SECURE, OR ERROR-FREE. WE MAKE NO WARRANTY ABOUT ANY CONTENT, USER, OR IDENTITY, AND YOU ACCESS ALL OF IT AT YOUR OWN RISK. Nothing in these Terms limits rights that consumer law grants you that cannot be limited.
 
 17. LIMITATION OF LIABILITY
-TO THE FULLEST EXTENT PERMITTED BY LAW, RIVLR AND ITS PERSONNEL SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, PUNITIVE, OR EXEMPLARY DAMAGES — INCLUDING LOST PROFITS, LOST DATA, LOSS OF GOODWILL, OR THE CONDUCT OF OTHER USERS OR THIRD PARTIES — ARISING FROM OR RELATING TO THE SERVICE, EVEN IF ADVISED OF THE POSSIBILITY. OUR TOTAL LIABILITY FOR ALL CLAIMS WILL NOT EXCEED THE GREATER OF THE AMOUNT YOU PAID US IN THE LAST 12 MONTHS OR £50. Nothing here excludes liability that cannot lawfully be excluded (including for death or personal injury caused by negligence, or fraud).
+TO THE FULLEST EXTENT PERMITTED BY LAW, RIVLER AND ITS PERSONNEL SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, PUNITIVE, OR EXEMPLARY DAMAGES — INCLUDING LOST PROFITS, LOST DATA, LOSS OF GOODWILL, OR THE CONDUCT OF OTHER USERS OR THIRD PARTIES — ARISING FROM OR RELATING TO THE SERVICE, EVEN IF ADVISED OF THE POSSIBILITY. OUR TOTAL LIABILITY FOR ALL CLAIMS WILL NOT EXCEED THE GREATER OF THE AMOUNT YOU PAID US IN THE LAST 12 MONTHS OR £50. Nothing here excludes liability that cannot lawfully be excluded (including for death or personal injury caused by negligence, or fraud).
 
 18. INDEMNITY
-You agree to indemnify and hold Rivlr and its personnel harmless from claims, liabilities, damages, losses, and expenses (including reasonable legal fees) arising from your content, your use of the service, your violation of these Terms, or your violation of any law or third-party right, including actions taken through your account.
+You agree to indemnify and hold Rivler and its personnel harmless from claims, liabilities, damages, losses, and expenses (including reasonable legal fees) arising from your content, your use of the service, your violation of these Terms, or your violation of any law or third-party right, including actions taken through your account.
 
 19. DISPUTE RESOLUTION AND GOVERNING LAW
 Talk to us first: before bringing any formal claim, email m2mb@info.com with a description of the dispute, and both sides will attempt in good faith to resolve it within 30 days — most things get fixed this way. These Terms are governed by the laws of England and Wales, and disputes are subject to the exclusive jurisdiction of its courts — except where the law of your country of residence grants you mandatory consumer protections and venue, which remain yours. To the extent permitted by applicable law, claims must be brought in your individual capacity, not as a claimant or class member in any class, consolidated, or representative proceeding; where such a limit is unenforceable in your jurisdiction, it does not apply to you.
@@ -322,7 +322,7 @@ Talk to us first: before bringing any formal claim, email m2mb@info.com with a d
 You may not assign or transfer these Terms or your account. We may assign these Terms (for example, in a merger or sale) — your rights under them are unaffected.
 
 21. SEVERABILITY; NO WAIVER; ENTIRE AGREEMENT
-If any provision of these Terms is found unenforceable, it will be limited to the minimum extent necessary and the rest remain in full force. Our failure to enforce any provision is not a waiver of it. These Terms, the Privacy Policy, the House Rules, and any Additional Terms are the entire agreement between you and us about the service, and supersede prior understandings. Nothing in these Terms creates any employment, agency, or partnership relationship, and you may not bind Rivlr in any way.
+If any provision of these Terms is found unenforceable, it will be limited to the minimum extent necessary and the rest remain in full force. Our failure to enforce any provision is not a waiver of it. These Terms, the Privacy Policy, the House Rules, and any Additional Terms are the entire agreement between you and us about the service, and supersede prior understandings. Nothing in these Terms creates any employment, agency, or partnership relationship, and you may not bind Rivler in any way.
 
 22. CHANGES TO THESE TERMS
 We may update these Terms as the service evolves. Material changes are posted here and flagged in the app at least 7 days before taking effect; continued use after that means you accept them. If you do not accept a change, stop using the service and delete your account before the change takes effect.
@@ -348,7 +348,7 @@ Long-press any face to report or block — one tap, instant. Photos and messages
 
 Breaking these gets you removed. The room decides fast.''';
 
-  static const about = '''Rivlr — you never know who you'll get.
+  static const about = '''Rivler — you never know who you'll get.
 
 A live social platform. Press one button and, seconds later, you're face-to-face with people you've never met — sometimes one, sometimes a room. Talk as long as you like; play a game whenever the vibe calls for it; the room votes, and the wheel decides what happens next.
 

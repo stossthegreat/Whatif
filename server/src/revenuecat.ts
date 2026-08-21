@@ -12,11 +12,11 @@
 /// nobody is Plus, and the app runs exactly as it did before payments.
 
 const KEY = process.env.RC_SECRET_KEY || '';
-const ENTITLEMENT = process.env.RC_ENTITLEMENT || 'plus';
+const ENTITLEMENT = process.env.RC_ENTITLEMENT || 'pro';
 export const rcEnabled = !!KEY;
 
 if (!rcEnabled) {
-  console.warn('ℹ️  RC_SECRET_KEY not set — Rivlr+ is off; every account is free.');
+  console.warn('ℹ️  RC_SECRET_KEY not set — Rivler+ is off; every account is free.');
 }
 
 /// `ok: false` means we couldn't reach RevenueCat — which is NOT the same as

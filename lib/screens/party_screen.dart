@@ -227,7 +227,7 @@ class _PartyScreenState extends State<PartyScreen> {
     Buzz.commit();
     Sfx.pop();
     Share.share(
-      'Drop into my Rivlr room 🎥 code $code — tap rivlr://join/$code or open Rivlr and enter it. You never know who you’ll get.',
+      'Drop into my Rivler room 🎥 code $code — tap rivlr://join/$code or open Rivler and enter it. You never know who you’ll get.',
     );
   }
 
@@ -322,17 +322,28 @@ class _PartyScreenState extends State<PartyScreen> {
                           Text('YOUR ROOM CODE',
                               style: T.eyebrow.copyWith(color: C.tx3, letterSpacing: 3.2, fontSize: 11)),
                           const SizedBox(height: 14),
+                          // half the old size and guaranteed to stay on ONE
+                          // line: at 64pt a 5-character code wrapped, which
+                          // read as a broken layout rather than a code.
+                          // FittedBox is the belt-and-braces — a longer code
+                          // or a large accessibility text size shrinks to fit
+                          // instead of wrapping again.
                           _code == null
                               ? Text(AppConfig.isLive ? '· · · ·' : 'OFFLINE',
-                                  style: T.display(56).copyWith(color: C.tx3, letterSpacing: 8))
+                                  style: T.display(30).copyWith(color: C.tx3, letterSpacing: 5))
                               : Press(
                                   onTap: () {
                                     Clipboard.setData(ClipboardData(text: _code!));
                                     Buzz.tick();
                                   },
-                                  child: Text(
-                                    _code!.split('').join(' '),
-                                    style: T.display(64).copyWith(letterSpacing: 6),
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      _code!.split('').join(' '),
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      style: T.display(32).copyWith(letterSpacing: 3),
+                                    ),
                                   ),
                                 ),
                           const SizedBox(height: 8),

@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:async';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:purchases_flutter/purchases_flutter.dart';
@@ -7,7 +8,7 @@ import '../revenuecat_config.dart';
 import '../state/session.dart';
 import 'analytics.dart';
 
-/// Rivlr+ purchases. RevenueCat talks to the App Store; our server decides
+/// Rivler+ purchases. RevenueCat talks to the App Store; our server decides
 /// who is entitled. This class never grants anything itself — every path
 /// ends in [Api.syncPlus], which makes the server ask RevenueCat and reply
 /// over the socket. A hacked client can call anything here and still not be
@@ -32,8 +33,13 @@ class Plus {
     if (!RcCfg.configured || _ready) return;
     try {
       await Purchases.setLogLevel(LogLevel.error);
+      // the SDK key is per-store: handing the Apple key to a Play build
+      // configures a project that has no Play products in it, and the
+      // paywall renders permanently empty with no error to explain why
+      final key = Platform.isAndroid ? RcCfg.googleKey : RcCfg.appleKey;
+      if (key.isEmpty) return;
       await Purchases.configure(
-        PurchasesConfiguration(RcCfg.appleKey)
+        PurchasesConfiguration(key)
           ..appUserID = AppSession.instance.myUid,
       );
       _ready = true;
