@@ -14,7 +14,7 @@
 /// 1. App Store Connect → Subscriptions → create a Subscription Group
 ///    ("Rivler Pro"), then two auto-renewable subscriptions inside it:
 ///       rivler_pro_weekly    £4.99 / 1 week
-///       rivler_pro_monthly   £9.99 / 1 month
+///       rivler_pro_monthly   £14.99 / 1 month
 ///    Both need a localised display name, description, and a review
 ///    screenshot, or the product stays "Missing Metadata" and never
 ///    appears in the app.
