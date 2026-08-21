@@ -3,7 +3,7 @@ import express from 'express';
 import { run, dbEnabled } from './db.js';
 import { verifyAuthToken } from './auth.js';
 import { store } from './store.js';
-import { moderateImage } from './moderation.js';
+import { moderateImage, aiModerationEnabled } from './moderation.js';
 import { storageEnabled, putObject, signedUrl, deleteObject, keyFor } from './storage.js';
 
 /// A face just changed — tell every connected phone RIGHT NOW instead of
@@ -304,6 +304,45 @@ export function mountMedia(app: Express): void {
     // LEGACY PATH: every row uploaded before build 90 still has its bytes.
     if (!row.bytes) return res.status(404).json({ err: 'gone' });
     sendMaybeRanged(req, res, mime, row.bytes as Buffer, row.kind as string);
+  });
+
+  /// LIVE VIDEO SAFETY. The app samples a frame from the OTHER person's
+  /// video every few seconds, shrinks it to a thumbnail, and asks here
+  /// whether it breaks the rules. A flagged answer blurs that person's video
+  /// on the viewer's phone instantly.
+  ///
+  /// Deliberately NOT stored. The frame is held in memory for the length of
+  /// this request and discarded — there is no INSERT here, no bucket write,
+  /// no id returned. That distinction is the whole reason this is a separate
+  /// route rather than a flag on /api/media, and it is what keeps "we never
+  /// record your video" true: a scan that keeps nothing is not a recording.
+  ///
+  /// Fails OPEN. No key, a timeout, a bad frame — all answer "not flagged".
+  /// A safety scan that breaks the call when it can't reach an API would do
+  /// more damage than the thing it's guarding against, and report + block
+  /// remain underneath it either way.
+  app.post('/api/moderate-frame', express.raw({ type: () => true, limit: '256kb' }),
+      async (req: Request, res: Response) => {
+    const uid = uidOf(req);
+    if (!uid) return res.status(401).json({ err: 'auth' });
+    if (!aiModerationEnabled) return res.json({ flagged: false, off: true });
+    const bytes = req.body as Buffer;
+    if (!Buffer.isBuffer(bytes) || bytes.length === 0) return res.json({ flagged: false });
+    const mime = String(req.headers['content-type'] ?? 'image/jpeg');
+    if (!mime.startsWith('image/')) return res.json({ flagged: false });
+    try {
+      const mod = await moderateImage(bytes, mime);
+      if (!mod) return res.json({ flagged: false });
+      // 'sexual' covers nudity; the severe set covers the categories that
+      // justify ending the room outright rather than just blurring it
+      const nudity = mod.categories.includes('sexual')
+          || mod.categories.includes('sexual/minors');
+      const severe = mod.categories.includes('sexual/minors')
+          || mod.categories.includes('violence/graphic');
+      res.json({ flagged: mod.flagged && (nudity || severe), severe, categories: mod.categories });
+    } catch {
+      res.json({ flagged: false });
+    }
   });
 
   app.get('/api/gifs', async (req: Request, res: Response) => {
