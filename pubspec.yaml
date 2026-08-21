@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.0+95
+version: 1.2.0+96
 
 environment:
   sdk: ^3.8.0
@@ -44,9 +44,22 @@ dependencies:
 
   # Live group video (LiveKit). Only used in live mode (RIVLR_BACKEND set);
   # in simulated builds the code is present but never invoked.
-  # PINNED: this exact version is what CI resolves; video_view.dart uses its
-  # fit API (RTCVideoViewObjectFit). Bumping this requires updating that file.
-  livekit_client: 2.3.1+hotfix.1
+  #
+  # 16 KB PAGE SIZE — this pin is load-bearing. LiveKit pulls in flutter_webrtc,
+  # which ships libwebrtc.so; flutter_webrtc only started building it with 16 KB
+  # ELF alignment in 1.2.0, and livekit_client picks up 1.2.0 from 2.5.1 onward.
+  # Anything older makes the whole app non-compliant with Google Play's 16 KB
+  # requirement (blocks updates from 1 Feb 2027) no matter what the Gradle
+  # config says, because the misalignment is baked into the prebuilt .so.
+  # 2.11.0 -> flutter_webrtc 1.6.0. Never drop below 2.5.1.
+  #
+  # This SDK is compiled against compileSdk 36, so android/app/build.gradle.kts
+  # must stay at compileSdk 36 or AGP refuses to resolve it.
+  #
+  # PINNED (exact, not caret): video_view.dart depends on the renderer's fit
+  # API, which is VideoViewFit here (it was flutter_webrtc's
+  # RTCVideoViewObjectFit up to 2.4.x). Bumping requires re-reading that file.
+  livekit_client: 2.11.0
 
   # Keep the screen awake while finding / live (a live video app must never sleep).
   wakelock_plus: ^1.2.5
@@ -87,7 +100,10 @@ dependencies:
   # cancellations and refunds; our server asks it who's entitled and is the
   # only thing the app trusts. Dormant until a key lands in
   # lib/revenuecat_config.dart.
-  purchases_flutter: ^10.7.0
+  # 10.9.1 bundles purchases-android 10.17.0, which uses Google Play Billing
+  # Library 8.3.0 — the version Play requires for new apps and updates from
+  # 31 Aug 2026. See docs/PLAY_COMPLIANCE.md before touching this.
+  purchases_flutter: ^10.9.1
 
   # Push — "your person is live". Token goes to the server; sends need the
   # APNs key uploaded in Firebase console + service account on Railway.

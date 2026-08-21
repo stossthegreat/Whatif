@@ -8,6 +8,11 @@
 /// every account behaves exactly as it did before payments existed. Same
 /// contract as [FirebaseCfg].
 ///
+/// On Android, RevenueCat owns the Google Play Billing Library version too —
+/// we never depend on `com.android.billingclient` ourselves, so the only way
+/// to move it is to bump `purchases_flutter`. Which version that lands us on,
+/// and which one Play actually requires, is in docs/PLAY_COMPLIANCE.md.
+///
 /// ---------------------------------------------------------------------
 /// SETUP CHECKLIST — the names below must match EXACTLY in three places
 /// ---------------------------------------------------------------------

@@ -29,7 +29,13 @@ android {
     // and the 16 KB page-size requirement applies to apps targeting 35+.
     // Inheriting flutter.targetSdkVersion made compliance depend on whatever
     // Flutter version the CI box happened to have.
-    compileSdk = 35
+    //
+    // compileSdk 36 is not optional: livekit_client and flutter_webrtc are
+    // compiled against API 36, and AGP hard-fails resolution when an app
+    // compiles against a lower level than a library it depends on. It is
+    // separate from targetSdk — compiling against 36 changes nothing at
+    // runtime; only targetSdk opts into Android 16 behaviour changes.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -62,6 +68,28 @@ android {
                 storeFile = file(cmKeystorePath)
                 storePassword = System.getenv("CM_KEYSTORE_PASSWORD")
             }
+        }
+    }
+
+    // 16 KB PAGE SIZE (Google Play: required for anything targeting API 35+;
+    // blocks app updates from 1 Feb 2027).
+    //
+    // Two halves, and only one of them lives here. This half is the packaging:
+    // shared libraries must be stored UNCOMPRESSED in the APK/AAB so AGP can
+    // zip-align them on a 16384-byte boundary. AGP 8.5.1+ does that alignment
+    // automatically for uncompressed libs, and false is already the AGP 8
+    // default — it is written out explicitly because the failure mode is
+    // silent: flip it to true and the app still builds, still installs, and
+    // simply stops loading on 16 KB devices.
+    //
+    // The other half is ELF segment alignment INSIDE each .so, which is baked
+    // in by whoever compiled it. We ship no native code of our own, so that
+    // half is entirely a function of our plugin versions — see the
+    // livekit_client note in pubspec.yaml. Verify a real build with
+    // tool/check_16kb.sh; nothing in this file can prove it.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
         }
     }
 
