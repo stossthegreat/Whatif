@@ -103,6 +103,53 @@ function gifCacheSet(q: string, data: unknown): void {
   while (gifCache.size > GIF_CACHE_MAX) gifCache.delete(gifCache.keys().next().value!);
 }
 
+/// Serve bytes with HTTP Range support.
+///
+/// This is why voice notes appeared in the thread but refused to play. iOS
+/// AVPlayer (what audioplayers uses for a remote URL) does not simply GET an
+/// audio file — it probes with `Range: bytes=0-1` first, and expects a 206
+/// with a Content-Range telling it the total length. `res.send(buffer)`
+/// ignores the Range header entirely and answers 200 with the whole body,
+/// and AVPlayer treats that as a server that cannot stream and gives up.
+/// Android's player is more forgiving, which is exactly the kind of bug that
+/// looks like "it's broken on my phone" rather than "the server is wrong".
+///
+/// Images don't need this, but it costs nothing to answer them the same way,
+/// and Accept-Ranges is the honest header for a route that can now serve one.
+function sendMaybeRanged(
+  req: Request, res: Response, mime: string, bytes: Buffer, kind: string,
+): void {
+  res.setHeader('Accept-Ranges', 'bytes');
+  // AVPlayer also sniffs the filename for a container hint, and our URLs are
+  // extensionless (/api/media/123?tk=…) — give it one.
+  if (kind === 'voice') {
+    res.setHeader('Content-Disposition', 'inline; filename="voice.m4a"');
+  }
+  const range = req.headers.range;
+  const total = bytes.length;
+  if (typeof range === 'string' && range.startsWith('bytes=')) {
+    const [rawStart, rawEnd] = range.slice(6).split('-');
+    let start = rawStart ? Number(rawStart) : 0;
+    let end = rawEnd ? Number(rawEnd) : total - 1;
+    if (!Number.isFinite(start) || start < 0) start = 0;
+    if (!Number.isFinite(end) || end >= total) end = total - 1;
+    // an unsatisfiable range has its own status code; answering 206 with
+    // nonsense makes the player retry forever
+    if (start > end || start >= total) {
+      res.status(416).setHeader('Content-Range', `bytes */${total}`);
+      return void res.end();
+    }
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${total}`);
+    res.setHeader('Content-Length', String(end - start + 1));
+    res.type(mime);
+    return void res.end(bytes.subarray(start, end + 1));
+  }
+  res.setHeader('Content-Length', String(total));
+  res.type(mime);
+  res.end(bytes);
+}
+
 export function mountMedia(app: Express): void {
   app.post('/api/media', express.raw({ type: () => true, limit: `${MAX_BYTES}b` }),
       async (req: Request, res: Response) => {
@@ -187,7 +234,10 @@ export function mountMedia(app: Express): void {
     if (cached) {
       res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
       res.setHeader('ETag', String(id));
-      return res.type(cached.mime).send(cached.bytes);
+      // same Range-aware path as the cold read below — an early return that
+      // quietly ignored Range headers would reintroduce the bug for anything
+      // warm in the cache
+      return sendMaybeRanged(req, res, cached.mime, cached.bytes, 'avatar');
     }
     const r = await run('SELECT owner, kind, mime, bytes, pair_key FROM media WHERE id=$1', [id]);
     const row = r?.rows?.[0];
@@ -207,7 +257,7 @@ export function mountMedia(app: Express): void {
     // sniff the container from an extensionless URL — serve the real one
     const mime = row.mime === 'audio/m4a' || row.mime === 'audio/x-m4a'
         ? 'audio/mp4' : (row.mime as string);
-    res.type(mime).send(row.bytes as Buffer);
+    sendMaybeRanged(req, res, mime, row.bytes as Buffer, row.kind as string);
   });
 
   app.get('/api/gifs', async (req: Request, res: Response) => {
