@@ -4,6 +4,7 @@ import { run, dbEnabled } from './db.js';
 import { verifyAuthToken } from './auth.js';
 import { store } from './store.js';
 import { moderateImage } from './moderation.js';
+import { storageEnabled, putObject, signedUrl, deleteObject, keyFor } from './storage.js';
 
 /// A face just changed — tell every connected phone RIGHT NOW instead of
 /// letting each surface discover it on its own next poll/snapshot. Avatar
@@ -150,6 +151,22 @@ function sendMaybeRanged(
   res.end(bytes);
 }
 
+
+/// Delete a media row AND its object in the bucket. Every delete path must go
+/// through here: deleting only the row leaves the bytes paid for forever, and
+/// an orphaned object is invisible — nothing will ever reference it again to
+/// tell you it's there.
+export async function dropMedia(id: number, owner?: string): Promise<void> {
+  const r = await run(
+    owner
+      ? 'DELETE FROM media WHERE id=$1 AND owner=$2 RETURNING storage_key'
+      : 'DELETE FROM media WHERE id=$1 RETURNING storage_key',
+    owner ? [id, owner] : [id]);
+  const key = r?.rows?.[0]?.storage_key as string | null | undefined;
+  if (key) await deleteObject(key);
+  dropAvatarCache(id);
+}
+
 export function mountMedia(app: Express): void {
   app.post('/api/media', express.raw({ type: () => true, limit: `${MAX_BYTES}b` }),
       async (req: Request, res: Response) => {
@@ -173,11 +190,24 @@ export function mountMedia(app: Express): void {
       if (mod?.flagged) return res.status(422).json({ err: 'flagged', categories: mod.categories });
     }
 
+    // The row is written first so the id exists to key the object by; the
+    // bytes column stays NULL when storage takes them. If the upload to the
+    // bucket fails we fall back to BYTEA on the same row rather than losing
+    // the media — a storage outage degrades, it doesn't break uploading.
     const r = await run(
-      'INSERT INTO media (owner, kind, mime, bytes, size) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-      [uid, kind, mime, bytes, bytes.length]);
+      'INSERT INTO media (owner, kind, mime, size) VALUES ($1,$2,$3,$4) RETURNING id',
+      [uid, kind, mime, bytes.length]);
     const id = r?.rows?.[0]?.id;
     if (id == null) return res.status(500).json({ err: 'db' });
+    let stored: string | null = null;
+    if (storageEnabled) {
+      stored = await putObject(keyFor(Number(id), kind, mime), bytes, mime);
+    }
+    if (stored) {
+      await run('UPDATE media SET storage_key=$2 WHERE id=$1', [id, stored]);
+    } else {
+      await run('UPDATE media SET bytes=$2 WHERE id=$1', [id, bytes]);
+    }
 
     if (kind === 'avatar') {
       // swap the avatar pointer and delete the old blob. NEVER upload the
@@ -200,8 +230,7 @@ export function mountMedia(app: Express): void {
         const old = prev?.rows?.[0]?.[col];
         // never delete what we just pointed at (both columns can hold it)
         if (old != null && Number(old) !== Number(id)) {
-          dropAvatarCache(Number(old));
-          void run('DELETE FROM media WHERE id=$1 AND owner=$2', [old, uid]);
+          void dropMedia(Number(old), uid);
         }
       }
       broadcastFaceFresh(uid, { photoId: Number(id), thumbId: Number(id) });
@@ -215,8 +244,7 @@ export function mountMedia(app: Express): void {
       // this arrives — so "the old thumb" is very often the live avatar.
       // Deleting it here would destroy the profile photo outright.
       if (old != null && Number(old) !== Number(id) && Number(old) !== Number(currentPhoto)) {
-        dropAvatarCache(Number(old));
-        void run('DELETE FROM media WHERE id=$1 AND owner=$2', [old, uid]);
+        void dropMedia(Number(old), uid);
       }
       broadcastFaceFresh(uid, { thumbId: Number(id) });
     }
@@ -239,7 +267,8 @@ export function mountMedia(app: Express): void {
       // warm in the cache
       return sendMaybeRanged(req, res, cached.mime, cached.bytes, 'avatar');
     }
-    const r = await run('SELECT owner, kind, mime, bytes, pair_key FROM media WHERE id=$1', [id]);
+    const r = await run(
+      'SELECT owner, kind, mime, bytes, pair_key, storage_key FROM media WHERE id=$1', [id]);
     const row = r?.rows?.[0];
     if (!row) return res.status(404).json({ err: 'gone' });
     const allowed = row.kind === 'avatar' || row.kind === 'thumb'
@@ -257,6 +286,23 @@ export function mountMedia(app: Express): void {
     // sniff the container from an extensionless URL — serve the real one
     const mime = row.mime === 'audio/m4a' || row.mime === 'audio/x-m4a'
         ? 'audio/mp4' : (row.mime as string);
+
+    // NEW PATH: bytes live in the bucket. Redirect to a short-lived signed
+    // URL so the file streams from Supabase's CDN and never passes through
+    // this server — that's the whole point (no egress here, and the CDN
+    // answers Range requests natively, which is what voice notes need).
+    // Authorisation still happened above; the signed URL is the result of it.
+    const skey = row.storage_key as string | null;
+    if (skey) {
+      const url = await signedUrl(skey);
+      if (url) return res.redirect(302, url);
+      // signing failed (storage blip) — fall through to bytes if this row
+      // happens to still have them, else say so honestly
+      if (!row.bytes) return res.status(503).json({ err: 'storage' });
+    }
+
+    // LEGACY PATH: every row uploaded before build 90 still has its bytes.
+    if (!row.bytes) return res.status(404).json({ err: 'gone' });
     sendMaybeRanged(req, res, mime, row.bytes as Buffer, row.kind as string);
   });
 
@@ -293,7 +339,18 @@ export function mountMedia(app: Express): void {
 export function startRetentionSweep(): void {
   const sweep = () => {
     if (!dbEnabled) return;
-    void run("DELETE FROM media WHERE kind NOT IN ('avatar','thumb') AND created_at < now() - interval '90 days'");
+    // RETURNING so the bucket objects go with the rows — a sweep that only
+    // deleted rows would quietly keep paying for every expired voice note
+    void (async () => {
+      const r = await run(
+        `DELETE FROM media
+          WHERE kind NOT IN ('avatar','thumb')
+            AND created_at < now() - interval '90 days'
+          RETURNING storage_key`);
+      for (const row of r?.rows ?? []) {
+        if (row.storage_key) await deleteObject(row.storage_key as string);
+      }
+    })();
   };
   sweep();
   setInterval(sweep, 24 * 3600_000);

@@ -42,7 +42,16 @@ const LIVE_BASELINE = Number(process.env.LIVE_BASELINE || 0);
 /// that works every time beats a free one that works most of the time — the
 /// saving is worth nothing if people can't see each other. Set P2P=true to
 /// turn it back on once it has been proven on real devices.
-const P2P_ENABLED = process.env.P2P === 'true';
+// LiveKit is for GROUPS ONLY. Every 2-person room — stranger match, 1-on-1
+// pick, or a friend call — goes phone-to-phone, which costs nothing and is
+// lower latency than relaying through a server. Default ON; set P2P=false to
+// kill-switch it if a network problem ever needs ruling out.
+//
+// Safe by construction: the client gives the direct connection a 6s window
+// and falls back to LiveKit if it can't carry the room. Only STUN is
+// configured (no TURN relay), so the ~15% of connections behind strict NAT
+// still land on LiveKit — that's the safety net doing its job, not a bug.
+const P2P_ENABLED = (process.env.P2P ?? 'true') === 'true';
 // Sign-in gate for going live. Off by default so a misconfigured deploy can
 // never lock every user out; Railway sets REQUIRE_ACCOUNT=true.
 // The app has NO guest path any more — the sign-in screen offers Apple and
@@ -789,7 +798,8 @@ async function formCell(memberIds: string[], modeOverride?: 'call') {
     send(u, { t: 'cell', room, url: LIVEKIT_URL, token, people: others,
       game: rounds[0], rounds, golden: cell.golden, luckyId: cell.luckyId, mode,
       // exactly-two stranger rooms may go phone-to-phone; groups/calls never
-      p2p: P2P_ENABLED && mode !== 'call' && live.length === 2 });
+      // every 2-person room, calls included — LiveKit is groups only now
+      p2p: P2P_ENABLED && live.length === 2 });
   }
 
   // talk-first: the room opens as a hang. In HANG mode games start when the

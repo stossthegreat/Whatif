@@ -2,7 +2,7 @@ import type { Express, Request, Response } from 'express';
 import express from 'express';
 import { run, dbEnabled, addBan, clearBan, devicesFor } from './db.js';
 import { CATEGORIES } from './moderation.js';
-import { dropAvatarCache } from './media.js';
+import { dropMedia } from './media.js';
 
 /// The moderation desk. Reports were write-only until now — nothing could read
 /// them, so the Terms' "reviewed within 24 hours" was a promise with no
@@ -150,10 +150,8 @@ export function mountAdmin(app: Express): void {
     await run('UPDATE users SET photo_media_id = NULL, photo_thumb_id = NULL WHERE uid=$1', [uid]);
     for (const col of ['photo_media_id', 'photo_thumb_id']) {
       const old = prev?.rows?.[0]?.[col];
-      if (old != null) {
-        dropAvatarCache(Number(old)); // stop serving it from memory too
-        void run('DELETE FROM media WHERE id=$1', [old]);
-      }
+      // dropMedia clears the bucket object, the row and the memory cache
+      if (old != null) void dropMedia(Number(old));
     }
     res.redirect(`/admin?key=${encodeURIComponent(String(req.body.key))}`);
   });

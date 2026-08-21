@@ -82,6 +82,11 @@ export async function initSocial(): Promise<void> {
   await run('ALTER TABLE media DROP CONSTRAINT IF EXISTS media_kind_check');
   await run(`ALTER TABLE media ADD CONSTRAINT media_kind_check
              CHECK (kind IN ('photo','voice','avatar','thumb'))`);
+  // b90: bytes now live in Supabase Storage. storage_key holds the object
+  // path; bytes stays for every row uploaded before that and must therefore
+  // become NULLABLE — a new row sets one or the other, never both.
+  await run('ALTER TABLE media ADD COLUMN IF NOT EXISTS storage_key TEXT');
+  await run('ALTER TABLE media ALTER COLUMN bytes DROP NOT NULL');
 
   await run(`CREATE TABLE IF NOT EXISTS friendships (
     a TEXT NOT NULL, b TEXT NOT NULL,
@@ -941,7 +946,17 @@ export function deleteSocial(uid: string): void {
   void run('DELETE FROM personality_votes WHERE voter=$1 OR target=$1', [uid]);
   void run('DELETE FROM messages WHERE sender=$1', [uid]);
   void run('DELETE FROM chat_state WHERE uid=$1 OR peer=$1', [uid]);
-  void run('DELETE FROM media WHERE owner=$1', [uid]);
+  // account deletion must empty the bucket too, or a deleted account's
+  // photos live on as objects nothing references and nothing will ever find
+  void (async () => {
+    const r = await run('DELETE FROM media WHERE owner=$1 RETURNING storage_key', [uid]);
+    const keys = (r?.rows ?? [])
+      .map((x) => x.storage_key as string | null)
+      .filter((k): k is string => !!k);
+    if (!keys.length) return;
+    const { deleteObject } = await import('./storage.js');
+    for (const k of keys) await deleteObject(k);
+  })();
   void run('DELETE FROM user_stats WHERE uid=$1', [uid]);
   void run('DELETE FROM user_badges WHERE uid=$1', [uid]);
 }
