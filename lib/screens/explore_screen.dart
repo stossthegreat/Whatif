@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/analytics.dart';
 import '../core/haptics.dart';
 import '../net/network_client.dart';
+import '../state/session.dart';
 import '../state/social.dart';
 import '../theme/tokens.dart';
 import '../widgets/avatar.dart';
@@ -10,6 +11,7 @@ import '../widgets/glass.dart';
 import '../widgets/notification_bell.dart';
 import '../widgets/person_card.dart';
 import 'chat_screen.dart';
+import 'edit_profile_screen.dart';
 
 /// EXPLORE — who's on right now, best matches first.
 ///
@@ -146,52 +148,38 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 child: _people.isEmpty
                     ? _empty(context)
                     : AnimatedBuilder(
-                        // the card buttons read the friend graph, so they have
-                        // to redraw the moment an add lands — otherwise "Add"
-                        // sits there after you've already tapped it
-                        animation: SocialState.instance,
+                        // card buttons read the friend graph, so they redraw
+                        // the moment a follow lands — otherwise "Follow" sits
+                        // there after you've already tapped it
+                        animation: Listenable.merge(
+                            [SocialState.instance, AppSession.instance]),
                         builder: (context, _) => LayoutBuilder(
                           builder: (context, box) {
-                            // one even grid, both lanes level and every card
-                            // the same height. The old staggered columns
-                            // offset one lane by 26px, which read as a
-                            // mistake rather than as an editorial choice.
-                            final fullW = box.maxWidth - r.gutter * 2;
-                            final colW = (fullW - 12) / 2;
-                            final cardH = colW / 0.70;
-                            // person[0] is the server's best match for YOU and
-                            // gets the billboard — but ONLY with a photo to
-                            // put in it. A full-width card with no picture is
-                            // just a big empty rectangle, which made the whole
-                            // wall look broken.
-                            final top = _people.first.thumbId != null
-                                ? _people.first : null;
-                            final rest =
-                                (top == null ? _people : _people.skip(1)).toList();
+                            // ONE card per row, the full width of the phone.
+                            // A two-up grid turns faces into thumbnails, and
+                            // the faces are the entire product here.
+                            final w = box.maxWidth - r.gutter * 2;
+                            final cardH = w * 1.25; // 4:5 portrait crop
                             return ListView(
-                              padding: EdgeInsets.fromLTRB(r.gutter, 2, r.gutter, 24),
+                              padding: EdgeInsets.fromLTRB(r.gutter, 2, r.gutter, 28),
                               physics: const AlwaysScrollableScrollPhysics(
                                   parent: BouncingScrollPhysics()),
                               children: [
-                                if (top != null) ...[
-                                  SizedBox(
-                                    height: fullW * 0.78,
-                                    child: _card(top, hero: true),
-                                  ),
-                                  const SizedBox(height: 12),
-                                ],
-                                for (var row = 0; row * 2 < rest.length; row++)
+                                // YOUR card, exactly as everyone else sees it
+                                _selfCard(cardH * 0.62),
+                                const SizedBox(height: 24),
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: Text('WHO’S AROUND',
+                                      style: T.eyebrow
+                                          .copyWith(color: C.tx3, fontSize: 10.5)),
+                                ),
+                                for (var i = 0; i < _people.length; i++)
                                   Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
+                                    padding: const EdgeInsets.only(bottom: 16),
                                     child: SizedBox(
                                       height: cardH,
-                                      child: Row(
-                                        children: [
-                                          Expanded(child: _fadeIn(row * 2, rest)),
-                                          const SizedBox(width: 12),
-                                          Expanded(child: _fadeIn(row * 2 + 1, rest)),
-                                        ],
-                                      ),
+                                      child: _fadeIn(i, _people),
                                     ),
                                   ),
                               ],
@@ -204,6 +192,47 @@ class _ExploreScreenState extends State<ExploreScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Your own card. Same widget, same data path, no actions — so what you see
+  /// here is literally what a stranger sees, photo included. "Is my photo
+  /// actually showing?" should never need a second phone to answer.
+  Widget _selfCard(double h) {
+    final me = AppSession.instance;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            children: [
+              Text('HOW YOU LOOK',
+                  style: T.eyebrow.copyWith(color: C.tx3, fontSize: 10.5)),
+              const Spacer(),
+              Press(
+                haptic: false,
+                onTap: () { Buzz.tick(); EditProfileScreen.push(context); },
+                child: Text('edit',
+                    style: T.tiny.copyWith(color: C.sig, fontWeight: FontWeight.w800)),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: h,
+          child: PersonCard(
+            name: me.myHandle,
+            hue: me.myHue,
+            thumbId: me.photoId,
+            photoId: me.photoId,
+            age: me.age,
+            country: me.country,
+            preview: true,
+            onTap: () { Buzz.tick(); EditProfileScreen.push(context); },
+          ),
+        ),
+      ],
     );
   }
 
@@ -225,7 +254,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   /// The card's own state comes from the friend graph, and so does what its
   /// button does — they're read in the same breath so a button can never
   /// promise something the server would refuse.
-  Widget _card(_Person p, {bool hero = false}) {
+  Widget _card(_Person p, {bool hero = true}) {
     final s = SocialState.instance;
     final friend = s.isFriend(p.uid);
     final asked = s.requested(p.uid);

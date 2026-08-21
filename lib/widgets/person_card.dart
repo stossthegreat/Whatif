@@ -57,6 +57,7 @@ class PersonCard extends StatelessWidget {
     this.onMessage,
     this.onAdd,
     this.hero = false,
+    this.preview = false,
     this.online = true,
     this.isFriend = false,
     this.requested = false,
@@ -88,6 +89,13 @@ class PersonCard extends StatelessWidget {
 
   /// The full-width billboard treatment for the #1 ranked person.
   final bool hero;
+
+  /// "This is you" — your own card, rendered exactly as everyone else sees
+  /// it. No actions (you can't follow yourself), and it exists so the one
+  /// question a profile photo always raises — does it actually look right to
+  /// other people? — has an answer inside the app instead of needing a
+  /// second phone.
+  final bool preview;
 
   final bool online;
   final bool isFriend;
@@ -215,8 +223,10 @@ class PersonCard extends StatelessWidget {
                     const SizedBox(height: 7),
                     _Chip(label: chip, accent: shared.isNotEmpty),
                   ],
-                  const SizedBox(height: 9),
-                  Row(children: _actions()),
+                  if (!preview) ...[
+                    const SizedBox(height: 9),
+                    Row(children: _actions()),
+                  ],
                 ],
               ),
             ),
