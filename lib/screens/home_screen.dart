@@ -228,11 +228,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 // sits centred instead of hugging the status bar
                 const Spacer(flex: 2),
                 // ---- the hero: Roulette --------------------------------
-                AnimatedBuilder(
-                  animation: AppSession.instance,
-                  builder: (context, _) =>
-                      _HeroCard(onTap: _roulette, locked: !AppSession.instance.plus),
-                ),
+                // THE HERO IS THE FREE THING. 1-on-1 is what everyone can
+                // actually do, so it gets the biggest surface — a hero that
+                // opens a paywall is a door that's locked from the outside.
+                _HeroCard(onTap: _oneOnOne),
 
                 const SizedBox(height: 14),
                 // ---- the two other doors ------------------------------
@@ -244,10 +243,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       children: [
                         Expanded(
                           child: _DoorCard(
-                            emoji: '🎥',
-                            label: '1 on 1',
-                            sub: 'free · browse & pick',
-                            onTap: _oneOnOne,
+                            emoji: '🎰',
+                            label: 'Roulette',
+                            sub: pro ? 'no choosing' : 'Rivler Pro',
+                            tagged: !pro,
+                            onTap: _roulette,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -469,9 +469,8 @@ class _Face {
 /// Roulette, as a proper piece of art rather than a floating button on a
 /// camera feed. Big, gradient, alive — and unmistakably a card, not a lens.
 class _HeroCard extends StatefulWidget {
-  const _HeroCard({required this.onTap, this.locked = false});
+  const _HeroCard({required this.onTap});
   final VoidCallback onTap;
-  final bool locked;
   @override
   State<_HeroCard> createState() => _HeroCardState();
 }
@@ -515,21 +514,20 @@ class _HeroCardState extends State<_HeroCard> with SingleTickerProviderStateMixi
                   children: [
                     Row(
                       children: [
-                        Text('ROULETTE',
+                        Text('1 ON 1  ·  FREE',
                             style: T.eyebrow.copyWith(
                                 color: Colors.white.withOpacity(0.75), fontSize: 10.5)),
-                        if (widget.locked) ...[
-                          const SizedBox(width: 6),
-                          const Text('👑', style: TextStyle(fontSize: 11)),
-                        ],
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text('Spin me\nsomeone', style: T.display(30).copyWith(height: 1.05)),
+                    Text('Meet someone', style: T.display(28).copyWith(height: 1.05)),
                     const SizedBox(height: 8),
-                    Text('no choosing · games hit back to back',
+                    // spell out the actual loop — a hero card that doesn't say
+                    // what happens when you press it is just a pretty button
+                    Text('swipe face to face · skip anytime\nadd a game whenever you want',
                         style: T.tiny.copyWith(
-                            color: Colors.white.withOpacity(0.85), fontSize: 12)),
+                            color: Colors.white.withOpacity(0.88),
+                            fontSize: 12, height: 1.35)),
                   ],
                 ),
               ),
@@ -545,7 +543,7 @@ class _HeroCardState extends State<_HeroCard> with SingleTickerProviderStateMixi
                     color: Colors.white.withOpacity(0.14),
                     border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
                   ),
-                  child: const Icon(Icons.bolt_rounded, size: 30, color: Colors.white),
+                  child: const Icon(Icons.videocam_rounded, size: 28, color: Colors.white),
                 ),
               ),
             ],
