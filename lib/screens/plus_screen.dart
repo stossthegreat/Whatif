@@ -73,7 +73,7 @@ class _PlusScreenState extends State<PlusScreen> {
     switch (r) {
       case PlusResult.success:
         Buzz.commit();
-        _toast('You’re Rivlr+ ✨');
+        _toast('You’re Rivler+ ✨');
         Navigator.of(context).maybePop();
       case PlusResult.pending:
         _toast('Payment taken — unlocking in a moment');
@@ -151,7 +151,7 @@ class _PlusScreenState extends State<PlusScreen> {
                       child: ShaderMask(
                         shaderCallback: (b) => C.gradSigHot.createShader(b),
                         blendMode: BlendMode.srcIn,
-                        child: Text('Rivlr+', style: T.display(46 * r.scale)),
+                        child: Text('Rivler+', style: T.display(46 * r.scale)),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -168,11 +168,6 @@ class _PlusScreenState extends State<PlusScreen> {
                       title: 'Choose who you meet',
                       line: 'Match with women only, men only, or everyone — '
                           'switch any time.',
-                    ),
-                    const _Perk(
-                      emoji: '♾️',
-                      title: 'Unlimited 1-on-1 invites',
-                      line: 'Free accounts get 10 a day. Plus never runs out.',
                     ),
                     const _Perk(
                       emoji: '💜',
@@ -200,10 +195,10 @@ class _PlusScreenState extends State<PlusScreen> {
                         ),
                     const SizedBox(height: 18),
                     if (s.plus)
-                      _Notice('You’re already Rivlr+. Thank you ✨')
+                      _Notice('You’re already Rivler+. Thank you ✨')
                     else
                       Cta(
-                        label: _busy ? 'One moment…' : 'Start Rivlr+',
+                        label: _busy ? 'One moment…' : 'Start Rivler+',
                         onTap: _busy || _packages.isEmpty ? null : _buy,
                       ),
                     const SizedBox(height: 12),

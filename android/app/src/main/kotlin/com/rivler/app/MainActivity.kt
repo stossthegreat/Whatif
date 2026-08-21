@@ -1,4 +1,4 @@
-package com.rivlr.app
+package com.rivler.app
 
 import io.flutter.embedding.android.FlutterActivity
 

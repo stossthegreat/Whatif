@@ -53,7 +53,7 @@ class _DobScreenState extends State<DobScreen> {
       total: 7,
       title: 'When were you born?',
       accent: 'born',
-      sub: 'Rivlr is strictly 18+. Your birthday is never shown to anyone — '
+      sub: 'Rivler is strictly 18+. Your birthday is never shown to anyone — '
           'we use it to keep this place adults-only and to match you better.',
       scrollable: false,
       onBack: widget.onBack,
@@ -92,7 +92,7 @@ class _DobScreenState extends State<DobScreen> {
                 border: Border.all(color: ok ? C.hair2 : C.live.withOpacity(0.6)),
               ),
               child: Text(
-                ok ? "You're $_age" : 'Under 18 — you can’t use Rivlr yet',
+                ok ? "You're $_age" : 'Under 18 — you can’t use Rivler yet',
                 style: T.body.copyWith(
                   color: ok ? Colors.white : C.live,
                   fontWeight: FontWeight.w800,
@@ -132,7 +132,7 @@ class AgeBlockedScreen extends StatelessWidget {
                   Text('Come back\nwhen you’re 18.', style: T.huge(38 * r.scale)),
                   const SizedBox(height: 16),
                   Text(
-                    'Rivlr is an adults-only app — everyone here has confirmed '
+                    'Rivler is an adults-only app — everyone here has confirmed '
                     'they’re 18 or over, and we keep it that way. We’ll be here.',
                     style: T.body.copyWith(fontSize: 16, height: 1.5),
                   ),

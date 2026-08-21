@@ -2,7 +2,7 @@ import 'package:flutter/animation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
-/// Rivlr — "Noir neon".
+/// Rivler — "Noir neon".
 /// Black canvas, violet-tinted glass, one electric purple, one acid spark.
 /// Huge condensed display type. Motion stays silent until it matters.
 /// The faces are the only content — everything else is stage lighting.

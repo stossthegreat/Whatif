@@ -1,4 +1,4 @@
-// Rivlr — live social backend.
+// Rivler — live social backend.
 //
 // One PLAY → an unpredictable, preference-aware, block-aware cell → LiveKit
 // video tokens → relayed game events. Real Sparks (mutual + "they're live"),
@@ -99,7 +99,7 @@ function canGoLive(u: User): boolean {
   return false;
 }
 
-/// Rivlr+ — hydrated from Postgres on hello and refreshed by the RevenueCat
+/// Rivler+ — hydrated from Postgres on hello and refreshed by the RevenueCat
 /// webhook. Never taken from anything the client says.
 function isPlus(u: User): boolean {
   return !!u.plusUntil && u.plusUntil.getTime() > Date.now();
@@ -910,7 +910,7 @@ function notifyLive(u: User) {
       if (store.userByUid(t.uid)) continue;
       if (now - (lastPushAt.get(t.uid) ?? 0) < PUSH_COOLDOWN_MS) continue;
       lastPushAt.set(t.uid, now);
-      sendPush(t.token, `${u.name} is live on Rivlr`, 'drop in while they’re on 🎥');
+      sendPush(t.token, `${u.name} is live on Rivler`, 'drop in while they’re on 🎥');
     }
   });
 }
@@ -1056,7 +1056,7 @@ app.get('/rules', (_req, res) => res.type('html').send(legal.page('House Rules',
 app.get('/delete-account', (_req, res) => res.type('html').send(legal.page('Delete your account', legal.deleteAccount)));
 mountMedia(app);
 mountAdmin(app);
-// Rivlr+ — the webhook and the app's "check my subscription now" endpoint.
+// Rivler+ — the webhook and the app's "check my subscription now" endpoint.
 // Both need to reach a connected user, so we hand them a sender.
 mountIap(app, (uid, until) => {
   const u = store.userByUid(uid);
@@ -1270,7 +1270,7 @@ wss.on('connection', (ws, req) => {
       case 'play':
         // going live requires a real account — that's what makes a ban stick.
         // Every MODE is free: gating a whole lane starves the room, and an
-        // empty room is worth nothing to anyone. Rivlr+ sells control over
+        // empty room is worth nothing to anyone. Rivler+ sells control over
         // WHO you meet (the filter), never the door itself.
         if (!canGoLive(user)) break;
         if (m.mode === 'roulette' || m.mode === 'hang') user.mode = m.mode;
@@ -1673,7 +1673,7 @@ wss.on('connection', (ws, req) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Rivlr server on :${PORT}  (livekit ${LIVEKIT_URL ? 'ON' : 'OFF'}, solo ${ALLOW_SOLO}, db ${db.dbEnabled ? 'ON' : 'OFF'})`);
+  console.log(`Rivler server on :${PORT}  (livekit ${LIVEKIT_URL ? 'ON' : 'OFF'}, solo ${ALLOW_SOLO}, db ${db.dbEnabled ? 'ON' : 'OFF'})`);
 });
 
 social.init(send);

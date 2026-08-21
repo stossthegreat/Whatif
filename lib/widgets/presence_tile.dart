@@ -157,8 +157,14 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // who you're actually talking to — the single most useful
+                    // label on the screen, so it reads at a glance rather than
+                    // hiding at caption size
                     Text('@${p.name}',
-                        style: T.tiny.copyWith(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12.5)),
+                        style: T.display(17).copyWith(
+                          color: Colors.white,
+                          shadows: const [Shadow(color: Color(0xCC000000), blurRadius: 8)],
+                        )),
                     if (widget.connecting)
                       Text('connecting camera…',
                           style: T.tiny.copyWith(color: C.tx3, fontSize: 10)),

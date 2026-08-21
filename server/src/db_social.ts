@@ -38,7 +38,7 @@ export async function initSocial(): Promise<void> {
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_thumb_id BIGINT',
     // your room code — minted once, yours forever (b61)
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS room_code TEXT',
-    // Rivlr+ entitlement (b63). NULL or past = free. The server is the only
+    // Rivler+ entitlement (b63). NULL or past = free. The server is the only
     // authority here; the client never asserts its own plan.
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS plus_until TIMESTAMPTZ',
   ];
@@ -724,7 +724,7 @@ export async function accountState(uid: string): Promise<{
   };
 }
 
-// ---- Rivlr+ entitlement ----------------------------------------------------
+// ---- Rivler+ entitlement ----------------------------------------------------
 
 /// The entitlement write. `until` null revokes (refund / expiry).
 export function setPlusUntil(uid: string, until: Date | null): void {

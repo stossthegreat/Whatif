@@ -51,7 +51,7 @@ class Moment {
     final r = (m['r'] as String?) ?? '';
     if (r.isEmpty) return null;
     return Moment(
-      game: (m['g'] as String?) ?? 'Rivlr',
+      game: (m['g'] as String?) ?? 'Rivler',
       result: r,
       hues: ((m['h'] as List?) ?? const []).whereType<num>().map((x) => x.toDouble()).toList(),
       laughs: (m['l'] as num?)?.toInt() ?? 0,
@@ -297,7 +297,7 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---- Rivlr+ ----
+  // ---- Rivler+ ----
   /// NEVER persisted and never client-decided: the server tells us on every
   /// connect and whenever RevenueCat says something changed. Storing this
   /// locally would just be a lie a modified client could tell itself.

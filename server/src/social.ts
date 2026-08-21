@@ -238,7 +238,7 @@ export async function friendRequest(user: User, targetUid: string): Promise<void
       send(other, { t: 'friendRequested', from: { uid: user.uid, name: user.name, hue: user.hue } });
     } else if (pushEnabled) {
       const token = await dbs.getPushToken(targetUid);
-      if (token) sendPush(token, `${user.name} wants to be friends`, 'open Rivlr to accept ⭐');
+      if (token) sendPush(token, `${user.name} wants to be friends`, 'open Rivler to accept ⭐');
     }
   }
   refreshBoth(user, targetUid);

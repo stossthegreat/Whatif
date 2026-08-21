@@ -27,7 +27,7 @@ const esc = (s: unknown) =>
 function shell(body: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Rivlr · moderation</title><style>
+<title>Rivler · moderation</title><style>
  body{background:#08090b;color:#e8e8ec;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0}
  main{max-width:1000px;margin:0 auto;padding:28px 18px 80px}
  h1{font-size:22px;margin:0 0 4px} .sub{color:#8b8b94;font-size:13px;margin-bottom:22px}

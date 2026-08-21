@@ -1,6 +1,6 @@
 /// App configuration.
 ///
-/// [backend] is empty by default, which runs Rivlr in **simulated mode** (the
+/// [backend] is empty by default, which runs Rivler in **simulated mode** (the
 /// people, matches and games are generated locally — perfect for a solo
 /// TestFlight demo, no servers needed). Point it at your deployed Railway server
 /// to go **live** with real strangers + LiveKit video:

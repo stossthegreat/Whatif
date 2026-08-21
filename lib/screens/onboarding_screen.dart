@@ -74,9 +74,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   const SizedBox(height: 18),
                   Text(
                     _blocked
-                        ? 'Camera access is off. Open Settings → Rivlr and switch '
+                        ? 'Camera access is off. Open Settings → Rivler and switch '
                             'on Camera and Microphone, then come back.'
-                        : 'Rivlr is face to face — it doesn’t work without them. '
+                        : 'Rivler is face to face — it doesn’t work without them. '
                             'Nothing is ever recorded.',
                     textAlign: TextAlign.center,
                     style: T.body.copyWith(fontSize: 16, height: 1.45),

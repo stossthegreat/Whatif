@@ -56,7 +56,7 @@ class RivlrApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: navKey,
-      title: 'Rivlr',
+      title: 'Rivler',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -329,8 +329,8 @@ class _RootState extends State<_Root> {
           if (ctx != null) {
             PlusScreen.push(ctx,
                 reason: m['where'] == 'oneOnOne'
-                    ? '1-on-1 rooms are part of Rivlr+ — Roulette and Groups are always free.'
-                    : 'Choosing who you meet is part of Rivlr+.');
+                    ? '1-on-1 rooms are part of Rivler+ — Roulette and Groups are always free.'
+                    : 'Choosing who you meet is part of Rivler+.');
           }
         }
         // content moderation rejected something server-side — say so wherever

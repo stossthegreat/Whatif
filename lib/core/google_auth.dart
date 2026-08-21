@@ -9,7 +9,7 @@ import 'analytics.dart';
 /// anonymous identifier, exactly as with Apple.
 ///
 /// The identity model is identical: your uid never changes; Google links to
-/// it as a recovery key. If this Google account already belongs to a Rivlr
+/// it as a recovery key. If this Google account already belongs to a Rivler
 /// account (reinstall / new phone), the server's welcome hands back the
 /// canonical uid and the whole graph returns.
 ///

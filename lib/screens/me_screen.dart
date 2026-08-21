@@ -208,7 +208,7 @@ class MeScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(R.chip),
                             boxShadow: C.glowSig(blur: 14, spread: -5),
                           ),
-                          child: Text('Rivlr+',
+                          child: Text('Rivler+',
                               style: T.display(13).copyWith(letterSpacing: 0.4)),
                         ),
                         const SizedBox(height: 8),
@@ -295,7 +295,7 @@ class MeScreen extends StatelessWidget {
                               Text(
                                 s.plus
                                     ? 'everyone who said yes to you'
-                                    : 'see who said yes — with Rivlr+',
+                                    : 'see who said yes — with Rivler+',
                                 style: T.tiny.copyWith(
                                     color: Colors.white70,
                                     fontSize: 12,

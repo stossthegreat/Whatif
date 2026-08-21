@@ -14,7 +14,7 @@ import { createPublicKey, createVerify } from 'crypto';
 
 const JWKS_URL = 'https://appleid.apple.com/auth/keys';
 const ISSUER = 'https://appleid.apple.com';
-const AUDIENCE = process.env.APPLE_BUNDLE_ID || 'com.rivlr.app';
+const AUDIENCE = process.env.APPLE_BUNDLE_ID || 'com.rivler.app';
 
 interface Jwk { kty: string; kid: string; n: string; e: string; alg?: string }
 

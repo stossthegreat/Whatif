@@ -14,7 +14,7 @@ class FirebaseCfg {
     messagingSenderId: '253597616968',
     projectId: 'rivlr-9761e',
     storageBucket: 'rivlr-9761e.firebasestorage.app',
-    iosBundleId: 'com.rivlr.app',
+    iosBundleId: 'com.rivler.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(

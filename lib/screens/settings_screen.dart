@@ -82,14 +82,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           PlusScreen.push(context, reason: 'Meet only women, or only men.');
                         }
                       },
-                      trailing: s.plus ? null : 'Rivlr+',
+                      trailing: s.plus ? null : 'Rivler+',
                     ),
                     _divider(),
                     if (s.plus)
                       _info('Subscription',
                           'active — manage or cancel in your Apple ID settings')
                     else
-                      _link('See what Rivlr+ unlocks',
+                      _link('See what Rivler+ unlocks',
                           () { Buzz.tick(); PlusScreen.push(context); }),
                   ]),
                   const SizedBox(height: 20),
@@ -120,7 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _divider(),
                     _link('Terms of Service', () => LegalScreen.push(context, 'Terms of Service', LegalCopy.terms)),
                     _divider(),
-                    _link('About Rivlr', () => LegalScreen.push(context, 'About', LegalCopy.about)),
+                    _link('About Rivler', () => LegalScreen.push(context, 'About', LegalCopy.about)),
                     _divider(),
                     _info('Contact', 'm2mb@info.com'),
                   ]),
@@ -162,7 +162,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _link('Delete account', () => _confirmDelete(context), color: C.live),
                   ]),
                   const SizedBox(height: 26),
-                  Center(child: Text('Rivlr · 1.0.0 (70)', style: T.tiny)),
+                  Center(child: Text('Rivler · 1.0.0 (70)', style: T.tiny)),
                 ],
               ),
             ),

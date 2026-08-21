@@ -6,7 +6,7 @@ import * as dbs from './db_social.js';
 import { verifyAuthToken } from './auth.js';
 import { fetchEntitlement, rcEnabled } from './revenuecat.js';
 
-/// Rivlr+ purchase surface. Two routes:
+/// Rivler+ purchase surface. Two routes:
 ///   POST /api/rc/webhook — RevenueCat tells us something changed
 ///   POST /api/iap/sync   — the app asks us to re-check right now
 /// Both end in the same place: ask RevenueCat for the truth, write
