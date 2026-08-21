@@ -327,10 +327,16 @@ class _RootState extends State<_Root> {
         if (m['code'] == 'needPlus') {
           final ctx = RivlrApp.navKey.currentContext;
           if (ctx != null) {
-            PlusScreen.push(ctx,
-                reason: m['where'] == 'oneOnOne'
-                    ? '1-on-1 rooms are part of Rivler+ — Roulette and Groups are always free.'
-                    : 'Choosing who you meet is part of Rivler+.');
+            PlusScreen.push(ctx, reason: switch (m['where']) {
+              'roulette' =>
+                'Roulette is part of Rivler Pro — 1-on-1 stays free.',
+              'groups' =>
+                'Your own Groups room is part of Rivler Pro — 1-on-1 stays free.',
+              'games' =>
+                'The party games are part of Rivler Pro. One subscriber unlocks '
+                    'them for everyone in the room.',
+              _ => 'Choosing who you meet is part of Rivler Pro.',
+            });
           }
         }
         // content moderation rejected something server-side — say so wherever

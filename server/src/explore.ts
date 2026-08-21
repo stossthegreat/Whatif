@@ -63,6 +63,9 @@ export async function list(viewer: User): Promise<void> {
       hue: card.hue ?? u.hue,
       // thumb first: a grid must never pull full-size avatars
       thumbId: card.thumbId ?? card.photoId,
+      // the full avatar rides along so a dead thumbnail can fall back to it
+      // client-side rather than showing a faceless card
+      photoId: card.photoId,
       title: card.title,
       country: card.country,
       age: card.age,
@@ -93,6 +96,9 @@ export async function list(viewer: User): Promise<void> {
         name: p.name,
         hue: p.hue,
         thumbId: p.thumbId,
+        // discoverRoster already folds the full avatar into thumbId when no
+        // derivative exists, so it IS the best fallback available here
+        photoId: p.thumbId,
         title: p.title,
         country: p.country,
         age: p.age,

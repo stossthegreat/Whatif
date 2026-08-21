@@ -157,12 +157,32 @@ class _PlusScreenState extends State<PlusScreen> {
                     const SizedBox(height: 8),
                     Center(
                       child: Text(
-                        widget.reason ?? 'Choose who you meet, and see who wants you back.',
+                        widget.reason ??
+                            'Every party game, Roulette and your own Groups room. '
+                            '1-on-1 stays free.',
                         textAlign: TextAlign.center,
                         style: T.body.copyWith(fontSize: 15, height: 1.45),
                       ),
                     ),
                     const SizedBox(height: 26),
+                    const _Perk(
+                      emoji: '🍾',
+                      title: 'Every party game',
+                      line: 'Spin the Bottle, Truth or Dare, Never Have I Ever, '
+                          'Would You Rather — the whole catalogue, in any room.',
+                    ),
+                    const _Perk(
+                      emoji: '🎰',
+                      title: 'Roulette',
+                      line: 'No choosing — we throw you at someone new and the '
+                          'games hit back to back.',
+                    ),
+                    const _Perk(
+                      emoji: '👥',
+                      title: 'Your own Groups room',
+                      line: 'A permanent code your people can drop into any '
+                          'time. Everyone in your room plays free.',
+                    ),
                     const _Perk(
                       emoji: '♀︎♂︎',
                       title: 'Choose who you meet',

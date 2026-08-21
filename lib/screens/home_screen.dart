@@ -117,16 +117,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  /// Roulette is Pro — the client pitches immediately rather than letting the
+  /// tap bounce off the server. The server stays the real gate either way.
   void _roulette() {
+    if (!AppSession.instance.plus) {
+      Buzz.tick();
+      PlusScreen.push(context,
+          reason: 'Roulette, Groups and every party game are part of Rivler Pro. '
+              '1-on-1 stays free.');
+      return;
+    }
     Buzz.pop();
     Sfx.match();
     Track.event('home_start', {'mode': 'roulette'});
     widget.onPlay('roulette');
   }
 
+  /// The free lane — browse real people and pick who you meet.
   void _oneOnOne() {
     Buzz.pop();
     DiscoverScreen.push(context);
+  }
+
+  void _groups() {
+    if (!AppSession.instance.plus) {
+      Buzz.tick();
+      PlusScreen.push(context,
+          reason: 'Your own room with your people is part of Rivler Pro. '
+              '1-on-1 stays free.');
+      return;
+    }
+    Buzz.pop();
+    widget.onPlay('groups');
   }
 
   @override
@@ -206,30 +228,41 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 // sits centred instead of hugging the status bar
                 const Spacer(flex: 2),
                 // ---- the hero: Roulette --------------------------------
-                _HeroCard(onTap: _roulette),
+                AnimatedBuilder(
+                  animation: AppSession.instance,
+                  builder: (context, _) =>
+                      _HeroCard(onTap: _roulette, locked: !AppSession.instance.plus),
+                ),
 
                 const SizedBox(height: 14),
                 // ---- the two other doors ------------------------------
-                Row(
-                  children: [
-                    Expanded(
-                      child: _DoorCard(
-                        emoji: '🎥',
-                        label: '1 on 1',
-                        sub: 'browse & pick',
-                        onTap: _oneOnOne,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _DoorCard(
-                        emoji: '👥',
-                        label: 'Groups',
-                        sub: 'your own room',
-                        onTap: () { Buzz.pop(); widget.onPlay('groups'); },
-                      ),
-                    ),
-                  ],
+                AnimatedBuilder(
+                  animation: AppSession.instance,
+                  builder: (context, _) {
+                    final pro = AppSession.instance.plus;
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: _DoorCard(
+                            emoji: '🎥',
+                            label: '1 on 1',
+                            sub: 'free · browse & pick',
+                            onTap: _oneOnOne,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _DoorCard(
+                            emoji: '👥',
+                            label: 'Groups',
+                            sub: pro ? 'your own room' : 'Rivler Pro',
+                            tagged: !pro,
+                            onTap: _groups,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
 
                 const Spacer(flex: 3),
@@ -436,8 +469,9 @@ class _Face {
 /// Roulette, as a proper piece of art rather than a floating button on a
 /// camera feed. Big, gradient, alive — and unmistakably a card, not a lens.
 class _HeroCard extends StatefulWidget {
-  const _HeroCard({required this.onTap});
+  const _HeroCard({required this.onTap, this.locked = false});
   final VoidCallback onTap;
+  final bool locked;
   @override
   State<_HeroCard> createState() => _HeroCardState();
 }
@@ -479,9 +513,17 @@ class _HeroCardState extends State<_HeroCard> with SingleTickerProviderStateMixi
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('ROULETTE',
-                        style: T.eyebrow.copyWith(
-                            color: Colors.white.withOpacity(0.75), fontSize: 10.5)),
+                    Row(
+                      children: [
+                        Text('ROULETTE',
+                            style: T.eyebrow.copyWith(
+                                color: Colors.white.withOpacity(0.75), fontSize: 10.5)),
+                        if (widget.locked) ...[
+                          const SizedBox(width: 6),
+                          const Text('👑', style: TextStyle(fontSize: 11)),
+                        ],
+                      ],
+                    ),
                     const SizedBox(height: 6),
                     Text('Spin me\nsomeone', style: T.display(30).copyWith(height: 1.05)),
                     const SizedBox(height: 8),

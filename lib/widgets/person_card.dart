@@ -47,6 +47,7 @@ class PersonCard extends StatelessWidget {
     required this.name,
     required this.hue,
     this.thumbId,
+    this.photoId,
     this.title,
     this.shared = const [],
     this.busy = false,
@@ -65,6 +66,9 @@ class PersonCard extends StatelessWidget {
   final String name;
   final double hue;
   final int? thumbId;
+
+  /// The FULL avatar, used only as a fallback when [thumbId] fails to load.
+  final int? photoId;
   final String? title;
   final List<String> shared;
   final bool busy;
@@ -124,7 +128,16 @@ class PersonCard extends StatelessWidget {
               Image.network(
                 Api.mediaUrl(id),
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _Placeholder(name: name, tint: _tint),
+                // a dead thumbnail must never mean a faceless card while the
+                // full photo is sitting right there — fall through to it
+                // before giving up on the letter
+                errorBuilder: (_, __, ___) => photoId != null && photoId != id
+                    ? Image.network(
+                        Api.mediaUrl(photoId!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _Placeholder(name: name, tint: _tint),
+                      )
+                    : _Placeholder(name: name, tint: _tint),
                 loadingBuilder: (context, child, progress) =>
                     progress == null ? child : _Placeholder(name: name, tint: _tint),
               )
@@ -213,22 +226,28 @@ class PersonCard extends StatelessWidget {
     );
   }
 
-  /// Two pills, always. The left one is the relationship, the right one is
-  /// the room — and neither ever offers something the server would refuse.
+  /// Follow and Message, always both — the pair every social card has
+  /// converged on, and what people reach for first.
+  ///
+  /// Message stays honest: the server refuses DMs between strangers, so
+  /// until you're connected it's muted and [onMessage] explains why rather
+  /// than opening a thread that can't send. The live "say hi" video action
+  /// moves onto the status row, where being live is already the subject.
   List<Widget> _actions() {
     final left = requested
         ? const ActionPill(label: 'Requested', muted: true)
         : isFriend
-            ? ActionPill(label: 'Message', icon: Icons.chat_bubble_rounded, onTap: onMessage)
-            : ActionPill(label: 'Add', icon: Icons.person_add_alt_1_rounded, onTap: onAdd);
+            ? const ActionPill(label: 'Following', muted: true)
+            : ActionPill(label: 'Follow', icon: Icons.person_add_alt_1_rounded, onTap: onAdd);
 
-    final right = busy
-        ? const ActionPill(label: 'In a room', muted: true)
-        : _live
-            // a video icon, because that is literally what this does — rings
-            // them into a room, not sends a text
-            ? ActionPill(label: 'Say hi', icon: Icons.videocam_rounded, live: true, onTap: onHi)
-            : const ActionPill(label: 'Away', muted: true);
+    // always tappable, never muted: a muted pill swallows the tap silently,
+    // and "nothing happened" is worse than being told why. The caller
+    // explains the follow-first rule when they aren't connected yet.
+    final right = ActionPill(
+      label: 'Message',
+      icon: Icons.chat_bubble_rounded,
+      onTap: onMessage,
+    );
 
     return [
       Expanded(child: left),

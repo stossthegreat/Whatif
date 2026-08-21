@@ -45,7 +45,22 @@ const LIVE_BASELINE = Number(process.env.LIVE_BASELINE || 0);
 const P2P_ENABLED = process.env.P2P === 'true';
 // Sign-in gate for going live. Off by default so a misconfigured deploy can
 // never lock every user out; Railway sets REQUIRE_ACCOUNT=true.
-const REQUIRE_ACCOUNT = (process.env.REQUIRE_ACCOUNT ?? 'false') === 'true';
+// The app has NO guest path any more — the sign-in screen offers Apple and
+// Google and nothing else — so the server defaults to enforcing it rather
+// than trusting every client to be an honest one. Set REQUIRE_ACCOUNT=false
+// only to deliberately reopen guest access.
+const REQUIRE_ACCOUNT = (process.env.REQUIRE_ACCOUNT ?? 'true') === 'true';
+// Apple verification always works (APPLE_BUNDLE_ID has a sane default), but
+// Google's audience has none: without GOOGLE_CLIENT_ID every Google token
+// fails to verify, so with enforcement on, ANDROID USERS CANNOT GO LIVE AT
+// ALL. That is a silent, total outage for one platform, so it gets shouted
+// at boot rather than discovered through support messages.
+if (REQUIRE_ACCOUNT && !process.env.GOOGLE_CLIENT_ID) {
+  console.error(
+    '[auth] ❌ REQUIRE_ACCOUNT is on but GOOGLE_CLIENT_ID is unset — Google ' +
+    'sign-ins cannot be verified, so Android users will be blocked from going ' +
+    'live. Set GOOGLE_CLIENT_ID to the WEB OAuth client id.');
+}
 
 const NAMES = ['kai', 'noor', 'remy', 'sasha', 'theo', 'luca', 'emi', 'dro', 'wren',
   'max', 'ira', 'jae', 'nova', 'sol', 'zed', 'fin', 'ash', 'juno'];
@@ -1268,18 +1283,34 @@ wss.on('connection', (ws, req) => {
         break;
       }
       case 'play':
-        // going live requires a real account — that's what makes a ban stick.
-        // Every MODE is free: gating a whole lane starves the room, and an
-        // empty room is worth nothing to anyone. Rivler+ sells control over
-        // WHO you meet (the filter), never the door itself.
+        // going live requires a real account — that's what makes a ban stick
         if (!canGoLive(user)) break;
+        // THE MODEL: 1-on-1 (mode 'hang') is the free taste — browse, pick,
+        // meet. Roulette is Pro. Gated here and nowhere else; the client's
+        // crown is a display of this decision, never the decision itself.
+        if (m.mode === 'roulette' && !isPlus(user)) {
+          send(user, { t: 'err', code: 'needPlus', where: 'roulette' });
+          break;
+        }
         if (m.mode === 'roulette' || m.mode === 'hang') user.mode = m.mode;
         leaveParty(id); leaveCell(user); enqueue(user);
         break;
-      case 'next': leaveCell(user); enqueue(user); break;
+      case 'next':
+        // re-queuing rides whatever user.mode already is, so a subscription
+        // that lapsed mid-session can't keep looping roulette on an
+        // entitlement that's gone
+        if (user.mode === 'roulette' && !isPlus(user)) {
+          user.mode = 'hang';
+          send(user, { t: 'err', code: 'needPlus', where: 'roulette' });
+          break;
+        }
+        leaveCell(user); enqueue(user);
+        break;
       case 'leave': dequeue(id); leaveCell(user); user.state = 'idle'; break;
       case 'host': {
         if (!canGoLive(user)) break;
+        // Groups is Pro — hosting a room for your people is a paid feature
+        if (!isPlus(user)) { send(user, { t: 'err', code: 'needPlus', where: 'groups' }); break; }
         // Your code is PERMANENT: minted once in the DB, identical across
         // reopens, reconnects and server restarts. An invite shared last week
         // still points at your room the moment you press Groups again.
@@ -1385,6 +1416,14 @@ wss.on('connection', (ws, req) => {
         // The auto-chain resumes on its own after the picked game ends.
         if (!cell) { console.log(`[game] pick ignored: ${user.uid} not in a cell`); break; }
         if (cell.inRound) { console.log(`[game] pick ignored: cell ${cell.id} mid-round`); break; }
+        // The party games ARE the product — Spin the Bottle, Truth or Dare,
+        // the lot. Anyone in the room can start one as long as SOMEONE in it
+        // is Pro: a subscriber's room is a full room for everyone in it,
+        // which is what makes buying it worth telling your friends about.
+        if (!cell.members.some((mid) => { const u2 = store.users.get(mid); return !!u2 && isPlus(u2); })) {
+          send(user, { t: 'err', code: 'needPlus', where: 'games' });
+          break;
+        }
         if (m.name === 'Impostor') startImpostor(cell);
         else if (m.name === 'Who Am I') startWhoAmI(cell);
         else if (m.name === 'Judge Says') startJudgeSays(cell);

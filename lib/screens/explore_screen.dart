@@ -233,6 +233,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       name: p.name,
       hue: p.hue,
       thumbId: p.thumbId,
+      photoId: p.photoId,
       title: p.title,
       shared: p.shared,
       busy: p.busy,
@@ -244,12 +245,26 @@ class _ExploreScreenState extends State<ExploreScreen> {
       requested: asked,
       onAdd: () => _add(p),
       onHi: () => _open(p),
-      onMessage: friend
-          ? () {
-              Buzz.tick();
-              ChatScreen.push(context, uid: p.uid, name: p.name, hue: p.hue);
-            }
-          : null,
+      // shown to everyone, so tapping it always says something. The server
+      // refuses DMs between strangers, so for anyone not yet connected this
+      // explains the rule instead of opening a thread that can't send.
+      onMessage: () {
+        Buzz.tick();
+        if (friend) {
+          ChatScreen.push(context, uid: p.uid, name: p.name, hue: p.hue);
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: C.char2,
+          content: Text(
+            asked
+                ? 'Waiting on @${p.name} — you can message once they follow back'
+                : 'Follow @${p.name} first — messaging opens when you both follow',
+            style: T.body.copyWith(color: Colors.white),
+          ),
+        ));
+      },
       onTap: () => _open(p),
     );
   }
@@ -315,6 +330,7 @@ class _Person {
     required this.name,
     required this.hue,
     this.thumbId,
+    this.photoId,
     this.title,
     this.country,
     this.age,
@@ -328,6 +344,7 @@ class _Person {
         name: (m['name'] as String?) ?? 'someone',
         hue: ((m['hue'] as num?) ?? 210).toDouble(),
         thumbId: (m['thumbId'] as num?)?.toInt(),
+        photoId: (m['photoId'] as num?)?.toInt(),
         title: m['title'] as String?,
         country: m['country'] as String?,
         // absent-tolerant: today's server doesn't send age; the card simply
@@ -344,6 +361,7 @@ class _Person {
   final String name;
   final double hue;
   final int? thumbId;
+  final int? photoId;
   final String? title;
   final String? country;
   final int? age;

@@ -131,7 +131,7 @@ class _MatchOverlayState extends State<MatchOverlay> with SingleTickerProviderSt
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 24),
                                     child: Text(
-                                      '⭐ you’re a guest — sign in with Apple so your people are never lost',
+                                      '⭐ sign in so your people are never lost',
                                       textAlign: TextAlign.center,
                                       style: T.tiny.copyWith(
                                           color: C.sig, fontWeight: FontWeight.w700, height: 1.5),

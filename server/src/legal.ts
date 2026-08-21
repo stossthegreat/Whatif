@@ -201,16 +201,16 @@ Rivler connects you into live video rooms with people you don't know (always one
 3. YOUR ACCOUNT AND SECURITY
 Rivler requires an account — Sign in with Apple on iOS, Sign in with Google on Android. There is no guest mode: a real, verifiable identity is what lets suspensions actually stick, and it is why the graph of friends and messages survives a reinstall. Your account is yours alone: do not sell, transfer, or share it, and do not let anyone else use it. You may not choose a handle you have no right to use or one intended to impersonate another person. You are responsible for activity on your account. If we must resolve a dispute over who owns an account, our determination (which may include suspension or termination) is final. Tell us immediately at m2mb@info.com about any unauthorised use.
 
-4. FREE SERVICE AND RIVLR+ SUBSCRIPTIONS
+4. FREE SERVICE AND RIVLER PRO SUBSCRIPTIONS
 Rivler is free to use. Meeting strangers, messaging, rooms and games cost nothing and always will — every way into a room is open to every account.
 
-Rivler+ is an optional paid subscription that unlocks: choosing which gender of people you are matched with; seeing the list of people who said they would meet you again; and priority position in the matching queue. Nothing about safety, moderation, friends you have already made, or your ability to talk to people you have already met is ever placed behind payment.
+Rivler Pro is an optional paid subscription that unlocks: choosing which gender of people you are matched with; seeing the list of people who said they would meet you again; and priority position in the matching queue. Nothing about safety, moderation, friends you have already made, or your ability to talk to people you have already met is ever placed behind payment.
 
 Subscriptions are sold through the app store you installed Rivler from — the App Store on iOS, Google Play on Android. The exact price and billing period are shown to you inside the app before you buy, in your own currency, and payment is charged to your Apple ID or Google Play account on confirmation. A subscription renews automatically for the same period at the same price unless you cancel at least 24 hours before the current period ends. Cancel any time in your Apple ID or Google Play subscription settings; cancelling stops future renewals and you keep access until the paid period runs out. We do not charge you separately and we never store your card details — your app store handles all billing.
 
 Refunds are handled by Apple or Google under their own policies, not by us; we cannot issue or refuse them, though we will help you contact them. Except where the law requires otherwise, part-used periods are not refunded. If your subscription lapses or is refunded, paid features switch off — any filter you had set returns to meeting everyone — and everything free about your account, including your friends and messages, is unaffected.
 
-We may change what Rivler+ includes or what it costs. Price rises and material reductions take effect only for periods beginning after we have told you, and your app store will ask you to agree to a price increase before it is charged. If a paid feature depends on other people being online — the matching filter especially — we cannot promise anyone will be available at a given moment; the app shows you honest live numbers so you can judge for yourself.
+We may change what Rivler Pro includes or what it costs. Price rises and material reductions take effect only for periods beginning after we have told you, and your app store will ask you to agree to a price increase before it is charged. If a paid feature depends on other people being online — the matching filter especially — we cannot promise anyone will be available at a given moment; the app shows you honest live numbers so you can judge for yourself.
 
 5. HOUSE RULES — ZERO TOLERANCE FOR OBJECTIONABLE CONTENT
 You agree that you will NOT, in any room, message, profile, or other content:
@@ -273,7 +273,7 @@ You may stop using Rivler and delete your account at any time (Settings → Dele
 Rivler is a young, evolving service. THE SERVICE AND ALL CONTENT ARE PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, OR THAT THE SERVICE WILL BE UNINTERRUPTED, SECURE, OR ERROR-FREE. WE MAKE NO WARRANTY ABOUT ANY CONTENT, USER, OR IDENTITY, AND YOU ACCESS ALL OF IT AT YOUR OWN RISK. Nothing in these Terms limits rights that consumer law grants you that cannot be limited.
 
 17. LIMITATION OF LIABILITY
-TO THE FULLEST EXTENT PERMITTED BY LAW, RIVLR AND ITS PERSONNEL SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, PUNITIVE, OR EXEMPLARY DAMAGES — INCLUDING LOST PROFITS, LOST DATA, LOSS OF GOODWILL, OR THE CONDUCT OF OTHER USERS OR THIRD PARTIES — ARISING FROM OR RELATING TO THE SERVICE, EVEN IF ADVISED OF THE POSSIBILITY. OUR TOTAL LIABILITY FOR ALL CLAIMS WILL NOT EXCEED THE GREATER OF THE AMOUNT YOU PAID US IN THE LAST 12 MONTHS OR £50. Nothing here excludes liability that cannot lawfully be excluded (including for death or personal injury caused by negligence, or fraud).
+TO THE FULLEST EXTENT PERMITTED BY LAW, RIVLER AND ITS PERSONNEL SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, PUNITIVE, OR EXEMPLARY DAMAGES — INCLUDING LOST PROFITS, LOST DATA, LOSS OF GOODWILL, OR THE CONDUCT OF OTHER USERS OR THIRD PARTIES — ARISING FROM OR RELATING TO THE SERVICE, EVEN IF ADVISED OF THE POSSIBILITY. OUR TOTAL LIABILITY FOR ALL CLAIMS WILL NOT EXCEED THE GREATER OF THE AMOUNT YOU PAID US IN THE LAST 12 MONTHS OR £50. Nothing here excludes liability that cannot lawfully be excluded (including for death or personal injury caused by negligence, or fraud).
 
 18. INDEMNITY
 You agree to indemnify and hold Rivler and its personnel harmless from claims, liabilities, damages, losses, and expenses (including reasonable legal fees) arising from your content, your use of the service, your violation of these Terms, or your violation of any law or third-party right, including actions taken through your account.
@@ -311,7 +311,7 @@ Long-press any face to report or block — one tap, instant. Photos and messages
 
 Breaking these gets you removed. The room decides fast.`;
 
-export const deleteAccount = `DELETE YOUR RIVLR ACCOUNT
+export const deleteAccount = `DELETE YOUR RIVLER ACCOUNT
 This page exists so you can always find out how to delete your account and data — with or without the app installed. (Required by Google Play's account-deletion policy; applies equally to iOS.)
 
 WHAT DELETION REMOVES

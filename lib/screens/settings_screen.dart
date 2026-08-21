@@ -66,11 +66,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         [
                           if (profileLine.isNotEmpty) profileLine,
                           if (s.myVibes.isNotEmpty) s.myVibes.join(' · '),
-                          s.signedIn ? 'signed in' : 'guest',
+                          // no guest path exists any more; anyone here signed
+                          // in with Apple or Google to get this far
+                          s.signedIn ? 'signed in' : 'not signed in',
                         ].join('\n')),
                   ]),
                   const SizedBox(height: 20),
-                  _section('RIVLR+'),
+                  _section('RIVLER PRO'),
                   _card([
                     _link(
                       s.plus ? 'Who you meet · ${_meetLabel(s.meetPref)}' : 'Choose who you meet',

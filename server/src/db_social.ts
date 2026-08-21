@@ -712,6 +712,20 @@ export async function accountState(uid: string): Promise<{
   plusUntil: Date | null; meet: string | null;
 } | null> {
   if (!dbEnabled) return null;
+  // SELF-HEAL, on every connect. Build 85 stopped NEW breakage (the avatar
+  // upload now claims both pointers) but did nothing for rows already broken
+  // — and those stay broken forever, which is exactly what "my photo still
+  // isn't on Explore" looks like. Explore reads the thumb, so a thumb
+  // pointer that is null, or aimed at a media row that no longer exists,
+  // renders the letter placeholder while the profile (which reads the full
+  // photo) looks perfectly fine. Point it back at the real avatar.
+  await run(
+    `UPDATE users SET photo_thumb_id = photo_media_id
+      WHERE uid = $1
+        AND photo_media_id IS NOT NULL
+        AND (photo_thumb_id IS NULL
+             OR NOT EXISTS (SELECT 1 FROM media m WHERE m.id = users.photo_thumb_id))`,
+    [uid]);
   const r = await run(
     'SELECT photo_media_id, photo_thumb_id, plus_until, meet FROM users WHERE uid=$1', [uid]);
   const x = r?.rows?.[0];
