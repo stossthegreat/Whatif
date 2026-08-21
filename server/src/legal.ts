@@ -9,23 +9,67 @@ export function page(title: string, body: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>${title} · Rivler</title>
+<meta name="description" content="Rivler — ${title}"/>
+<meta name="robots" content="index,follow"/>
 <style>
-  body{background:#000;color:#cfcfd4;font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0}
-  main{max-width:720px;margin:0 auto;padding:48px 24px 96px}
-  h1{color:#fff;font-size:28px;letter-spacing:-0.5px}
-  .mark{color:#fff;font-weight:800;font-size:22px;margin-bottom:32px}
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  body{background:#0A0714;color:#cfcfd4;font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0}
+  header{border-bottom:1px solid #1e1830;padding:20px 24px;position:sticky;top:0;
+    background:rgba(10,7,20,.92);backdrop-filter:blur(12px)}
+  .wrap{max-width:760px;margin:0 auto}
+  .mark{color:#fff;font-weight:800;font-size:21px;letter-spacing:.5px;text-decoration:none;display:inline-block}
   .mark span{color:#A36BFF}
+  nav{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px}
+  nav a{color:#9E9EA8;text-decoration:none;font-size:13.5px;font-weight:600;
+    padding:6px 13px;border:1px solid #241d38;border-radius:99px;white-space:nowrap}
+  nav a:hover{color:#fff;border-color:#3b2f5c}
+  nav a.on{color:#fff;background:#A36BFF;border-color:#A36BFF}
+  main{max-width:760px;margin:0 auto;padding:40px 24px 90px}
+  h1{color:#fff;font-size:30px;letter-spacing:-0.5px;margin:0 0 8px}
+  .sub{color:#6f6f7d;font-size:13.5px;margin:0 0 34px}
+  .body{font-size:15.5px}
   a{color:#A36BFF}
-</style></head><body><main>
-<div class="mark"><span>R</span>ivler</div>
+  footer{border-top:1px solid #1e1830;color:#6f6f7d;font-size:13px;
+    max-width:760px;margin:0 auto;padding:26px 24px 60px}
+  @media(max-width:520px){h1{font-size:25px}main{padding:28px 18px 70px}}
+</style></head><body>
+<header><div class="wrap">
+  <a class="mark" href="/legal"><span>R</span>ivler</a>
+  <nav>
+    <a href="/privacy"${title === 'Privacy Policy' ? ' class="on"' : ''}>Privacy</a>
+    <a href="/terms"${title === 'Terms of Service' ? ' class="on"' : ''}>Terms</a>
+    <a href="/rules"${title === 'House Rules' ? ' class="on"' : ''}>House Rules</a>
+    <a href="/delete-account"${title.startsWith('Delete') ? ' class="on"' : ''}>Delete account</a>
+    <a href="mailto:m2mb@info.com">Contact</a>
+  </nav>
+</div></header>
+<main>
 <h1>${title}</h1>
-<p>${esc}</p>
-</main></body></html>`;
+<p class="sub">Rivler · questions any time at <a href="mailto:m2mb@info.com">m2mb@info.com</a></p>
+<div class="body">${esc}</div>
+</main>
+<footer>© Rivler. <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> ·
+<a href="/rules">House Rules</a> · <a href="/delete-account">Delete your account</a></footer>
+</body></html>`;
+}
+
+/// The index every store form can point at when it wants "a support URL"
+/// rather than one specific document.
+export function legalIndex(): string {
+  return page('Legal &amp; Safety',
+    'Everything about how Rivler handles your data, what the rules are, and how ' +
+    'to delete your account — in plain language.\n\n' +
+    'PRIVACY POLICY — what we collect, why, how long we keep it, and every choice you have.\n' +
+    'TERMS OF SERVICE — the agreement between you and Rivler, including subscriptions.\n' +
+    'HOUSE RULES — the four rules that keep the place good.\n' +
+    'DELETE YOUR ACCOUNT — how to remove your account and data, with or without the app.\n\n' +
+    'Use the links at the top of this page. Anything unclear: m2mb@info.com.');
 }
 
 export const privacy = `PRIVACY POLICY
 Rivler — live social video
-Effective date: 11 August 2026 · Version 4.1
+Effective date: 21 August 2026 · Version 4.2
 
 This Privacy Policy explains what Rivler ("Rivler", "we", "us", "our") collects, why we collect it, how long we keep it, who we share it with, and every choice you have. Please read it carefully — by using Rivler you agree to the practices described here. Capitalised terms not defined here have the meanings given in our Terms of Service. This policy is also available at any time from Settings → Privacy Policy inside the app.
 
@@ -47,7 +91,9 @@ Rivler pairs people into live video rooms with games, lets you browse who is onl
 Rivler requires an account: Sign in with Apple on iOS, Sign in with Google on Android. There is no guest mode — a real, verifiable identity is what makes suspensions actually stick, and it is why your friends, messages and profile survive a reinstall. Whichever you use, we receive and store ONLY the anonymous user identifier that provider issues for Rivler — a random string. We do not request, read, or store your name or email address from Apple or from Google.
 
 5. CAMERA AND MICROPHONE — NEVER RECORDED
-WE DO NOT RECORD, STORE, OR ANALYSE YOUR VIDEO OR AUDIO. When a room ends, the stream ends. There is no archive, no server-side capture, no face or voice analysis, and no use of your video or audio to train AI systems. In most one-to-one rooms your video travels directly between the two phones and never touches our servers at all; in group rooms and when a direct connection isn't possible, it is relayed in real time by our video provider without being recorded. This is the foundation of Rivler and it does not change.
+WE DO NOT RECORD OR STORE YOUR VIDEO OR AUDIO. When a room ends, the stream ends. There is no archive, no server-side capture, no face or voice recognition, and no use of your video or audio to train AI systems.
+
+One honest exception, and it is a SAFETY CHECK, not a recording: every few seconds the app takes a single still frame of the OTHER person's video on your phone, shrinks it to a thumbnail, and sends it to be checked for nudity and other content that breaks our rules. If it fails that check, their video is covered on your screen straight away. The frame is examined and discarded in the same moment — it is never written to disk, never stored, never attached to your account, never seen by a person, and never used to train anything. Nothing is kept, which is why we can still say your rooms are not recorded. Audio is never analysed at all. Section 15 names the processor that performs this check. In most one-to-one rooms your video travels directly between the two phones and never touches our servers at all; in group rooms and when a direct connection isn't possible, it is relayed in real time by our video provider without being recorded. This is the foundation of Rivler and it does not change.
 
 6. MESSAGES AND MEDIA YOU SEND
 When you and another person become friends, you can message each other. To deliver messages across devices and sessions, we store on our servers:
@@ -80,7 +126,7 @@ Like every online service, our servers momentarily see your IP address and conne
 We also generate a random identifier for your device and store it in your phone's secure keychain. It is a random string — it contains nothing about you, is not your advertising identifier, and is never shared with anyone. Its only job is safety: it is what stops someone who has been suspended from deleting the app, reinstalling it, and walking straight back in. It is linked to the accounts that have signed in on this device, and to any suspension applied to it.
 
 12. WHAT WE DO NOT DO
-• We do not record rooms — no video, no audio, no transcripts of live rooms
+• We do not record rooms — no video, no audio, no transcripts of live rooms (the safety check in section 5 keeps nothing)
 • We do not request your contacts or address book
 • We do not collect GPS or precise location
 • We do not use cookies, web tracking, or advertising identifiers
@@ -99,6 +145,13 @@ your handle, your bio, and messages — and blocks the worst of it outright,
 before it is ever stored or shown to anyone. This is automated pattern
 matching, not a person, and it runs on every relevant upload, not only after
 a complaint. See section 15 for the processor that performs this scan.
+
+The same filter also runs on live video, as described in section 5: a still
+frame every few seconds, checked and discarded, so a camera that goes where
+it should not is covered on the other person's screen within seconds rather
+than after somebody files a report. Repeated failures file a report on their
+own. You can always choose to view a covered camera anyway — the check is
+automated and occasionally wrong, so it never gets the final word.
 
 12b. WHEN A HUMAN MAY SEE SOMETHING
 We would rather over-explain this than let "never recorded" be read as more
@@ -144,7 +197,7 @@ We share personal data only with the processors that make the service run, each 
 • LiveKit — real-time video relay for group rooms and fallback connections (no recording)
 • Railway — server hosting
 • Supabase — our database host
-• OpenAI — automated content-safety screening of photos and text at the moment you submit them (section 12a); used for moderation only, on that single request, never to train any model
+• OpenAI — automated content-safety screening of photos, text, and the live-video safety frames described in section 5, at the moment they are submitted (section 12a); used for moderation only, on that single request, never stored by us, and never used to train any model
 • Google Firebase — analytics and push delivery
 • Apple — Sign in with Apple and push delivery
 • Google — Sign in with Google
@@ -188,7 +241,7 @@ Questions, requests, complaints: m2mb@info.com. We read everything.`;
 
 export const terms = `TERMS OF SERVICE & END USER LICENCE AGREEMENT
 Rivler — live social video
-Effective date: 11 August 2026 · Version 4.1
+Effective date: 21 August 2026 · Version 4.2
 
 These Terms are a binding contract between you and Rivler ("Rivler", "we", "us"). They incorporate our Privacy Policy and House Rules by reference. By creating an account, ticking the boxes at sign-in, or using Rivler in any way, you agree to all of them; if you do not agree, do not use the service. If we publish additional rules for specific features ("Additional Terms"), those apply too.
 
@@ -229,7 +282,7 @@ You agree that you will NOT, in any room, message, profile, or other content:
 We may investigate any of the above and take any action we consider appropriate, including removing content, suspending or permanently terminating accounts, and reporting to law enforcement.
 
 6. MODERATION
-Before anything is even shown to anyone, an automated filter screens photos and text you submit — profile photos, chat photos, your handle and bio, and messages — for content that breaks these Terms, and blocks the worst of it outright at the moment you try to send it.
+Before anything is even shown to anyone, an automated filter screens photos and text you submit — profile photos, chat photos, your handle and bio, and messages — for content that breaks these Terms, and blocks the worst of it outright at the moment you try to send it. The same filter watches live video: a still frame is checked every few seconds and immediately discarded, and a camera that breaks these Terms is covered on the other person's screen within seconds. Repeated failures are reported automatically and may end your access.
 
 Reporting is also one tap away in every room, chat and profile, and asks what kind of problem it is — child safety, nudity or sexual content, harassment or hate, violence or threats, impersonation, or something else. Blocks are instant and permanent: a blocked person can never be matched with you again.
 
@@ -301,7 +354,7 @@ Four rules. They keep this place good.
 Everyone here is an adult. No exceptions, no "almost".
 
 2. BE DECENT ON CAMERA
-No nudity. No harassment, hate, or threats. No violence, weapons, or drugs. Instant, permanent ban.
+No nudity. No harassment, hate, or threats. No violence, weapons, or drugs. Cameras are automatically checked and a camera that breaks this gets covered on the other person's screen within seconds. Instant, permanent ban.
 
 3. NEVER RECORD ANYONE
 We never record rooms — that's a promise. You don't record them either. No screenshots, no screen-capture, no sharing anyone's face without consent.

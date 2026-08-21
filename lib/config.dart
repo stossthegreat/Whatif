@@ -27,8 +27,14 @@ class AppConfig {
   /// hides the Google button entirely, so an unconfigured build can never
   /// show a dead button. Set in Codemagic with:
   ///   --dart-define=GOOGLE_SERVER_CLIENT_ID=xxxx.apps.googleusercontent.com
-  static const String googleServerClientId =
-      String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID', defaultValue: '');
+  /// Defaults to the real WEB client id from the rivler-3064b project. This
+  /// is NOT a secret — it ships inside google-services.json in every Android
+  /// build by design — and defaulting it means one less thing to get wrong in
+  /// CI. The dart-define still overrides it for a different environment.
+  static const String googleServerClientId = String.fromEnvironment(
+    'GOOGLE_SERVER_CLIENT_ID',
+    defaultValue: '245988086284-hpdj8nk9pt5as7hpquetrd39bdsarss5.apps.googleusercontent.com',
+  );
 
   /// The iOS OAuth client id. Google Sign-In on iOS ALSO needs native config
   /// the Dart layer can't supply — a GIDClientID and a matching reversed-id
@@ -37,8 +43,10 @@ class AppConfig {
   /// appears once this is set, and setting it is the same moment you add the
   /// plist entries. Android needs none of this.
   ///   --dart-define=GOOGLE_IOS_CLIENT_ID=xxxx.apps.googleusercontent.com
-  static const String googleIosClientId =
-      String.fromEnvironment('GOOGLE_IOS_CLIENT_ID', defaultValue: '');
+  static const String googleIosClientId = String.fromEnvironment(
+    'GOOGLE_IOS_CLIENT_ID',
+    defaultValue: '245988086284-1118vejf3c4igo4idrg43olfqtet1p6h.apps.googleusercontent.com',
+  );
 
   /// Google sign-in is offerable at all: the server can verify the token
   /// (server client id) AND, on iOS only, the native side is configured too.

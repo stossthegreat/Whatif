@@ -1,6 +1,10 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../core/haptics.dart';
+import '../core/nsfw_guard.dart';
 import '../models/person.dart';
 import '../theme/tokens.dart';
+import 'glass.dart';
 
 /// A person's tile. In production this is their live video; here it's an elegant
 /// "presence" surface — a cool light pooled on near-black, a specular edge, a
@@ -54,16 +58,40 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
   late final AnimationController _pop =
       AnimationController(vsync: this, duration: M.slow);
 
+  /// The boundary the safety scanner captures from. Only the REMOTE video is
+  /// watched — scanning your own camera would be checking the one person who
+  /// already knows what they're doing.
+  final GlobalKey _frameKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
     Future<void>.delayed(widget.popDelay, () {
       if (mounted) _pop.forward();
     });
+    _maybeWatch();
+  }
+
+  @override
+  void didUpdateWidget(PresenceTile old) {
+    super.didUpdateWidget(old);
+    // a new person in the tile means the previous verdict is meaningless
+    if (old.person.id != widget.person.id) {
+      NsfwGuard.instance.stop();
+      _maybeWatch();
+    } else if (old.videoChild == null && widget.videoChild != null) {
+      _maybeWatch(); // their camera just came up
+    }
+  }
+
+  void _maybeWatch() {
+    if (widget.videoChild == null) return;
+    NsfwGuard.instance.watch(_frameKey, autoReport: widget.onReport);
   }
 
   @override
   void dispose() {
+    NsfwGuard.instance.stop();
     _pop.dispose();
     super.dispose();
   }
@@ -97,8 +125,11 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // live video (if any) else the pooled-light placeholder
-              widget.videoChild ??
+              // live video (if any) else the pooled-light placeholder.
+              // RepaintBoundary is what makes the frame capturable at all.
+              if (widget.videoChild != null)
+                RepaintBoundary(key: _frameKey, child: widget.videoChild!)
+              else
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: RadialGradient(
@@ -109,6 +140,22 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
                       ),
                     ),
                   ),
+              // THE COVER. Sits over the video and under the handle, so a
+              // blurred person is still identifiable enough to report. Blur
+              // plus an opaque wash: a heavy blur alone can still leave a
+              // recognisable shape, and the point is that nobody has to see it.
+              if (widget.videoChild != null)
+                ValueListenableBuilder<bool>(
+                  valueListenable: NsfwGuard.instance.blurred,
+                  builder: (context, on, _) => IgnorePointer(
+                    ignoring: !on,
+                    child: AnimatedOpacity(
+                      opacity: on ? 1 : 0,
+                      duration: const Duration(milliseconds: 160),
+                      child: on ? _NsfwCover(onReport: widget.onReport) : const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
               // bottom legibility scrim so the handle always reads over video
               const Positioned(
                 left: 0, right: 0, bottom: 0, height: 56,
@@ -239,6 +286,84 @@ class _SaveHeart extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+
+/// What you see instead of someone who has gone too far. Deliberately calm:
+/// this is a shield, not an accusation, and the classifier is occasionally
+/// wrong — so there is always a way back to the video.
+class _NsfwCover extends StatelessWidget {
+  const _NsfwCover({this.onReport});
+  final VoidCallback? onReport;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+        child: Container(
+          color: const Color(0xE6120C1C),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('🫣', style: TextStyle(fontSize: 40)),
+              const SizedBox(height: 14),
+              Text('Camera hidden',
+                  textAlign: TextAlign.center, style: T.display(20)),
+              const SizedBox(height: 8),
+              Text(
+                'We covered this because it looks like it breaks the rules.',
+                textAlign: TextAlign.center,
+                style: T.body.copyWith(fontSize: 13.5, height: 1.4, color: C.tx2),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (onReport != null)
+                    Press(
+                      onTap: () { Buzz.commit(); onReport!(); },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                        decoration: BoxDecoration(
+                          color: C.live,
+                          borderRadius: BorderRadius.circular(R.chip),
+                        ),
+                        child: Text('Report',
+                            style: T.body.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14)),
+                      ),
+                    ),
+                  const SizedBox(width: 10),
+                  // the classifier gets it wrong sometimes; never trap anyone
+                  // behind a machine's guess
+                  Press(
+                    haptic: false,
+                    onTap: () { Buzz.tick(); NsfwGuard.instance.showAnyway(); },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                      decoration: BoxDecoration(
+                        color: C.glass2,
+                        borderRadius: BorderRadius.circular(R.chip),
+                        border: Border.all(color: C.hair2),
+                      ),
+                      child: Text('Show anyway',
+                          style: T.body.copyWith(
+                              color: C.tx2, fontWeight: FontWeight.w700, fontSize: 14)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

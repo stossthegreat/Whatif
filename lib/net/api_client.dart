@@ -60,6 +60,34 @@ class Api {
   }
 
   /// URL for a media id — loadable by Image.network / audioplayers directly.
+  /// Send ONE downscaled video frame for a safety check. Returns true only
+  /// when the server positively says it's flagged — every other outcome
+  /// (no key, timeout, error, unparsable) is false, because a scan that
+  /// can't run must never blur an innocent person's face.
+  ///
+  /// Short timeout on purpose: this runs on a 3s cadence, so a request that
+  /// hasn't answered in 6s is already stale and worth abandoning.
+  static Future<bool> moderateFrame(Uint8List png) async {
+    if (!ready) return false;
+    try {
+      final r = await http
+          .post(
+            Uri.parse('$_base/api/moderate-frame'),
+            headers: {
+              'Content-Type': 'image/png',
+              'Authorization': 'Bearer $_token',
+            },
+            body: png,
+          )
+          .timeout(const Duration(seconds: 6));
+      if (r.statusCode != 200) return false;
+      final j = jsonDecode(r.body) as Map<String, dynamic>;
+      return j['flagged'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static String mediaUrl(int id) => '$_base/api/media/$id?tk=${Uri.encodeComponent(_token)}';
 
   /// GIF search via the server's Tenor proxy.

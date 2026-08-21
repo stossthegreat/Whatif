@@ -1075,6 +1075,7 @@ app.get('/health', (_req, res) => res.json({
   livekit: LIVEKIT_URL.length > 0,
 }));
 // public legal pages — these URLs go in App Store Connect / Play Console
+app.get('/legal', (_req, res) => res.type('html').send(legal.legalIndex()));
 app.get('/privacy', (_req, res) => res.type('html').send(legal.page('Privacy Policy', legal.privacy)));
 app.get('/terms', (_req, res) => res.type('html').send(legal.page('Terms of Service', legal.terms)));
 app.get('/rules', (_req, res) => res.type('html').send(legal.page('House Rules', legal.rules)));

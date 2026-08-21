@@ -38,6 +38,19 @@
 				<string>rivlr</string>
 			</array>
 		</dict>
+		<!-- Google Sign-In callback. This is the REVERSED_CLIENT_ID from
+		     GoogleService-Info.plist and it is not optional: Safari hands the
+		     completed sign-in back to the app through this scheme, so without
+		     it the Google sheet opens, the user signs in, and nothing ever
+		     returns. Must stay in lockstep with GOOGLE_IOS_CLIENT_ID. -->
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.rivler.app.google</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.245988086284-1118vejf3c4igo4idrg43olfqtet1p6h</string>
+			</array>
+		</dict>
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
