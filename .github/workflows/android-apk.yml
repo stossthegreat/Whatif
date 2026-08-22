@@ -95,17 +95,30 @@ jobs:
       - name: 🔍 Verify Flutter setup
         run: flutter doctor -v
 
-      - name: 🔑 Report signing
-        # Nothing to set up — the upload key is in the repo. This just says
-        # which key the APK will carry, so a debug-signed test build is never
-        # a surprise. The AAB workflow is the one that stops without it,
-        # because Play rejects debug signing.
+      - name: 🔑 Signing
+        # Nothing to set up — the upload key is in the repo. Same credentials
+        # and same $GITHUB_ENV hand-off as the AAB workflow, so a test APK
+        # carries the key that actually ships. Unlike the AAB workflow this
+        # does not stop when the keystore is absent: a debug-signed APK still
+        # installs on a phone, which is all this artifact is for.
         run: |
-          if [ -f android/app/upload-keystore.jks ] && ! grep -q 'REPLACE_ME' android/app/build.gradle.kts; then
-            echo "Release-signed with the upload key from the repo."
+          KS=android/app/upload-keystore.jks
+
+          # Same three values as the top of android-aab.yml — keep them in step.
+          KEY_ALIAS=REPLACE_ME
+          STORE_PASSWORD=REPLACE_ME
+          KEY_PASSWORD=REPLACE_ME
+
+          if [ -f "$KS" ] && [ "$KEY_ALIAS" != "REPLACE_ME" ]; then
+            echo "KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
+            echo "STORE_PASSWORD=$STORE_PASSWORD" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=$KEY_PASSWORD" >> $GITHUB_ENV
+            echo "Release-signed with the upload key from the repo:"
+            keytool -list -v -keystore "$KS" -alias "$KEY_ALIAS" \
+              -storepass "$STORE_PASSWORD" | grep -E "SHA1:|SHA256:"
           else
             echo "Debug-signed — installs on a phone, never valid for Play."
-            echo "One-time setup is at the top of android/app/build.gradle.kts."
+            echo "Needs $KS committed, and the three credential lines above set."
           fi
 
       - name: 🧪 Run Flutter tests

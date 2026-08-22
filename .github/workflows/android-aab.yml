@@ -45,47 +45,72 @@ jobs:
         run: |
           set -e
           KS=android/app/upload-keystore.jks
-          GRADLE=android/app/build.gradle.kts
 
-          if [ ! -f "$KS" ]; then
-            echo "::error::$KS is missing, so this build could only be debug-signed and Play would reject it with 'signed in debug mode'."
-            echo "Copy Rivler's upload keystore to $KS and commit it."
-            echo "Full one-time setup is at the top of $GRADLE."
-            exit 1
-          fi
+          # The keystore's own credentials. They live HERE, in the workflow,
+          # and are handed to Gradle through $GITHUB_ENV further down — the
+          # same way the other Rivler app repos do it. android/app/
+          # build.gradle.kts reads KEY_ALIAS / KEY_PASSWORD / STORE_PASSWORD
+          # from the environment before anything else, so this is the only
+          # place they need to exist.
+          #
+          # Set these three to whatever the keystore at $KS actually uses, or
+          # keytool below fails with "keystore password was incorrect".
+          KEY_ALIAS=REPLACE_ME
+          STORE_PASSWORD=REPLACE_ME
+          KEY_PASSWORD=REPLACE_ME
 
-          if grep -q 'REPLACE_ME' "$GRADLE"; then
-            echo "::error::$GRADLE still has its REPLACE_ME placeholders."
-            echo "Set keyAliasValue, keyPasswordValue and storePasswordValue to the keystore's real values, then commit."
-            echo "To read them off the keystore: keytool -list -v -keystore $KS"
-            exit 1
-          fi
-
-          ALIAS=$(grep '^val keyAliasValue' "$GRADLE" | sed 's/.*?: "\(.*\)".*/\1/')
-          STOREPASS=$(grep '^val storePasswordValue' "$GRADLE" | sed 's/.*?: "\(.*\)".*/\1/')
-
-          # Rivler's UPLOAD key as registered with Play Console. If the keystore
-          # in the repo does not produce these, Play answers the upload with
-          # "Your Android App Bundle is signed with the wrong key" — so it is
-          # worth two seconds here rather than a wasted upload.
+          # Rivler's fingerprints as recorded against Play Console.
           EXPECT_SHA1="FA:D0:02:93:84:20:93:CB:12:9D:2D:FD:75:4B:DC:BF:13:FF:07:F9"
           EXPECT_SHA256="52:43:75:AF:A8:4F:4A:1A:08:05:7A:09:67:8F:54:88:5F:53:DB:F1:AE:D3:50:41:98:DA:63:BF:5B:4E:A1:CC"
 
-          DUMP=$(keytool -list -v -keystore "$KS" -alias "$ALIAS" -storepass "$STOREPASS")
-          ACTUAL_SHA1=$(echo "$DUMP"   | grep -m1 'SHA1:'   | sed 's/.*SHA1: *//')
-          ACTUAL_SHA256=$(echo "$DUMP" | grep -m1 'SHA256:' | sed 's/.*SHA256: *//')
+          echo "================================================================"
+          echo " EXPECTED FINGERPRINTS (registered with Play Console for Rivler)"
+          echo "================================================================"
+          echo "         SHA1: $EXPECT_SHA1"
+          echo "         SHA256: $EXPECT_SHA256"
+          echo "================================================================"
+          echo ""
 
-          echo "expected SHA1:   $EXPECT_SHA1"
-          echo "actual   SHA1:   $ACTUAL_SHA1"
-          echo "expected SHA256: $EXPECT_SHA256"
-          echo "actual   SHA256: $ACTUAL_SHA256"
+          if [ ! -f "$KS" ]; then
+            echo "::error::$KS is missing, so this build could only be debug-signed and Play would reject it with 'signed in debug mode'."
+            echo "Put Rivler's upload keystore at $KS and commit it."
+            echo "android/.gitignore already whitelists that exact path."
+            exit 1
+          fi
 
-          # A warning, not a failure. If the expected values above turn out to
-          # be the APP SIGNING key (the one Google holds) rather than the
-          # upload key, a mismatch here is normal and must not block the build.
-          # Play is the authority; this is an early heads-up, not a gate.
+          if [ "$KEY_ALIAS" = "REPLACE_ME" ]; then
+            echo "::error::The three credential lines at the top of this workflow are still REPLACE_ME."
+            echo "Set KEY_ALIAS, STORE_PASSWORD and KEY_PASSWORD to the values $KS actually uses."
+            echo "To read the alias off it: keytool -list -v -keystore $KS"
+            exit 1
+          fi
+
+          echo "Using keystore from repo: $KS"
+          ls -l "$KS"
+          echo ""
+          echo "Actual fingerprints from keystore:"
+          keytool -list -v -keystore "$KS" -alias "$KEY_ALIAS" \
+            -storepass "$STORE_PASSWORD" -keypass "$KEY_PASSWORD" \
+            | grep -E "SHA1:|SHA256:"
+
+          # Hand the credentials to Gradle. android/app/build.gradle.kts reads
+          # KEY_ALIAS / KEY_PASSWORD / STORE_PASSWORD from the environment
+          # before anything else, so they live here in the workflow and the
+          # Gradle file keeps its placeholders.
+          echo "KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
+          echo "STORE_PASSWORD=$STORE_PASSWORD" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=$KEY_PASSWORD" >> $GITHUB_ENV
+
+          ACTUAL_SHA1=$(keytool -list -v -keystore "$KS" -alias "$KEY_ALIAS" \
+            -storepass "$STORE_PASSWORD" -keypass "$KEY_PASSWORD" \
+            | grep -m1 'SHA1:' | sed 's/.*SHA1: *//')
+
+          # A warning, not a gate. If the expected values above turn out to be
+          # the APP SIGNING key — the one Google holds under Play App Signing —
+          # rather than the upload key, a mismatch here is normal and must not
+          # block the build. Play is the authority; this is an early heads-up.
           if [ "$ACTUAL_SHA1" != "$EXPECT_SHA1" ]; then
-            echo "::warning::Keystore does NOT match the upload key recorded in this workflow. If Rivler is already on Play under a different upload key, this bundle will be rejected. Check Play Console > Test and release > App integrity > App signing."
+            echo "::warning::Keystore does NOT match the fingerprint recorded above. If Rivler is already on Play under a different upload key, this bundle will be rejected. Check Play Console > Test and release > App integrity > App signing."
           else
             echo "Fingerprints match the recorded upload key."
           fi
