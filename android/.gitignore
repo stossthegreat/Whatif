@@ -12,3 +12,11 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Whitelist the upload key the android-aab workflow expects at
+# app/upload-keystore.jks, the same way the other Rivler app repos do it.
+# This line is the whole reason the keystore can live in the repo — Flutter's
+# default ignore above blocks it, and the rule in the root .gitignore cannot
+# override a rule in a nested one. Its alias and passwords are at the top of
+# app/build.gradle.kts, and the workflow prints its fingerprints on every run.
+!app/upload-keystore.jks
