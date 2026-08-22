@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import '../core/analytics.dart';
@@ -20,12 +22,15 @@ import 'legal_screen.dart';
 ///   • a plain-English auto-renewal statement
 ///
 /// Prices are never hardcoded. Whatever the store says is what shows, in the
-/// viewer's own currency, and a price change needs no new build.
+/// viewer's own currency, and a price change needs no new build. The only
+/// exception is a build with no RevenueCat key at all, which falls back to
+/// [RcCfg]'s display hints purely so the layout is reviewable on a device.
 class PlusScreen extends StatefulWidget {
   const PlusScreen({super.key, this.reason});
 
-  /// What the user was trying to do — makes the pitch specific instead of
-  /// a generic "go premium".
+  /// What the user was trying to do. This is a SUBLINE, never the headline —
+  /// it arrives as free prose from a dozen call sites, and rendering prose at
+  /// display size produced a five-line headline that ate the whole screen.
   final String? reason;
 
   static Future<void> push(BuildContext context, {String? reason}) {
@@ -40,10 +45,15 @@ class PlusScreen extends StatefulWidget {
   State<PlusScreen> createState() => _PlusScreenState();
 }
 
+enum _Plan { weekly, monthly }
+
 class _PlusScreenState extends State<PlusScreen> {
   bool _busy = false;
   List<Package> _packages = const [];
-  Package? _pick;
+
+  /// Which card is lit. Held as a plain enum, not a Package, so the two cards
+  /// still select correctly in a build with no store behind them.
+  _Plan _plan = _Plan.monthly; // the better value per day, and the higher LTV
 
   @override
   void initState() {
@@ -54,24 +64,63 @@ class _PlusScreenState extends State<PlusScreen> {
   Future<void> _load() async {
     await Plus.instance.refresh();
     if (!mounted) return;
-    setState(() {
-      _packages = Plus.instance.packages;
-      // default to MONTHLY: it's the better value per day and the higher
-      // LTV, and defaulting to the cheapest sticker price trains everyone
-      // into the weekly plan
-      _pick = _monthly ?? _weekly ?? (_packages.isEmpty ? null : _packages.first);
-    });
+    setState(() => _packages = Plus.instance.packages);
   }
 
-  Package? get _weekly => _packages
-      .where((p) => p.packageType == PackageType.weekly)
+  Package? _pkg(PackageType t) => _packages
+      .where((p) => p.packageType == t)
       .cast<Package?>()
       .firstWhere((_) => true, orElse: () => null);
 
-  Package? get _monthly => _packages
-      .where((p) => p.packageType == PackageType.monthly)
-      .cast<Package?>()
-      .firstWhere((_) => true, orElse: () => null);
+  Package? get _weekly => _pkg(PackageType.weekly);
+  Package? get _monthly => _pkg(PackageType.monthly);
+  Package? get _picked => _plan == _Plan.weekly ? _weekly : _monthly;
+
+  /// What each card shows. Store price when we have it, [RcCfg] hint when the
+  /// SDK is dormant, an em dash while the offering is still loading.
+  String _priceOf(_Plan p) {
+    final pkg = p == _Plan.weekly ? _weekly : _monthly;
+    if (pkg != null) return pkg.storeProduct.priceString;
+    if (!RcCfg.configured) {
+      return p == _Plan.weekly ? RcCfg.weeklyPriceHint : RcCfg.monthlyPriceHint;
+    }
+    return '—';
+  }
+
+  double? _valueOf(_Plan p) {
+    final pkg = p == _Plan.weekly ? _weekly : _monthly;
+    if (pkg != null) return pkg.storeProduct.price;
+    if (!RcCfg.configured) {
+      return p == _Plan.weekly
+          ? RcCfg.weeklyPriceHintValue
+          : RcCfg.monthlyPriceHintValue;
+    }
+    return null;
+  }
+
+  /// How much cheaper a month of monthly is than a month of weekly.
+  ///
+  /// Computed from the live prices, never hardcoded: the two products can be
+  /// repriced independently in either store, and a badge claiming a discount
+  /// that the checkout then contradicts is the kind of thing that gets a
+  /// build rejected. A month is 52/12 weeks, not 4 — using 4 overstates the
+  /// saving by about seven points.
+  int? get _savePct {
+    final w = _valueOf(_Plan.weekly);
+    final m = _valueOf(_Plan.monthly);
+    if (w == null || m == null || w <= 0 || m <= 0) return null;
+    final weeklyPerMonth = w * 52 / 12;
+    final pct = (1 - m / weeklyPerMonth) * 100;
+    // below ~5% it isn't a selling point, it's noise
+    return pct >= 5 ? pct.round() : null;
+  }
+
+  /// The single compliance line under the button, for the SELECTED plan.
+  String get _renewalLine {
+    final price = _priceOf(_plan);
+    final per = _plan == _Plan.weekly ? 'week' : 'month';
+    return '$price/$per · Auto-renews until cancelled';
+  }
 
   void _toast(String s) {
     if (!mounted) return;
@@ -83,7 +132,7 @@ class _PlusScreenState extends State<PlusScreen> {
   }
 
   Future<void> _buy() async {
-    final p = _pick;
+    final p = _picked;
     if (_busy || p == null) return;
     setState(() => _busy = true);
     final r = await Plus.instance.buy(p);
@@ -128,7 +177,20 @@ class _PlusScreenState extends State<PlusScreen> {
   @override
   Widget build(BuildContext context) {
     final r = Responsive.of(context);
+    final mq = MediaQuery.of(context);
     final s = AppSession.instance;
+    final save = _savePct;
+
+    // Both cards are ONE number wide and ONE number tall, and it is the same
+    // number for each — there is no code path where they differ. Square on any
+    // normal phone; on a short one the height cap wins and they shrink
+    // together, which is the only way a fixed square can stay on a screen that
+    // never scrolls.
+    final usable = mq.size.width - r.gutter * 2;
+    final side = math.min((usable - 14) / 2, mq.size.height * 0.185);
+
+    final canBuy = !_busy && _picked != null && !s.plus;
+
     return Scaffold(
       backgroundColor: C.char,
       body: Container(
@@ -136,14 +198,11 @@ class _PlusScreenState extends State<PlusScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            stops: const [0.0, 0.5],
-            colors: [C.purpleDeep.withOpacity(0.40), Colors.transparent],
+            stops: const [0.0, 0.55],
+            colors: [C.purpleDeep.withOpacity(0.42), Colors.transparent],
           ),
         ),
         child: SafeArea(
-          // ONE screen. Spacers absorb the difference between a small phone
-          // and a tall one instead of pushing the CTA off the bottom, which
-          // is the single most expensive thing a paywall can do.
           child: Padding(
             padding: EdgeInsets.fromLTRB(r.gutter, 4, r.gutter, 10),
             child: Column(
@@ -154,77 +213,96 @@ class _PlusScreenState extends State<PlusScreen> {
                   child: Press(
                     onTap: () => Navigator.of(context).maybePop(),
                     child: Container(
-                      width: 34, height: 34,
+                      width: 34,
+                      height: 34,
                       decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: C.glass2,
                           border: Border.all(color: C.hair)),
-                      child: const Icon(Icons.close_rounded, size: 18, color: C.tx2),
+                      child: const Icon(Icons.close_rounded,
+                          size: 18, color: C.tx2),
                     ),
                   ),
                 ),
 
                 const Spacer(flex: 2),
 
-                // ---- ONE hero outcome ------------------------------------
+                // ---- the headline. Fixed, never the caller's prose. -------
                 ShaderMask(
                   shaderCallback: (b) => C.gradSigHot.createShader(b),
                   blendMode: BlendMode.srcIn,
-                  child: Text('RIVLER PRO',
-                      textAlign: TextAlign.center,
-                      style: T.eyebrow.copyWith(fontSize: 12, letterSpacing: 3)),
+                  child: Text(
+                    'Unlock unlimited\nRivler Pro',
+                    textAlign: TextAlign.center,
+                    style: T.display(34 * r.scale).copyWith(height: 1.08),
+                  ),
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  widget.reason == null
-                      ? 'Every party game,\nunlocked.'
-                      : widget.reason!,
-                  textAlign: TextAlign.center,
-                  style: T.display(30 * r.scale).copyWith(height: 1.12),
-                ),
+                if (widget.reason != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.reason!,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: T.sub.copyWith(fontSize: 14.5, color: C.tx2),
+                  ),
+                ],
 
                 const Spacer(flex: 2),
 
-                // ---- FOUR points -----------------------------------------
-                const _Point(emoji: '🍾', text: 'Spin the Bottle, Truth or Dare, Never Have I Ever — 17 games'),
-                const _Point(emoji: '🎰', text: 'Roulette — someone new, back to back'),
-                const _Point(emoji: '👥', text: 'Your own room your friends drop into'),
-                const _Point(emoji: '♀︎♂︎', text: 'Choose who you meet'),
+                // ---- four points, at a size you can actually read ---------
+                const _Point(
+                    emoji: '🍾',
+                    text: 'Spin the Bottle, Truth or Dare, Never Have I '
+                        'Ever — 17 games'),
+                const _Point(
+                    emoji: '🎰', text: 'Roulette — someone new, back to back'),
+                const _Point(
+                    emoji: '👥', text: 'Your own room your friends drop into'),
+                // An icon, not the ♀︎♂︎ pair: two emoji in a 26pt slot wrapped
+                // the second one onto its own line on a real device.
+                const _Point(
+                    icon: Icons.wc_rounded, text: 'Choose who you meet'),
 
-                const Spacer(flex: 3),
+                const Spacer(flex: 2),
 
-                // ---- TWO identical boxes ---------------------------------
-                if (!RcCfg.configured)
-                  _Notice('Subscriptions aren’t switched on in this build yet.')
-                else if (_packages.isEmpty)
-                  _Notice('Loading plans…')
-                else
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _PlanBox(
-                          label: 'WEEKLY',
-                          package: _weekly,
-                          per: 'per week',
-                          selected: _pick != null && _pick == _weekly,
-                          onTap: () { Buzz.tick(); setState(() => _pick = _weekly); },
-                        ),
+                // ---- two cards, identical by construction ------------------
+                Row(
+                  children: [
+                    Expanded(
+                      child: _PlanCard(
+                        side: side,
+                        name: 'WEEKLY',
+                        price: _priceOf(_Plan.weekly),
+                        per: 'per week',
+                        badge: 'STANDARD',
+                        selected: _plan == _Plan.weekly,
+                        onTap: () {
+                          Buzz.tick();
+                          setState(() => _plan = _Plan.weekly);
+                        },
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _PlanBox(
-                          label: 'MONTHLY',
-                          package: _monthly,
-                          per: 'per month',
-                          best: true,
-                          selected: _pick != null && _pick == _monthly,
-                          onTap: () { Buzz.tick(); setState(() => _pick = _monthly); },
-                        ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _PlanCard(
+                        side: side,
+                        name: 'MONTHLY',
+                        price: _priceOf(_Plan.monthly),
+                        per: 'per month',
+                        badge: save == null ? 'BEST VALUE' : 'SAVE $save%',
+                        hot: true,
+                        selected: _plan == _Plan.monthly,
+                        onTap: () {
+                          Buzz.tick();
+                          setState(() => _plan = _Plan.monthly);
+                        },
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
+                ),
 
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
 
                 // ---- the CTA, always on screen ---------------------------
                 if (s.plus)
@@ -232,30 +310,41 @@ class _PlusScreenState extends State<PlusScreen> {
                 else
                   Cta(
                     label: _busy ? 'One moment…' : 'Start Rivler Pro',
-                    onTap: _busy || _pick == null ? null : _buy,
+                    onTap: canBuy ? _buy : null,
                   ),
 
                 const SizedBox(height: 10),
 
-                // Apple requires the renewal terms in plain language, visible
-                // BEFORE purchase — not buried in the Terms document.
-                Text(
-                  'Renews automatically until cancelled. Cancel any time in your '
-                  'account settings, at least 24 hours before the period ends.',
-                  textAlign: TextAlign.center,
-                  style: T.tiny.copyWith(fontSize: 10.5, height: 1.35, color: C.tx3),
-                ),
-                const SizedBox(height: 8),
+                // Price, period and renewal in one line, for the plan that is
+                // actually selected. Apple needs all three visible before
+                // purchase; the full cancellation terms live one tap away in
+                // Terms, which is where a wall of small print belongs.
+                if (!s.plus)
+                  Text(
+                    RcCfg.configured
+                        ? _renewalLine
+                        : 'Subscriptions aren’t live in this build yet',
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    style: T.tiny.copyWith(fontSize: 12, color: C.tx2),
+                  ),
+
+                const SizedBox(height: 12),
+
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     _Mini('Restore', _busy ? null : _restore),
                     _dot(),
-                    _Mini('Terms', () => LegalScreen.push(
-                        context, 'Terms of Service', LegalCopy.terms)),
+                    _Mini(
+                        'Terms',
+                        () => LegalScreen.push(
+                            context, 'Terms of Service', LegalCopy.terms)),
                     _dot(),
-                    _Mini('Privacy', () => LegalScreen.push(
-                        context, 'Privacy Policy', LegalCopy.privacy)),
+                    _Mini(
+                        'Privacy',
+                        () => LegalScreen.push(
+                            context, 'Privacy Policy', LegalCopy.privacy)),
                   ],
                 ),
               ],
@@ -266,26 +355,46 @@ class _PlusScreenState extends State<PlusScreen> {
     );
   }
 
-  Widget _dot() => Text('  ·  ', style: T.tiny.copyWith(color: C.tx3, fontSize: 11));
+  Widget _dot() =>
+      Text('  ·  ', style: T.tiny.copyWith(color: C.tx3, fontSize: 11));
 }
 
 /// One selling point — one line, one glance. Four of these is the whole pitch.
+/// Takes an emoji or an icon; the leading slot is a fixed width either way so
+/// the four rows line up on the left edge of their text.
 class _Point extends StatelessWidget {
-  const _Point({required this.emoji, required this.text});
-  final String emoji;
+  const _Point({this.emoji, this.icon, required this.text})
+      : assert(emoji != null || icon != null);
+  final String? emoji;
+  final IconData? icon;
   final String text;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 11),
+      padding: const EdgeInsets.only(bottom: 13),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 26, child: Text(emoji, style: const TextStyle(fontSize: 15))),
+          SizedBox(
+            width: 32,
+            child: icon != null
+                ? Icon(icon, size: 19, color: C.sig)
+                : Text(emoji!,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: const TextStyle(fontSize: 17)),
+          ),
           Expanded(
-            child: Text(text,
-                style: T.body.copyWith(fontSize: 14, height: 1.3, color: Colors.white)),
+            child: Text(
+              text,
+              style: T.body.copyWith(
+                fontSize: 16.5,
+                height: 1.28,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
           ),
         ],
       ),
@@ -293,77 +402,101 @@ class _Point extends StatelessWidget {
   }
 }
 
-/// One plan. Both boxes are the SAME shape and size on purpose — a paywall
-/// where one option is visually bigger reads as a trick, and price is the
-/// only thing that should be doing the persuading.
-class _PlanBox extends StatelessWidget {
-  const _PlanBox({
-    required this.label,
-    required this.package,
+/// One plan.
+///
+/// [side] is passed in rather than measured so both cards are literally the
+/// same box: same width, same height, same radius, same padding. A paywall
+/// where one option is drawn bigger than the other reads as a thumb on the
+/// scale, and the price is the only thing here that should be persuading
+/// anyone. The only difference between the two is what the badge says.
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({
+    required this.side,
+    required this.name,
+    required this.price,
     required this.per,
+    required this.badge,
     required this.selected,
     required this.onTap,
-    this.best = false,
+    this.hot = false,
   });
-  final String label;
-  final Package? package;
+
+  final double side;
+  final String name;
+  final String price;
   final String per;
+  final String badge;
+
+  /// Whether the badge is the acid "this is the deal" pill or the quiet one.
+  final bool hot;
   final bool selected;
-  final bool best;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    // price and period come STRAIGHT from the store, in the viewer's currency
-    final price = package?.storeProduct.priceString ?? '—';
     return Press(
       haptic: false,
-      onTap: package == null ? () {} : onTap,
+      onTap: onTap,
       child: AnimatedContainer(
         duration: M.quick,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        height: side,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         decoration: BoxDecoration(
           color: selected ? null : C.char2,
           gradient: selected ? C.gradSig : null,
           borderRadius: BorderRadius.circular(R.card),
           border: Border.all(
-              color: selected ? const Color(0x59FFFFFF) : C.hair2,
-              width: selected ? 1.5 : 1),
-          boxShadow: selected ? C.glowSig(blur: 18, spread: -8) : null,
+              color: selected ? const Color(0x66FFFFFF) : C.hair2,
+              width: selected ? 1.6 : 1),
+          boxShadow: selected ? C.glowSig(blur: 22, spread: -8) : null,
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(label,
-                style: T.eyebrow.copyWith(
-                    fontSize: 9.5,
-                    letterSpacing: 1.6,
-                    color: selected ? Colors.white70 : C.tx3)),
-            const SizedBox(height: 6),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+              decoration: BoxDecoration(
+                color: hot
+                    ? C.acid
+                    : (selected ? const Color(0x2EFFFFFF) : C.glass2),
+                borderRadius: BorderRadius.circular(R.chip),
+              ),
+              child: Text(
+                badge,
+                maxLines: 1,
+                style: T.tiny.copyWith(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                  color: hot
+                      ? Colors.black
+                      : (selected ? Colors.white : C.tx3),
+                ),
+              ),
+            ),
+            const Spacer(),
             FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(price, maxLines: 1, style: T.display(22)),
+              child: Text(price, maxLines: 1, style: T.display(30)),
             ),
-            const SizedBox(height: 2),
-            Text(per,
-                style: T.tiny.copyWith(
-                    fontSize: 11, color: selected ? Colors.white70 : C.tx3)),
-            if (best) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: selected ? Colors.white : C.acid,
-                  borderRadius: BorderRadius.circular(R.chip),
-                ),
-                child: Text('BEST VALUE',
-                    style: T.tiny.copyWith(
-                        color: Colors.black,
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.4)),
-              ),
-            ],
+            const SizedBox(height: 4),
+            Text(
+              per,
+              maxLines: 1,
+              style: T.tiny.copyWith(
+                  fontSize: 12,
+                  color: selected ? Colors.white70 : C.tx3),
+            ),
+            const Spacer(),
+            Text(
+              name,
+              maxLines: 1,
+              style: T.eyebrow.copyWith(
+                  fontSize: 9.5,
+                  letterSpacing: 1.8,
+                  color: selected ? Colors.white70 : C.tx3),
+            ),
           ],
         ),
       ),
@@ -385,7 +518,7 @@ class _Mini extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Text(label,
             style: T.tiny.copyWith(
-                color: C.tx2, fontSize: 11.5, fontWeight: FontWeight.w800)),
+                color: C.tx2, fontSize: 12, fontWeight: FontWeight.w800)),
       ),
     );
   }
