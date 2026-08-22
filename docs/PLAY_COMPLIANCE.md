@@ -65,14 +65,26 @@ purely a function of our plugin versions. The one that mattered:
 - we were pinned at `livekit_client 2.3.1+hotfix.1` → `flutter_webrtc 0.12.2`
   → **not aligned**, and no Gradle setting could have fixed it
 
-Now pinned to `livekit_client 2.6.4` (`flutter_webrtc 1.3.0`). That pin has a
-ceiling as well as a floor: `livekit_client >= 2.6.5` requires `meta ^1.17.0`,
-while `flutter_test` from the Flutter 3.35.6 SDK pins `meta 1.16.0`, so pub
-cannot solve above 2.6.4. **Raising the LiveKit pin means raising the Flutter
-version in `.github/workflows/*.yml` in the same commit.** CI caught this, not
-a local build — which is most of the argument for having CI.
+Now pinned to `livekit_client 2.11.0` (`flutter_webrtc 1.6.0`), **and that pin
+is coupled to the Flutter version.** Two constraints point in opposite
+directions:
 
-Because `flutter_webrtc 1.3.0`'s Android library is compiled against API 36,
+| | |
+|---|---|
+| `livekit_client <= 2.6.4` | does not compile on Dart 3.10+ — its own `local.dart` reads `publishOptions.videoCodec` on a nullable that can no longer be promoted across an `await` |
+| `livekit_client >= 2.6.5` | requires `meta ^1.17.0`, and `flutter_test` pins meta from the SDK: 1.16.0 up to Flutter 3.35.x, 1.17.0 from **3.38.0** |
+
+There is no LiveKit version that works on Flutter 3.35.6, so the resolution is
+to move up: **2.11.0 on Flutter ≥ 3.38.0**. The workflows pin 3.38.0 and
+Codemagic already uses newer. Each half of this was found by a build machine
+rather than by reading — the meta conflict by GitHub Actions, the Dart
+promotion error by the Codemagic iOS archive.
+
+3.38.0 is also a ceiling for now: Flutter 3.47 hard-errors below Gradle 8.14 /
+AGP 8.11.1 / Kotlin 2.2.20, and this repo is on 8.12 / 8.10.1 / 2.1.0. Moving
+Flutter past 3.44 means moving all three in the same commit.
+
+Because `flutter_webrtc 1.6.0`'s Android library is compiled against API 36,
 `compileSdk` had to go to 36 as well, which in turn required AGP 8.10.1 (the
 first line supporting API 36). Gradle stayed on 8.12 — above AGP 8.10's 8.11.1
 minimum.

@@ -52,11 +52,20 @@ jobs:
         # PINNED, not 'stable'. An unpinned channel silently upgrades the SDK
         # underneath us, and Flutter ships its own Gradle plugin via
         # includeBuild — so a Flutter bump can break the Android build on a
-        # commit that changed nothing. 3.35.6 carries Dart 3.9.2, which
-        # satisfies pubspec's `sdk: ^3.8.0`, and NDK r27, which is 16 KB-capable.
+        # commit that changed nothing.
+        #
+        # 3.38.0 specifically, and it is a FLOOR, not a preference:
+        #   • flutter_test pins meta 1.16.0 up to 3.35.x and 1.17.0 from
+        #     3.38.0, and livekit_client 2.11.0 needs ^1.17.0. Below this,
+        #     pub cannot solve. See the pin comment in pubspec.yaml.
+        #   • it is also a CEILING for now: Flutter 3.47 hard-errors below
+        #     Gradle 8.14 / AGP 8.11.1 / Kotlin 2.2.20, and this repo is on
+        #     8.12 / 8.10.1 / 2.1.0. Raising Flutter past 3.44 means raising
+        #     all three in the same commit.
+        # Dart 3.10 satisfies pubspec's `sdk: ^3.8.0`; NDK r27+ keeps 16 KB.
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.35.6'
+          flutter-version: '3.38.0'
           channel: stable
           cache: true
 
@@ -85,6 +94,34 @@ jobs:
 
       - name: 🔍 Verify Flutter setup
         run: flutter doctor -v
+
+      - name: 🔑 Prepare signing (optional here)
+        # Optional on purpose: an APK from this workflow is for putting on a
+        # phone, and Gradle's debug-keystore fallback installs fine. If the
+        # secrets happen to be set, the APK gets signed with the real upload
+        # key so it matches what actually ships. The AAB workflow is the one
+        # that hard-fails without them, because Play rejects debug signing.
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_B64:-}" ] || [ -z "${KEY_ALIAS:-}" ]; then
+            echo "No signing secrets — this APK will be debug-signed (installs on a phone, never valid for Play)."
+            exit 0
+          fi
+          KS="$GITHUB_WORKSPACE/android/app/upload-keystore.jks"
+          echo "$KEYSTORE_B64" | base64 -d > "$KS"
+          umask 077
+          {
+            echo "storeFile=$KS"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "storePassword=$STORE_PASSWORD"
+          } > "$GITHUB_WORKSPACE/android/key.properties"
+          echo "Signing with the upload key."
 
       - name: 🧪 Run Flutter tests
         # test/widget_test.dart is a boot smoke test. Non-blocking: a camera- and
