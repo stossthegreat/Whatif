@@ -115,8 +115,19 @@ class _PlusScreenState extends State<PlusScreen> {
     return pct >= 5 ? pct.round() : null;
   }
 
-  /// The single compliance line under the button, for the SELECTED plan.
-  String get _renewalLine {
+  /// The single line under the button. Three states, and each one has to be
+  /// true — a paywall that claims a price it cannot charge is the fastest way
+  /// to fail review.
+  ///
+  ///  • no SDK key compiled in  -> say so plainly
+  ///  • key present, no offering back -> the key, the offering id or the store
+  ///    is wrong. Do NOT print "—/month · auto-renews", which reads like a
+  ///    rendering glitch and hides a real misconfiguration.
+  ///  • offering loaded -> price, period and renewal for the SELECTED plan,
+  ///    which is everything Apple requires visible before purchase.
+  String get _footerLine {
+    if (!RcCfg.configured) return 'Subscriptions aren’t live in this build yet';
+    if (_packages.isEmpty) return 'Plans couldn’t load — check your connection';
     final price = _priceOf(_plan);
     final per = _plan == _Plan.weekly ? 'week' : 'month';
     return '$price/$per · Auto-renews until cancelled';
@@ -321,9 +332,7 @@ class _PlusScreenState extends State<PlusScreen> {
                 // Terms, which is where a wall of small print belongs.
                 if (!s.plus)
                   Text(
-                    RcCfg.configured
-                        ? _renewalLine
-                        : 'Subscriptions aren’t live in this build yet',
+                    _footerLine,
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     style: T.tiny.copyWith(fontSize: 12, color: C.tx2),
