@@ -44,13 +44,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Android signing — NEVER commit these. This repo is public, and a committed
-# keystore plus its passwords lets anyone sign builds as Rivler.
-# CI writes both of these at build time from Actions secrets; see the header
-# of .github/workflows/android-aab.yml.
-/android/key.properties
-*.jks
-*.keystore
+# NOTE: android/app/upload-keystore.jks is deliberately NOT ignored — the
+# upload key lives in the repo, the same way the other Rivler app repos do it,
+# so a release build needs no dashboard configuration and no CI secrets
+# anywhere. Keep this repo's collaborator list tight, because anyone who can
+# read it can sign builds as Rivler.
 
 # Machine-local SDK paths, written by the Flutter tool and by CI
 /android/local.properties

@@ -1,6 +1,3 @@
-import java.util.Properties
-import java.io.FileInputStream
-
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -8,20 +5,46 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Release signing. Two sources, first match wins:
-//  1. android/key.properties  (local release builds)
-//  2. CM_KEYSTORE_* environment variables (Codemagic's Android code signing)
-// Neither present -> falls back to debug signing so `flutter run --release`
-// still works on a dev machine, but a Play upload will be refused — which is
-// correct: shipping a store build accidentally signed with debug keys is the
-// mistake this file used to allow.
-val keystoreProperties = Properties()
-val keystorePropertiesFile = rootProject.file("key.properties")
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
-}
+// Release signing — the upload key lives IN THE REPO, the same way the other
+// Rivler app repos do it. One committed file plus the three values below.
+// Nothing to configure in any dashboard, no CI secrets, no environment set-up:
+// `flutter build appbundle --release` produces a Play-ready bundle on any
+// machine and in any CI.
+//
+// ── ONE-TIME SETUP, then never again ───────────────────────────────────────
+//
+//  1. Copy Rivler's upload keystore to  android/app/upload-keystore.jks
+//     and commit it. It has to be the SAME key already registered with Play
+//     Console — a different one is refused on upload with "Your Android App
+//     Bundle is signed with the wrong key", and undoing that means asking
+//     Google to reset the upload key, which takes days. If Rivler has never
+//     been uploaded to Play, then any new keystore is fine.
+//
+//  2. Replace the three REPLACE_ME values below with that keystore's real
+//     alias and passwords, and commit. To read them off the keystore:
+//         keytool -list -v -keystore android/app/upload-keystore.jks
+//
+// Until both are done the build falls back to DEBUG signing. The APK still
+// installs on a phone, and the AAB workflow stops early with an explanation
+// rather than spending twenty minutes producing a bundle Play would reject
+// with "You uploaded an APK or Android App Bundle that was signed in debug
+// mode".
+//
+// The env vars are only so CI or Codemagic can override without editing this
+// file; nothing has to set them.
+val keyAliasValue: String = System.getenv("KEY_ALIAS") ?: "REPLACE_ME"
+val keyPasswordValue: String = System.getenv("KEY_PASSWORD") ?: "REPLACE_ME"
+val storePasswordValue: String = System.getenv("STORE_PASSWORD") ?: "REPLACE_ME"
+
+// Resolved relative to android/app, which is where this script lives.
+val repoKeystore = file("upload-keystore.jks")
 val cmKeystorePath: String? = System.getenv("CM_KEYSTORE_PATH")
-val hasReleaseKeys = keystorePropertiesFile.exists() || cmKeystorePath != null
+
+// Both halves required. A filled-in alias with no keystore file, or a keystore
+// with the placeholders still in place, fails at signing time with a far worse
+// error than quietly falling back to debug does.
+val hasRepoKeys = repoKeystore.exists() && keyAliasValue != "REPLACE_ME"
+val hasReleaseKeys = hasRepoKeys || cmKeystorePath != null
 
 android {
     namespace = "com.rivler.app"
@@ -62,11 +85,11 @@ android {
 
     signingConfigs {
         create("release") {
-            if (keystorePropertiesFile.exists()) {
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-                storeFile = file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
+            if (hasRepoKeys) {
+                storeFile = repoKeystore
+                keyAlias = keyAliasValue
+                keyPassword = keyPasswordValue
+                storePassword = storePasswordValue
             } else if (cmKeystorePath != null) {
                 keyAlias = System.getenv("CM_KEY_ALIAS")
                 keyPassword = System.getenv("CM_KEY_PASSWORD")
