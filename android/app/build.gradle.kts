@@ -25,10 +25,10 @@ val hasReleaseKeys = keystorePropertiesFile.exists() || cmKeystorePath != null
 
 android {
     namespace = "com.rivler.app"
-    // Pinned, not inherited: Play requires targeting Android 15 (API 35),
-    // and the 16 KB page-size requirement applies to apps targeting 35+.
-    // Inheriting flutter.targetSdkVersion made compliance depend on whatever
-    // Flutter version the CI box happened to have.
+    // Pinned, not inherited. Inheriting flutter.compileSdkVersion /
+    // flutter.targetSdkVersion made Play compliance depend on whatever Flutter
+    // version the CI box happened to have, which is not a thing to leave to
+    // chance when the deadlines are hard.
     //
     // compileSdk 36 is not optional: livekit_client and flutter_webrtc are
     // compiled against API 36, and AGP hard-fails resolution when an app
@@ -50,7 +50,12 @@ android {
     defaultConfig {
         applicationId = "com.rivler.app"
         minSdk = flutter.minSdkVersion
-        targetSdk = 35
+        // Play requires targeting API 36 for new apps and updates from
+        // 31 Aug 2026. Targeting 36 opts into Android 16's behaviour changes;
+        // the three that touch this app are handled in AndroidManifest.xml
+        // (predictive back, large-screen resizability) and lib/main.dart
+        // (edge-to-edge, already on). See docs/PLAY_COMPLIANCE.md.
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

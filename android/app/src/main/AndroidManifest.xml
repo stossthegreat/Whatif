@@ -11,7 +11,37 @@
     <application
         android:label="Rivler"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:enableOnBackInvokedCallback="true">
+        <!-- PREDICTIVE BACK. Targeting API 36 makes this true by default on
+             Android 16, where onBackPressed stops being called and KEYCODE_BACK
+             stops being dispatched. Declared explicitly so the behaviour is the
+             same on Android 13-15 instead of silently changing with the OS
+             version. Safe here because nothing in this app intercepts the system
+             back event: there is no WillPopScope and no PopScope anywhere in
+             lib/, only Navigator.maybePop() wired to in-app back buttons, which
+             is ordinary route navigation and unaffected. If a screen ever needs
+             to intercept back (an "are you sure?" on a live call, say), it must
+             use PopScope — WillPopScope does not work under predictive back. -->
+
+        <!-- LARGE SCREENS — TEMPORARY OPT-OUT, EXPIRES AT API 37.
+             For apps targeting API 36, Android ignores screenOrientation,
+             resizableActivity, minAspectRatio, maxAspectRatio and
+             setRequestedOrientation() on any display >= sw600dp. Our
+             SystemChrome.setPreferredOrientations([portraitUp]) in main.dart
+             goes through setRequestedOrientation(), so on a tablet or an
+             unfolded foldable this app would rotate and resize freely into
+             layouts that were only ever designed for a portrait phone.
+             This property keeps the old compatibility-mode behaviour while
+             that stays true.
+
+             This is deliberate debt, not an oversight. Google removes the
+             opt-out entirely when we target API 37, so the real fix — layouts
+             that adapt to landscape and to sw600dp+ — has to land before then.
+             Delete this block on the same day that work ships. -->
+        <property
+            android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+            android:value="true" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

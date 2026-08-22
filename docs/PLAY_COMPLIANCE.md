@@ -8,7 +8,7 @@ them at the linked pages before trusting this file, because Google moves them.
 |---|---|---|---|
 | Play Billing Library 8+ | 31 Aug 2026 (ext. 1 Nov 2026) | `pubspec.yaml` → `purchases_flutter` | **Met** (8.3.0) |
 | 16 KB memory page sizes | 1 Feb 2027 | `pubspec.yaml` → `livekit_client`, `android/app/build.gradle.kts` | **Met** — verify per build |
-| Target API level 36 | 31 Aug 2026 (ext. 1 Nov 2026) | `android/app/build.gradle.kts` → `targetSdk` | **Not met — decision needed** |
+| Target API level 36 | 31 Aug 2026 (ext. 1 Nov 2026) | `android/app/build.gradle.kts` → `targetSdk`, `AndroidManifest.xml` | **Met** |
 
 ---
 
@@ -91,26 +91,97 @@ APK instead.
 
 Source: <https://developer.android.com/guide/practices/page-sizes>
 
-## 3. Target API level 36 — open decision
+## 3. Target API level 36
 
 From **31 Aug 2026**, new apps and updates must target API 36 to be submitted
-at all. We are on `targetSdk = 35`.
+at all. `targetSdk = 36` is set.
 
-This was deliberately left alone rather than changed alongside the other two,
-because it is the only one of the three with runtime consequences. Targeting
-36 opts into Android 16's behaviour changes, and the one that bites a
-full-bleed video app is **mandatory edge-to-edge**: an app targeting 36 can no
-longer opt out, so system bars draw over the layout and every screen's padding
-has to be re-checked on a real device. `compileSdk = 36` — already done — has
-no runtime effect on its own; only `targetSdk` does.
+Unlike `compileSdk`, this one changes runtime behaviour, so each Android 16
+change was checked against what the app actually does rather than assumed.
+Three touch us:
 
-So it is a one-line change plus a full visual pass on a device:
+### Edge-to-edge opt-out removed — already fine
 
-```kotlin
-targetSdk = 36
+Android 15 enforced edge-to-edge for apps targeting API 35 but allowed an
+opt-out via `windowOptOutEdgeToEdgeEnforcement`. Targeting 36 disables that
+opt-out. **No change needed here, and the risk was smaller than it looks:** we
+already targeted 35 and never set the opt-out attribute, so edge-to-edge has
+been live in shipping builds all along. `lib/main.dart` asks for it explicitly
+(`SystemUiMode.edgeToEdge`, transparent status and navigation bars).
+
+Insets were audited screen by screen rather than trusted:
+
+- `main_shell.dart` reads `MediaQuery.padding.bottom`, adds it to the 64dp nav
+  bar height, pads the bar by it, and re-injects the total as bottom padding
+  for every tab through a nested `MediaQuery` — so tab content scrolls clear
+  of the bar and the bar clears the gesture pill.
+- Every other top-level screen wraps its body in `SafeArea`.
+- The six onboarding steps that have no `SafeArea` of their own —
+  `gender`, `handle`, `interests`, `language`, `photo`, `safety` — all render
+  inside `OnboardingShell`, which has one.
+
+### Predictive back — enabled explicitly
+
+For apps targeting 36 on Android 16, predictive back animations are on by
+default, `onBackPressed` is no longer called, and `KEYCODE_BACK` is no longer
+dispatched. Apps that intercept the back event break.
+
+This app intercepts nothing: there is no `WillPopScope` and no `PopScope`
+anywhere in `lib/`, only `Navigator.maybePop()` on in-app back buttons, which
+is ordinary route navigation. So `android:enableOnBackInvokedCallback="true"`
+is declared in the manifest — matching the API 36 default, but stated outright
+so Android 13-15 behave the same way instead of the behaviour flipping with
+the OS version.
+
+**If a screen ever needs to intercept back** — a confirm-before-leaving on a
+live call, for example — it must use `PopScope`. `WillPopScope` does not work
+under predictive back and will silently stop firing.
+
+### Large-screen resizability — opted out, expires at API 37
+
+This is the one with real debt attached.
+
+For apps targeting 36, Android ignores `screenOrientation`,
+`resizableActivity`, `minAspectRatio`, `maxAspectRatio` and
+`setRequestedOrientation()` on any display of sw600dp or larger.
+`lib/main.dart` calls
+`SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp])`, which
+goes through `setRequestedOrientation()` — so on a tablet or an unfolded
+foldable this app would rotate and resize freely into layouts only ever
+designed for a portrait phone.
+
+The manifest therefore declares Google's documented temporary opt-out at the
+application level:
+
+```xml
+<property
+    android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+    android:value="true" />
 ```
 
-Do it before the next Play submission, and budget a session for checking
-insets on Home, the video call screen, Explore, and the paywall.
+That keeps compatibility-mode behaviour on large screens. **It stops working
+when we target API 37.** The real fix is layouts that adapt to landscape and
+to sw600dp+, and it has to land before that bump. Delete the property on the
+day that work ships.
 
-Source: <https://developer.android.com/google/play/requirements/target-sdk>
+### Checked and not applicable
+
+- **Elegant font APIs deprecated** — we never set `elegantTextHeight`; Flutter
+  rasterises its own text.
+- **Safer Intents** — opt-in, and we declare no cross-app intent filters
+  beyond LAUNCHER.
+- **Fixed-rate work scheduling** — no `scheduleAtFixedRate` in the app.
+- **Health permissions, Bluetooth bond, GPU syscall filtering** — unused.
+
+### Worth watching, not yet enforced
+
+**Local Network Permission.** Google is moving LAN access behind a runtime
+permission, currently opt-in, "enforced at a later Android release". Our P2P
+path is exactly the kind of traffic it targets: WebRTC gathers host ICE
+candidates on local network addresses for same-network calls. Nothing to do
+today, but when that permission becomes mandatory, P2P calls between two
+people on the same Wi-Fi will need it — and the fallback needs to stay
+graceful when a user denies it.
+
+Source: <https://developer.android.com/about/versions/16/behavior-changes-16>
+and <https://developer.android.com/google/play/requirements/target-sdk>
