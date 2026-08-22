@@ -65,10 +65,17 @@ purely a function of our plugin versions. The one that mattered:
 - we were pinned at `livekit_client 2.3.1+hotfix.1` → `flutter_webrtc 0.12.2`
   → **not aligned**, and no Gradle setting could have fixed it
 
-Now pinned to `livekit_client 2.11.0` (`flutter_webrtc 1.6.0`). Because that
-SDK is compiled against API 36, `compileSdk` had to go to 36 as well, which in
-turn required AGP 8.10.1 (the first line supporting API 36). Gradle stayed on
-8.12 — above AGP 8.10's 8.11.1 minimum.
+Now pinned to `livekit_client 2.6.4` (`flutter_webrtc 1.3.0`). That pin has a
+ceiling as well as a floor: `livekit_client >= 2.6.5` requires `meta ^1.17.0`,
+while `flutter_test` from the Flutter 3.35.6 SDK pins `meta 1.16.0`, so pub
+cannot solve above 2.6.4. **Raising the LiveKit pin means raising the Flutter
+version in `.github/workflows/*.yml` in the same commit.** CI caught this, not
+a local build — which is most of the argument for having CI.
+
+Because `flutter_webrtc 1.3.0`'s Android library is compiled against API 36,
+`compileSdk` had to go to 36 as well, which in turn required AGP 8.10.1 (the
+first line supporting API 36). Gradle stayed on 8.12 — above AGP 8.10's 8.11.1
+minimum.
 
 **Half two — zip alignment in the APK.** Ours. Shared libraries must be stored
 uncompressed so AGP can align them on a 16384-byte boundary; AGP 8.5.1+ does

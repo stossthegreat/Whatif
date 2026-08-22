@@ -30,7 +30,7 @@ android {
     // version the CI box happened to have, which is not a thing to leave to
     // chance when the deadlines are hard.
     //
-    // compileSdk 36 is not optional: livekit_client and flutter_webrtc are
+    // compileSdk 36 is not optional: flutter_webrtc (via livekit_client) is
     // compiled against API 36, and AGP hard-fails resolution when an app
     // compiles against a lower level than a library it depends on. It is
     // separate from targetSdk — compiling against 36 changes nothing at
