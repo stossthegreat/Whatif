@@ -63,5 +63,18 @@ class RcCfg {
   static const String weeklyProductId = 'rivler_pro_weekly';
   static const String monthlyProductId = 'rivler_pro_monthly';
 
+  /// DISPLAY-ONLY fallback prices, used by the paywall for exactly one
+  /// purpose: so the layout can be reviewed on a device before the SDK keys
+  /// land. The moment [configured] is true these are never read again — the
+  /// paywall shows what the store says, in the viewer's own currency, and a
+  /// price change never needs a new build.
+  ///
+  /// Keep them in step with the products created in App Store Connect and Play
+  /// Console, or a pre-keys build will advertise a price that isn't real.
+  static const String weeklyPriceHint = '£4.99';
+  static const String monthlyPriceHint = '£14.99';
+  static const double weeklyPriceHintValue = 4.99;
+  static const double monthlyPriceHintValue = 14.99;
+
   static bool get configured => appleKey.isNotEmpty || googleKey.isNotEmpty;
 }
