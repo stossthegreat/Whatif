@@ -42,11 +42,11 @@ class RcCfg {
   RcCfg._();
 
   /// App Store public SDK key from RevenueCat → Project → API keys.
-  static const String appleKey = '';
+  static const String appleKey = 'appl_CsDgWBlxPhQjiFdlAOBOAYteYSJ';
 
   /// Google Play public SDK key from the same screen. Android reads this
   /// one; iOS reads [appleKey].
-  static const String googleKey = '';
+  static const String googleKey = 'goog_PrOdrThDTOcqyfDGUQVftZYXtRT';
 
   /// The entitlement identifier configured in RevenueCat. Must match the
   /// server's RC_ENTITLEMENT.
