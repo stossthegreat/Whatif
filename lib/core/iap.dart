@@ -60,11 +60,44 @@ class Plus {
     } catch (_) {/* ignore */}
   }
 
+  /// Why the price list is empty, in words, or null when it isn't.
+  ///
+  /// This used to swallow the exception and leave the paywall showing dashes
+  /// with nothing to go on. Every failure here is a configuration problem with
+  /// a specific cause, and guessing between them costs a build each time.
+  String? lastError;
+
   Future<void> _loadOfferings() async {
     try {
       final offerings = await Purchases.getOfferings();
-      _offering = offerings.current;
-    } catch (_) {
+
+      // `current` is whichever offering is flagged Current in the dashboard —
+      // NOT the one whose identifier happens to be 'default'. An offering that
+      // exists but was never made current leaves this null, which is the most
+      // common reason a correctly-keyed app shows no plans. Fall back to any
+      // offering rather than showing nothing.
+      _offering = offerings.current ??
+          (offerings.all.isNotEmpty ? offerings.all.values.first : null);
+
+      if (offerings.all.isEmpty) {
+        lastError = 'RevenueCat has no offerings for this app';
+      } else if (_offering == null) {
+        lastError = 'No offering is marked Current';
+      } else if (_offering!.availablePackages.isEmpty) {
+        // The offering exists and has packages configured, but the STORE
+        // refused to serve their products. Almost always one of: products not
+        // "Ready to Submit", the Paid Applications Agreement not active, or a
+        // bundle id that doesn't match the app in RevenueCat.
+        lastError = 'Offering "${_offering!.identifier}" — the store returned '
+            'no products for it';
+      } else {
+        lastError = null;
+      }
+    } on PlatformException catch (e) {
+      lastError = e.message ?? 'Store error ${e.code}';
+      _offering = null;
+    } catch (e) {
+      lastError = e.toString();
       _offering = null;
     }
   }

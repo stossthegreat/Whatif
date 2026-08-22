@@ -127,7 +127,12 @@ class _PlusScreenState extends State<PlusScreen> {
   ///    which is everything Apple requires visible before purchase.
   String get _footerLine {
     if (!RcCfg.configured) return 'Subscriptions aren’t live in this build yet';
-    if (_packages.isEmpty) return 'Plans couldn’t load — check your connection';
+    if (_packages.isEmpty) {
+      // The real reason, not "check your connection". Every one of these is a
+      // dashboard or App Store Connect state with a specific fix, and a
+      // generic message costs a build per guess.
+      return Plus.instance.lastError ?? 'Plans couldn’t load';
+    }
     final price = _priceOf(_plan);
     final per = _plan == _Plan.weekly ? 'week' : 'month';
     return '$price/$per · Auto-renews until cancelled';
@@ -334,8 +339,11 @@ class _PlusScreenState extends State<PlusScreen> {
                   Text(
                     _footerLine,
                     textAlign: TextAlign.center,
-                    maxLines: 1,
-                    style: T.tiny.copyWith(fontSize: 12, color: C.tx2),
+                    // Two, not one: the renewal line fits on one, but a
+                    // diagnostic reason clipped at one line is useless.
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: T.tiny.copyWith(fontSize: 12, height: 1.3, color: C.tx2),
                   ),
 
                 const SizedBox(height: 12),

@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- INTERNET is added automatically to debug builds only — without it
          here, the RELEASE build cannot reach the backend at all. -->
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -6,6 +7,20 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+
+    <!-- ADVERTISING ID — removed on purpose.
+         firebase_analytics pulls in play-services-measurement, which merges
+         com.google.android.gms.permission.AD_ID into the manifest whether or
+         not anything uses it. Its presence is what makes Play ask you to fill
+         in the Advertising ID declaration, and it drags the ad identifier into
+         the Data safety form as collected data.
+         Rivler runs no ads and does no install attribution, so it has nothing
+         to declare. Stripping it here means the honest answer to Play's
+         "Does your app use advertising ID?" is simply NO.
+         The cost is Firebase Analytics demographics and interest reporting.
+         If ads or attribution are ever added, delete this line and answer YES. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID"
+        tools:node="remove"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.front" android:required="false"/>
     <application
