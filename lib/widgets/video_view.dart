@@ -12,7 +12,7 @@ import 'package:livekit_client/livekit_client.dart';
 /// correct. A manual Transform on top cancels the mirror and produces the
 /// dreaded "lean left, image goes right". This happened. Never again.
 ///
-/// NOTE: livekit_client is pinned to 2.6.4, where the renderer's fit type is
+/// NOTE: livekit_client is pinned to 2.11.0, where the renderer's fit type is
 /// the SDK's own VideoViewFit enum. Up to 2.4.x it was flutter_webrtc's
 /// RTCVideoViewObjectFit — the P2P renderer below still takes that one, so both
 /// types are in scope here and they are NOT interchangeable. If the pin moves,

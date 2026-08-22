@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.0+98
+version: 1.2.0+99
 
 environment:
   sdk: ^3.8.0
@@ -45,30 +45,38 @@ dependencies:
   # Live group video (LiveKit). Only used in live mode (RIVLR_BACKEND set);
   # in simulated builds the code is present but never invoked.
   #
-  # PINNED EXACTLY, and the window is narrow — it has a floor AND a ceiling.
+  # PINNED EXACTLY, and this pin is COUPLED TO THE FLUTTER VERSION. Three
+  # constraints define it, and two of them were found the hard way — one by
+  # GitHub Actions, one by the Codemagic iOS build:
   #
-  # FLOOR (16 KB page sizes). LiveKit pulls in flutter_webrtc, which ships
-  # libwebrtc.so. flutter_webrtc only started building it with 16 KB ELF
-  # alignment in 1.2.0, and livekit_client picks that up from 2.5.1 onward.
-  # Older than that makes the app non-compliant with Google Play's 16 KB
-  # requirement no matter what the Gradle config says, because the
-  # misalignment is baked into the prebuilt .so. Never drop below 2.5.1.
+  #  1. 16 KB page sizes (Google Play, blocks updates from 1 Feb 2027).
+  #     LiveKit pulls in flutter_webrtc, which ships libwebrtc.so.
+  #     flutter_webrtc only builds it with 16 KB ELF alignment from 1.2.0, and
+  #     livekit_client picks that up from 2.5.1. Older is non-compliant no
+  #     matter what Gradle says — the misalignment is inside the prebuilt .so.
   #
-  # CEILING (meta). livekit_client >= 2.6.5 requires meta ^1.17.0, but
-  # flutter_test from the Flutter 3.35.6 SDK pins meta 1.16.0, so pub cannot
-  # solve. CI found this, not a local build. Raising this pin therefore means
-  # raising the Flutter version in .github/workflows/*.yml at the same time —
-  # they move together or not at all.
+  #  2. livekit_client <= 2.6.4 DOES NOT COMPILE on Dart 3.10+. Its own
+  #     local.dart reads `publishOptions.videoCodec` on a nullable that can no
+  #     longer be promoted across an await. Fine on Flutter 3.35.6, a hard
+  #     kernel_snapshot failure on the newer Flutter that Codemagic uses.
   #
-  # 2.6.4 is the top of that window: flutter_webrtc 1.3.0, meta ^1.8.0.
+  #  3. livekit_client >= 2.6.5 requires meta ^1.17.0, and flutter_test pins
+  #     meta from the SDK: 1.16.0 up to Flutter 3.35.x, 1.17.0 from 3.38.0.
+  #     So anything at or above 2.6.5 needs FLUTTER >= 3.38.0.
   #
-  # ALSO: flutter_webrtc 1.3.0's Android library is compiled against API 36,
+  # (2) and (3) point opposite ways and leave no version that works on
+  # Flutter 3.35.6. The only resolution is to move up: 2.11.0 on Flutter
+  # 3.38.0 or newer, which is what .github/workflows/*.yml now pin and what
+  # Codemagic already uses. Dropping the Flutter version below 3.38.0 breaks
+  # this pin; there is no safe LiveKit version below it.
+  #
+  # ALSO: flutter_webrtc 1.6.0's Android library is compiled against API 36,
   # which is why android/app/build.gradle.kts must stay at compileSdk 36.
   #
   # widgets/video_view.dart depends on the renderer's fit API, which is
   # VideoViewFit from 2.5 onward (it was flutter_webrtc's RTCVideoViewObjectFit
   # up to 2.4.x). Re-read that file before moving this pin.
-  livekit_client: 2.6.4
+  livekit_client: 2.11.0
 
   # Keep the screen awake while finding / live (a live video app must never sleep).
   wakelock_plus: ^1.2.5
