@@ -95,33 +95,18 @@ jobs:
       - name: 🔍 Verify Flutter setup
         run: flutter doctor -v
 
-      - name: 🔑 Prepare signing (optional here)
-        # Optional on purpose: an APK from this workflow is for putting on a
-        # phone, and Gradle's debug-keystore fallback installs fine. If the
-        # secrets happen to be set, the APK gets signed with the real upload
-        # key so it matches what actually ships. The AAB workflow is the one
-        # that hard-fails without them, because Play rejects debug signing.
-        env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      - name: 🔑 Report signing
+        # Nothing to set up — the upload key is in the repo. This just says
+        # which key the APK will carry, so a debug-signed test build is never
+        # a surprise. The AAB workflow is the one that stops without it,
+        # because Play rejects debug signing.
         run: |
-          set -euo pipefail
-          if [ -z "${KEYSTORE_B64:-}" ] || [ -z "${KEY_ALIAS:-}" ]; then
-            echo "No signing secrets — this APK will be debug-signed (installs on a phone, never valid for Play)."
-            exit 0
+          if [ -f android/app/upload-keystore.jks ] && ! grep -q 'REPLACE_ME' android/app/build.gradle.kts; then
+            echo "Release-signed with the upload key from the repo."
+          else
+            echo "Debug-signed — installs on a phone, never valid for Play."
+            echo "One-time setup is at the top of android/app/build.gradle.kts."
           fi
-          KS="$GITHUB_WORKSPACE/android/app/upload-keystore.jks"
-          echo "$KEYSTORE_B64" | base64 -d > "$KS"
-          umask 077
-          {
-            echo "storeFile=$KS"
-            echo "keyAlias=$KEY_ALIAS"
-            echo "keyPassword=$KEY_PASSWORD"
-            echo "storePassword=$STORE_PASSWORD"
-          } > "$GITHUB_WORKSPACE/android/key.properties"
-          echo "Signing with the upload key."
 
       - name: 🧪 Run Flutter tests
         # test/widget_test.dart is a boot smoke test. Non-blocking: a camera- and

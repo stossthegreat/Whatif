@@ -1,41 +1,26 @@
 name: Build Flutter AAB — Play release
 
-# The Play Store artifact. Produces android app bundle signed with your upload
-# key, ready to drop into Play Console.
+# The Play Store artifact. Produces the release-signed Android App Bundle you
+# upload to Play Console.
 #
-# ── ONE-TIME SETUP (GitHub → Settings → Secrets and variables → Actions) ──
+# NOTHING TO CONFIGURE. No GitHub secrets, no dashboards. The upload key lives
+# in the repo, same as the other Rivler app repos:
 #
-# Unlike the other repos, this app does NOT keep its keystore in git. That is
-# deliberate: a committed .jks plus passwords in a YAML file means anyone who
-# can read the repo can sign builds as you, and this repo is public. The
-# signing material lives in Actions secrets instead, and Gradle already knows
-# how to read it — android/app/build.gradle.kts looks for android/key.properties,
-# which the "Prepare signing" step below writes at build time and never commits.
+#     android/app/upload-keystore.jks   the key
+#     android/app/build.gradle.kts      its alias and passwords, at the top
 #
-# Add these four secrets:
+# Commit those and every build from here on is signed correctly, on any machine
+# and in any CI. The one-time setup is written out at the top of
+# android/app/build.gradle.kts.
 #
-#   ANDROID_KEYSTORE_BASE64    base64 of your upload-keystore.jks
-#   ANDROID_KEY_ALIAS          the alias inside that keystore
-#   ANDROID_KEY_PASSWORD       the key password
-#   ANDROID_KEYSTORE_PASSWORD  the store password
-#
-# To produce the first one on a Mac:
-#     base64 -i upload-keystore.jks | pbcopy
-# on Linux:
-#     base64 -w0 upload-keystore.jks
-#
-# With no secrets set this workflow FAILS FAST and builds nothing. That is on
-# purpose. Gradle's fallback when no release key is configured is the debug
-# keystore, and Play rejects a debug-signed upload with "You uploaded an APK or
-# Android App Bundle that was signed in debug mode" — but only after you have
-# waited for the build and done the upload. Failing at step three with the list
-# of missing secrets is cheaper than failing in Play Console.
-#
-# If you just want something installable on a phone right now, run the
-# Android APK Build workflow, which needs no secrets.
+# WHY THE BUILD MIGHT SAY "DEBUG MODE": when Gradle can't find a release key it
+# falls back to the debug keystore, and Play answers that upload with "You
+# uploaded an APK or Android App Bundle that was signed in debug mode." So this
+# workflow checks for the keystore in step one and stops there if it's missing,
+# rather than spending twenty minutes making a bundle you can't upload.
 #
 # NOTE ON BUILD NUMBERS: this does NOT pass --build-number. Play requires a
-# strictly increasing versionCode, and pubspec.yaml is already at +97, so a run
+# strictly increasing versionCode and pubspec.yaml is already at +99, so a run
 # number would move it backwards. Bump `version:` in pubspec.yaml per release.
 
 on:
@@ -54,6 +39,33 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify keystore
+        # First step on purpose — everything after this is expensive.
+        run: |
+          set -e
+          KS=android/app/upload-keystore.jks
+          GRADLE=android/app/build.gradle.kts
+
+          if [ ! -f "$KS" ]; then
+            echo "::error::$KS is missing, so this build could only be debug-signed and Play would reject it with 'signed in debug mode'."
+            echo "Copy Rivler's upload keystore to $KS and commit it."
+            echo "Full one-time setup is at the top of $GRADLE."
+            exit 1
+          fi
+
+          if grep -q 'REPLACE_ME' "$GRADLE"; then
+            echo "::error::$GRADLE still has its REPLACE_ME placeholders."
+            echo "Set keyAliasValue, keyPasswordValue and storePasswordValue to the keystore's real values, then commit."
+            echo "To read them off the keystore: keytool -list -v -keystore $KS"
+            exit 1
+          fi
+
+          ALIAS=$(grep '^val keyAliasValue' "$GRADLE" | sed 's/.*?: "\(.*\)".*/\1/')
+          STOREPASS=$(grep '^val storePasswordValue' "$GRADLE" | sed 's/.*?: "\(.*\)".*/\1/')
+          echo "Keystore fingerprints — these must match Play Console:"
+          keytool -list -v -keystore "$KS" -alias "$ALIAS" \
+            -storepass "$STOREPASS" | grep -E "SHA1:|SHA256:"
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -82,62 +94,6 @@ jobs:
           yes | "$SDKMANAGER" --licenses > /dev/null || true
           "$SDKMANAGER" "platforms;android-36" > /dev/null
 
-      - name: Prepare signing
-        # Writes the keystore and android/key.properties from secrets. Both are
-        # build-time only and neither is ever committed (.gitignore covers them).
-        # Passwords go in through $GITHUB_ENV-free heredocs so they never appear
-        # in a command line that the log could echo.
-        env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-        run: |
-          set -euo pipefail
-          missing=""
-          [ -z "${KEYSTORE_B64:-}"   ] && missing="$missing ANDROID_KEYSTORE_BASE64"
-          [ -z "${KEY_ALIAS:-}"      ] && missing="$missing ANDROID_KEY_ALIAS"
-          [ -z "${KEY_PASSWORD:-}"   ] && missing="$missing ANDROID_KEY_PASSWORD"
-          [ -z "${STORE_PASSWORD:-}" ] && missing="$missing ANDROID_KEYSTORE_PASSWORD"
-
-          # HARD FAIL, deliberately. Gradle's fallback when no release key is
-          # configured is the DEBUG keystore, and Play answers a debug-signed
-          # upload with "You uploaded an APK or Android App Bundle that was
-          # signed in debug mode" — after the whole build and upload. Producing
-          # that artifact at all is worse than not producing one, so this stops
-          # here with the fix instead of handing over a poisoned bundle.
-          if [ -n "$missing" ]; then
-            echo "::error::Cannot produce a Play-ready bundle — missing secret(s):$missing"
-            echo ""
-            echo "Add them under Settings > Secrets and variables > Actions:"
-            echo "  ANDROID_KEYSTORE_BASE64     base64 -w0 upload-keystore.jks   (macOS: base64 -i upload-keystore.jks)"
-            echo "  ANDROID_KEY_ALIAS           the alias inside that keystore"
-            echo "  ANDROID_KEY_PASSWORD        the key password"
-            echo "  ANDROID_KEYSTORE_PASSWORD   the store password"
-            echo ""
-            echo "For an installable-but-not-uploadable build in the meantime,"
-            echo "use the Android APK Build workflow instead."
-            exit 1
-          fi
-          KS="$GITHUB_WORKSPACE/android/app/upload-keystore.jks"
-          echo "$KEYSTORE_B64" | base64 -d > "$KS"
-
-          # storeFile is absolute on purpose: file() inside the :app module
-          # resolves relative paths against android/app, which is easy to get
-          # subtly wrong and produces a confusing "keystore not found".
-          umask 077
-          {
-            echo "storeFile=$KS"
-            echo "keyAlias=$KEY_ALIAS"
-            echo "keyPassword=$KEY_PASSWORD"
-            echo "storePassword=$STORE_PASSWORD"
-          } > "$GITHUB_WORKSPACE/android/key.properties"
-
-          echo "Keystore fingerprints (check these match Play Console):"
-          keytool -list -v -keystore "$KS" -alias "$KEY_ALIAS" \
-            -storepass "$STORE_PASSWORD" -keypass "$KEY_PASSWORD" \
-            | grep -E "SHA1:|SHA256:"
-
       - name: Precache Flutter engine
         run: flutter precache --android --force
 
@@ -150,24 +106,16 @@ jobs:
       - name: Verify 16 KB page size support
         # Fails the build rather than warning. A plugin bump can reintroduce a
         # 4 KB-aligned .so with no other symptom, and Play would reject the
-        # upload — better to find out here. See docs/PLAY_COMPLIANCE.md.
+        # upload. See docs/PLAY_COMPLIANCE.md.
         run: python3 tool/check_16kb.py build/app/outputs/bundle/release/app-release.aab
 
-      - name: Confirm signing
-        # A debug-signed bundle is a wasted Play upload. Say so loudly, in the
-        # run summary, instead of leaving it to be discovered in Play Console.
+      - name: Build summary
         run: |
-          # Belt and braces: the run cannot get here without key.properties,
-          # but a bundle that reaches Play unsigned costs a rejected upload, so
-          # the check is worth the two lines.
-          if [ ! -f android/key.properties ]; then
-            echo "::error::key.properties vanished before the build — the bundle is debug-signed. Not shipping it."
-            exit 1
-          fi
-          echo "Signed with the upload key from Actions secrets." >> $GITHUB_STEP_SUMMARY
+          AAB=build/app/outputs/bundle/release/app-release.aab
+          echo "Signed with the upload key from the repo." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: \`$(grep '^version:' pubspec.yaml | cut -d' ' -f2)\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Size**: $(du -h build/app/outputs/bundle/release/app-release.aab | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Size**: $(du -h $AAB | cut -f1)" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
