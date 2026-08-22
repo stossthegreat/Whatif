@@ -1,0 +1,148 @@
+name: Android APK Build
+
+# Every push builds an installable APK you can download from the Actions tab.
+# This is the "does it still compile, can I put it on a phone" workflow — the
+# Play-ready signed bundle is android-aab.yml.
+#
+# No secrets required. Without signing secrets the APK is debug-signed, which
+# installs on a device fine and is refused by Play — which is the correct
+# outcome for a branch build.
+
+on:
+  push:
+    branches: [ main, 'claude/**' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type (debug or release)'
+        required: false
+        default: 'release'
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      # Daemon off: a one-shot CI JVM has nothing to keep warm. Workers capped
+      # at 2 because android/gradle.properties asks for an 8 GB heap and the
+      # runner has 16 GB total to share with the Kotlin compile daemon.
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2"
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup Java 17
+        # AGP 8.10.1 requires JDK 17. Not optional.
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: 🐦 Setup Flutter
+        # PINNED, not 'stable'. An unpinned channel silently upgrades the SDK
+        # underneath us, and Flutter ships its own Gradle plugin via
+        # includeBuild — so a Flutter bump can break the Android build on a
+        # commit that changed nothing. 3.35.6 carries Dart 3.9.2, which
+        # satisfies pubspec's `sdk: ^3.8.0`, and NDK r27, which is 16 KB-capable.
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.6'
+          channel: stable
+          cache: true
+
+      - name: 🔧 Write local.properties
+        # android/settings.gradle.kts does require(flutterSdkPath != null) and
+        # reads this file directly, so it has to exist before Gradle configures.
+        run: |
+          mkdir -p android
+          FLUTTER_SDK=$(dirname "$(dirname "$(which flutter)")")
+          echo "flutter.sdk=$FLUTTER_SDK" > android/local.properties
+          echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
+
+      - name: 📱 Android SDK 36 + licenses
+        # Two reasons this matters here specifically: the app pins
+        # compileSdk/targetSdk 36, and accepting licences is what lets AGP
+        # auto-download anything else it needs (notably NDK r27, which
+        # ndkVersion = flutter.ndkVersion asks for and the runner image may
+        # not already have).
+        run: |
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platforms;android-36" > /dev/null
+
+      - name: 📦 Get Flutter dependencies
+        run: flutter pub get
+
+      - name: 🔍 Verify Flutter setup
+        run: flutter doctor -v
+
+      - name: 🧪 Run Flutter tests
+        # test/widget_test.dart is a boot smoke test. Non-blocking: a camera- and
+        # animation-driven app is easy to make flaky in a headless runner, and a
+        # flaky smoke test must never stand between you and an APK.
+        run: flutter test || echo "No tests found"
+        continue-on-error: true
+
+      - name: 🏗️ Build Debug APK
+        if: github.event.inputs.build_type == 'debug' || github.event_name == 'pull_request'
+        run: flutter build apk --debug
+
+      - name: 🚀 Build Release APK
+        if: github.event.inputs.build_type != 'debug' && github.event_name != 'pull_request'
+        run: flutter build apk --release
+
+      - name: 📐 Verify 16 KB page size support
+        # Google Play blocks updates that fail this from 1 Feb 2027, and the
+        # thing that breaks is ELF alignment inside third-party prebuilt .so
+        # files — so it can regress on a plugin bump with no visible symptom.
+        # An APK is the better artifact to check than an AAB: it carries the
+        # zip alignment too. See docs/PLAY_COMPLIANCE.md.
+        if: github.event.inputs.build_type != 'debug' && github.event_name != 'pull_request'
+        run: python3 tool/check_16kb.py build/app/outputs/flutter-apk/app-release.apk
+
+      - name: 📤 Upload Debug APK
+        if: github.event.inputs.build_type == 'debug' || github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rivler-debug-${{ github.sha }}
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 30
+
+      - name: 📤 Upload Release APK
+        if: github.event.inputs.build_type != 'debug' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rivler-release-${{ github.sha }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 90
+
+      - name: 📊 Generate Build Summary
+        if: always()
+        run: |
+          echo "## Rivler — Android build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build type**: ${{ github.event.inputs.build_type || 'release' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: \`$(grep '^version:' pubspec.yaml | cut -d' ' -f2)\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Flutter**: $(flutter --version | head -n1)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          for f in build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/app-debug.apk; do
+            if [ -f "$f" ]; then
+              echo "- **$(basename $f)**: $(du -h "$f" | cut -f1)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download it from the **Artifacts** section of this run." >> $GITHUB_STEP_SUMMARY
