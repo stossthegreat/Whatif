@@ -46,7 +46,7 @@ class RcCfg {
 
   /// Google Play public SDK key from the same screen. Android reads this
   /// one; iOS reads [appleKey].
-  static const String googleKey = '';
+  static const String googleKey = 'goog_PrOdrThDTOcqyfDGUQVftZYXtRT';
 
   /// The entitlement identifier configured in RevenueCat. Must match the
   /// server's RC_ENTITLEMENT.
