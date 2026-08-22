@@ -55,9 +55,9 @@ jobs:
           #
           # Set these three to whatever the keystore at $KS actually uses, or
           # keytool below fails with "keystore password was incorrect".
-          KEY_ALIAS=REPLACE_ME
-          STORE_PASSWORD=REPLACE_ME
-          KEY_PASSWORD=REPLACE_ME
+          KEY_ALIAS=rivler
+          STORE_PASSWORD=rivler123
+          KEY_PASSWORD=rivler123
 
           # Rivler's fingerprints as recorded against Play Console.
           EXPECT_SHA1="FA:D0:02:93:84:20:93:CB:12:9D:2D:FD:75:4B:DC:BF:13:FF:07:F9"

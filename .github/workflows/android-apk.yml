@@ -105,9 +105,9 @@ jobs:
           KS=android/app/upload-keystore.jks
 
           # Same three values as the top of android-aab.yml — keep them in step.
-          KEY_ALIAS=REPLACE_ME
-          STORE_PASSWORD=REPLACE_ME
-          KEY_PASSWORD=REPLACE_ME
+          KEY_ALIAS=rivler
+          STORE_PASSWORD=rivler123
+          KEY_PASSWORD=rivler123
 
           if [ -f "$KS" ] && [ "$KEY_ALIAS" != "REPLACE_ME" ]; then
             echo "KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
