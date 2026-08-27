@@ -128,6 +128,25 @@ class Api {
       return false;
     }
   }
+
+  /// Take your own profile photo down. The server clears both pointers, drops
+  /// the blobs, and tells everyone looking at Explore.
+  ///
+  /// App Store guideline 1.2 asks for a way to remove your own content from
+  /// the feed immediately, and a profile photo is the only thing this app
+  /// publishes to one.
+  static Future<bool> removePhoto() async {
+    if (!ready) return false;
+    try {
+      final r = await http.post(
+        Uri.parse('$_base/api/media/photo/remove'),
+        headers: {'authorization': 'Bearer $_token'},
+      ).timeout(const Duration(seconds: 15));
+      return r.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 }
 
 class Gif {

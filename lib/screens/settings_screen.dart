@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import '../core/apple_auth.dart';
 import '../core/haptics.dart';
 import '../net/network_client.dart';
@@ -124,7 +125,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _divider(),
                     _link('About Rivler', () => LegalScreen.push(context, 'About', LegalCopy.about)),
                     _divider(),
-                    _info('Contact', 'm2mb@info.com'),
+                    // Guideline 1.2 requires contact information IN THE APP,
+                    // giving users a way to report inappropriate activity.
+                    // A non-interactive label satisfies the letter of that and
+                    // not the intent — a reviewer looking for it needs to be
+                    // able to do something with it, so this copies the address.
+                    _link('Report a problem · m2mb@info.com', () async {
+                      await Clipboard.setData(
+                          const ClipboardData(text: 'm2mb@info.com'));
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: C.char2,
+                        content: Text(
+                          'Email copied — m2mb@info.com. We answer reports '
+                          'within 24 hours.',
+                          style: T.body.copyWith(color: Colors.white),
+                        ),
+                      ));
+                    }),
                   ]),
                   const SizedBox(height: 20),
                   _section('DISCOVERY'),
