@@ -46,9 +46,14 @@ plugins {
 //
 // The env vars are only so CI or Codemagic can override without editing this
 // file; nothing has to set them.
-val keyAliasValue: String = System.getenv("KEY_ALIAS") ?: "REPLACE_ME"
-val keyPasswordValue: String = System.getenv("KEY_PASSWORD") ?: "REPLACE_ME"
-val storePasswordValue: String = System.getenv("STORE_PASSWORD") ?: "REPLACE_ME"
+// Env first (that is how the workflows pass them, via $GITHUB_ENV), falling
+// back to the same literals so a local `flutter build appbundle --release`
+// signs correctly too, with no setup. Same arrangement as the other Rivler
+// app repos. Change these together with the three lines at the top of both
+// workflow files if the keystore is ever replaced.
+val keyAliasValue: String = System.getenv("KEY_ALIAS") ?: "rivler"
+val keyPasswordValue: String = System.getenv("KEY_PASSWORD") ?: "rivler123"
+val storePasswordValue: String = System.getenv("STORE_PASSWORD") ?: "rivler123"
 
 // Resolved relative to android/app, which is where this script lives.
 val repoKeystore = file("upload-keystore.jks")
@@ -59,7 +64,11 @@ val cmKeystorePath: String? = System.getenv("CM_KEYSTORE_PATH")
 // a filled-in password with no keystore file fails the same way. Either gap ->
 // debug signing, which installs on a phone and is refused by Play, and the AAB
 // workflow stops early rather than producing that bundle at all.
-val hasRepoKeys = repoKeystore.exists() && keyAliasValue != "REPLACE_ME"
+// The credentials always resolve now, so the keystore file being present is
+// the only condition. Absent, it falls back to debug signing rather than
+// failing configuration — and the AAB workflow stops at its first step so
+// that fallback can never reach Play.
+val hasRepoKeys = repoKeystore.exists()
 val hasReleaseKeys = hasRepoKeys || cmKeystorePath != null
 
 android {
