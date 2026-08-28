@@ -136,6 +136,23 @@ jobs:
         if: github.event.inputs.build_type != 'debug' && github.event_name != 'pull_request'
         run: flutter build apk --release
 
+      - name: 🔏 Print the APK's actual signing certificate
+        # Reads the signature off the FINISHED artifact, not off the keystore
+        # we hoped was used. Google Sign-In matches package name + signing
+        # SHA-1 against the OAuth client, so when sign-in fails with
+        # DEVELOPER_ERROR / ApiException 10 this is the number to compare
+        # against Firebase — and a debug-signed build shows a throwaway CI key
+        # here that could never be registered.
+        if: github.event.inputs.build_type != 'debug' && github.event_name != 'pull_request'
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          echo "This APK is signed by:"
+          keytool -printcert -jarfile "$APK" | grep -E "Owner:|SHA1:|SHA256:" || true
+          echo ""
+          echo "That SHA1 must be registered in Firebase Console >"
+          echo "Project settings > Android app (com.rivler.app) > Add fingerprint,"
+          echo "or Google Sign-In fails with ApiException 10."
+
       - name: 📐 Verify 16 KB page size support
         # Google Play blocks updates that fail this from 1 Feb 2027, and the
         # thing that breaks is ELF alignment inside third-party prebuilt .so

@@ -100,6 +100,56 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     });
   }
 
+  /// Take the photo down everywhere, now. Confirmed first because it is
+  /// destructive and the blobs are deleted server-side, not just unlinked.
+  Future<void> _removePhoto() async {
+    if (_uploading) return;
+    Buzz.tick();
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: C.char2,
+        title: Text('Remove your photo?',
+            style: T.h3.copyWith(color: Colors.white)),
+        content: Text(
+          'It comes off your profile and Explore straight away, and the file '
+          'is deleted. You can add a new one any time.',
+          style: T.body,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Keep it', style: T.body.copyWith(color: C.tx2)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Remove',
+                style: T.body.copyWith(
+                    color: C.live, fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+
+    setState(() => _uploading = true);
+    final ok = await Api.removePhoto();
+    if (!mounted) return;
+    setState(() {
+      _uploading = false;
+      // 0 is the "no photo" value the Avatar widget already falls back on.
+      if (ok) s.setPhotoId(0);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: C.char2,
+      content: Text(
+        ok ? 'Photo removed' : 'Couldn’t remove it — try again',
+        style: T.body.copyWith(color: Colors.white),
+      ),
+    ));
+  }
+
   Future<void> _pickPhoto() async {
     if (_uploading) return;
     Buzz.tick();
@@ -192,6 +242,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         ],
                       ),
                     ),
+                  ),
+                  // Guideline 1.2: "a mechanism for users to immediately
+                  // remove posts from the feed". A profile photo is the only
+                  // thing this app publishes to one (Explore), and until now
+                  // taking it down meant deleting the whole account. Only
+                  // shown when there is actually a photo to remove.
+                  AnimatedBuilder(
+                    animation: s,
+                    builder: (context, _) => s.photoId == 0
+                        ? const SizedBox(height: 24)
+                        : Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Center(
+                              child: Press(
+                                haptic: false,
+                                onTap: _removePhoto,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14, vertical: 8),
+                                  child: Text(
+                                    'Remove photo',
+                                    style: T.tiny.copyWith(
+                                        color: C.live,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                   ),
                   const SizedBox(height: 24),
                   if (_titles.isNotEmpty) ...[

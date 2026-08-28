@@ -251,6 +251,42 @@ export function mountMedia(app: Express): void {
     res.json({ id: Number(id), size: bytes.length });
   });
 
+  /// Take your own profile photo down, immediately.
+  ///
+  /// App Store guideline 1.2 requires "a mechanism for users to immediately
+  /// remove posts from the feed". A profile photo is the only thing this app
+  /// publishes to a feed — Explore — so this is that mechanism. Until now the
+  /// only way to unpublish one was to delete the whole account, or an admin
+  /// doing it for you.
+  ///
+  /// Clears both pointers before deleting the blobs: a row pointing at a media
+  /// id that no longer exists is what produced the broken-avatar bug, and the
+  /// order matters more than the two extra statements cost.
+  app.post('/api/media/photo/remove', async (req: Request, res: Response) => {
+    const uid = uidOf(req);
+    if (!uid) return res.status(401).json({ err: 'auth' });
+
+    const prev = await run(
+      'SELECT photo_media_id, photo_thumb_id FROM users WHERE uid=$1', [uid]);
+    await run(
+      'UPDATE users SET photo_media_id=NULL, photo_thumb_id=NULL WHERE uid=$1',
+      [uid]);
+
+    // Deduplicated: photo_media_id and photo_thumb_id normally point at the
+    // same row, and dropping it twice logs a spurious failure.
+    const ids = new Set<number>();
+    for (const col of ['photo_media_id', 'photo_thumb_id']) {
+      const v = prev?.rows?.[0]?.[col];
+      if (v != null) ids.add(Number(v));
+    }
+    for (const id of ids) void dropMedia(id, uid);
+
+    // Everyone looking at Explore is holding a stale card until told
+    // otherwise; thumbId 0 is the "no photo" signal the client already reads.
+    broadcastFaceFresh(uid, { thumbId: 0 });
+    res.json({ ok: true });
+  });
+
   app.get('/api/media/:id', async (req: Request, res: Response) => {
     const uid = uidOf(req);
     if (!uid) return res.status(401).json({ err: 'auth' });
