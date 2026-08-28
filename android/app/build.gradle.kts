@@ -11,44 +11,40 @@ plugins {
 // `flutter build appbundle --release` produces a Play-ready bundle on any
 // machine and in any CI.
 //
-// ── TWO THINGS TO DO ONCE, then never again ────────────────────────────────
+// SET UP ALREADY — nothing to do. The keystore is committed at
+// android/app/upload-keystore.jks and its credentials are the three values
+// below. android/.gitignore carries the `!app/upload-keystore.jks` line that
+// lets the file exist here at all: Flutter's default ignore blocks **/*.jks,
+// and a rule in the root .gitignore cannot override one in a nested file,
+// which is why a keystore dropped in without that line silently never commits.
 //
-//  1. Put Rivler's upload keystore at  android/app/upload-keystore.jks
-//     and commit it. android/.gitignore already whitelists that exact path —
-//     Flutter's default ignore blocks **/*.jks and a rule in the root
-//     .gitignore cannot override a rule in a nested one, which is why a
-//     keystore dropped in without that line silently never gets committed.
+// REGISTERING THIS KEY is the part that lives outside the repo, and it is two
+// different places doing two different jobs — see android/app/SIGNING.md for
+// the fingerprints and the full procedure:
 //
-//  2. Replace the three REPLACE_ME values below with that keystore's alias
-//     and passwords. To read the alias off it:
-//         keytool -list -v -keystore android/app/upload-keystore.jks
+//   Play Console  the SHA-256, so uploads are accepted. If an upload key is
+//                 already registered and it is not this one, Play answers with
+//                 "signed with the wrong key" — App integrity > App signing >
+//                 Request upload key reset swaps it, a couple of days, and
+//                 nothing about the app or its users is affected because
+//                 Google holds the app signing key.
+//   Firebase      the SHA-1, so Google Sign-In works. It matches package name
+//                 AND the installed APK's certificate; miss it and sign-in
+//                 fails with ApiException 10, silently.
 //
-// WHICH KEYSTORE. It has to be the key already registered with Play Console
-// as the UPLOAD key, or Play answers with "Your Android App Bundle is signed
-// with the wrong key". Most likely places to find it:
+// The AAB workflow prints this keystore's fingerprints under the ones recorded
+// for Rivler, so a mismatch shows up on screen before an upload, not after.
 //
-//   • Codemagic, under Team settings > Code signing identities > Android
-//     keystores — which is what the CM_KEYSTORE_* branch below exists for.
-//     If it is there, a Codemagic Android build signs correctly with nothing
-//     committed here at all.
-//   • wherever it was generated. Never in a repo before this one.
-//
-// If it is genuinely lost, Play Console > Test and release > App integrity >
-// App signing has an upload-key reset request. Takes a couple of days.
-//
-// If Rivler has never been uploaded to Play, any freshly generated keystore
-// is fine and becomes the upload key. Back it up somewhere that is not only
-// this repo.
-//
-// The AAB workflow prints whatever keystore is here alongside the SHA-1 and
-// SHA-256 recorded for Rivler, so a wrong key shows up on screen before an
-// upload rather than after one.
-//
-// The env vars are only so CI or Codemagic can override without editing this
-// file; nothing has to set them.
-val keyAliasValue: String = System.getenv("KEY_ALIAS") ?: "REPLACE_ME"
-val keyPasswordValue: String = System.getenv("KEY_PASSWORD") ?: "REPLACE_ME"
-val storePasswordValue: String = System.getenv("STORE_PASSWORD") ?: "REPLACE_ME"
+// Replacing the keystore means updating the three values below AND the three
+// at the top of both workflow files.
+// Env first (that is how the workflows pass them, via $GITHUB_ENV), falling
+// back to the same literals so a local `flutter build appbundle --release`
+// signs correctly too, with no setup. Same arrangement as the other Rivler
+// app repos. Change these together with the three lines at the top of both
+// workflow files if the keystore is ever replaced.
+val keyAliasValue: String = System.getenv("KEY_ALIAS") ?: "rivler"
+val keyPasswordValue: String = System.getenv("KEY_PASSWORD") ?: "rivler123"
+val storePasswordValue: String = System.getenv("STORE_PASSWORD") ?: "rivler123"
 
 // Resolved relative to android/app, which is where this script lives.
 val repoKeystore = file("upload-keystore.jks")
@@ -59,7 +55,11 @@ val cmKeystorePath: String? = System.getenv("CM_KEYSTORE_PATH")
 // a filled-in password with no keystore file fails the same way. Either gap ->
 // debug signing, which installs on a phone and is refused by Play, and the AAB
 // workflow stops early rather than producing that bundle at all.
-val hasRepoKeys = repoKeystore.exists() && keyAliasValue != "REPLACE_ME"
+// The credentials always resolve now, so the keystore file being present is
+// the only condition. Absent, it falls back to debug signing rather than
+// failing configuration — and the AAB workflow stops at its first step so
+// that fallback can never reach Play.
+val hasRepoKeys = repoKeystore.exists()
 val hasReleaseKeys = hasRepoKeys || cmKeystorePath != null
 
 android {
