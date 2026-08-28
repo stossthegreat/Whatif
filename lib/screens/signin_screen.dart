@@ -68,7 +68,11 @@ class _SignInScreenState extends State<SignInScreen> {
     if (ok) {
       _proceed(signedIn: true);
     } else {
-      setState(() => _error = 'Google sign-in didn’t work — try again');
+      // The platform's own words when we have them. "Try again" is the wrong
+      // instruction for ApiException: 10, which will fail identically forever
+      // until the signing certificate is registered.
+      setState(() => _error =
+          lastGoogleError ?? 'Google sign-in didn’t work — try again');
     }
   }
 
@@ -228,7 +232,18 @@ class _SignInScreenState extends State<SignInScreen> {
                   ],
                   if (_error != null) ...[
                     const SizedBox(height: 12),
-                    Center(child: Text(_error!, style: T.tiny.copyWith(color: C.live))),
+                    // Up to 4 lines: a PlatformException carries the status
+                    // code that identifies the fault, and clipping it to one
+                    // line throws away the only useful part.
+                    Center(
+                      child: Text(
+                        _error!,
+                        textAlign: TextAlign.center,
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                        style: T.tiny.copyWith(color: C.live, height: 1.35),
+                      ),
+                    ),
                   ],
                   // No guest path — a real identity is what makes bans stick,
                   // recovery work, and the people you meet stay yours.
