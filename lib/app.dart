@@ -130,6 +130,31 @@ class _RootState extends State<_Root> {
     _boot();
   }
 
+  /// Where a cold start lands.
+  ///
+  /// This used to be `onboarded ? home : welcome`, which meant a signed-in
+  /// account that had not finished all eight onboarding steps was sent back to
+  /// the sign-in screen on every launch — even though the Apple/Google id was
+  /// sitting in SharedPreferences the whole time. `onboarded` is only set by
+  /// completeOnboarding(), right at the end of the flow.
+  ///
+  /// Signing in is a one-time act. Once there is a stored identity the sign-in
+  /// screen must never appear again; the worst case is resuming partway
+  /// through onboarding, where every answer so far is already persisted and
+  /// comes back pre-filled.
+  _Step _resumeStep(AppSession s) {
+    if (s.onboarded) return _Step.home;
+    // an under-18 rejection outranks everything and is remembered on purpose
+    if (s.dobRejected) return _Step.ageBlocked;
+    final hasIdentity = (s.appleUserId?.isNotEmpty ?? false) ||
+        (s.googleUserId?.isNotEmpty ?? false);
+    if (!hasIdentity) return _Step.welcome;
+    // Signed in, onboarding unfinished. Age is the one answer that gates the
+    // rest, so resume at the date of birth if it is missing and just after it
+    // otherwise.
+    return s.age == null ? _Step.dob : _Step.handle;
+  }
+
   Future<void> _boot() async {
     // load saved identity BEFORE the network hello, so the backend sees a
     // stable uid and we can skip onboarding for returning users.
@@ -147,7 +172,7 @@ class _RootState extends State<_Root> {
       unawaited(Plus.instance.start());
     }
     if (!mounted) return;
-    _to(AppSession.instance.onboarded ? _Step.home : _Step.welcome);
+    _to(_resumeStep(AppSession.instance));
     // returning users: register for pushes once home settles (first-run users
     // are asked right after onboarding instead — see the permission step)
     if (AppSession.instance.onboarded) {

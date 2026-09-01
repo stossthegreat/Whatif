@@ -206,6 +206,12 @@ class AppSession extends ChangeNotifier {
     appleToken = token;               // signed proof, sent once on the next hello
     _prefs?.setString('appleUserId', appleId);
     signedIn = true;
+    // PERSIST IT. This used to set the field in memory only, so `signedIn`
+    // read back false on the next launch and the app asked them to sign in
+    // again — every single time, until they happened to finish the whole
+    // onboarding flow in one sitting, which is the only thing that called
+    // _persist().
+    _prefs?.setBool('signedIn', true);
     notifyListeners();
   }
 
@@ -219,6 +225,7 @@ class AppSession extends ChangeNotifier {
     googleToken = token;              // signed proof, sent once on the next hello
     _prefs?.setString('googleUserId', googleId);
     signedIn = true;
+    _prefs?.setBool('signedIn', true); // see the note in setAppleIdentity
     notifyListeners();
   }
 
