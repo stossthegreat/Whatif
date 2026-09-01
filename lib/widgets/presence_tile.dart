@@ -225,6 +225,36 @@ class _PresenceTileState extends State<PresenceTile> with SingleTickerProviderSt
                   bottom: 8,
                   child: _SaveHeart(saved: widget.saved, onTap: widget.onSave),
                 ),
+              // REPORT — visible, top-left, on every face that can be reported.
+              //
+              // The long-press above still works and stays, but a gesture with
+              // nothing on screen to advertise it is not a mechanism anyone can
+              // find. App Store guideline 1.2 asks for "a mechanism for users
+              // to flag objectionable content", and the live video tile is
+              // exactly where objectionable content appears — a reviewer on a
+              // call who sees no way to report concludes there isn't one.
+              // Small and low-contrast so it stays out of the way of the face,
+              // but never hidden.
+              if (widget.onReport != null)
+                Positioned(
+                  left: 9,
+                  top: 8,
+                  child: Press(
+                    haptic: false,
+                    onTap: widget.onReport,
+                    child: Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withOpacity(0.42),
+                        border: Border.all(color: const Color(0x33FFFFFF)),
+                      ),
+                      child: const Icon(Icons.flag_outlined,
+                          size: 15, color: Colors.white),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

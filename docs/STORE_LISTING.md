@@ -130,34 +130,54 @@ date-of-birth gate that remembers a rejection, so the rating matches behaviour.
 
 ## Review notes (App Review Information → Notes)
 
+Every claim below was checked against the build before being written down. Do
+not send it until `OPENAI_API_KEY` is set on the server — the filtering
+paragraph is false without it, and a claim App Review can disprove is worse
+than no claim.
+
 ```
 Rivler is an 18+ live party-games app. Users play structured games (Spin the
 Bottle, Would You Rather, Never Have I Ever) on camera, either in a private
 room with friends via a room code, or with someone who accepts their invite.
 
+On the previous rejection: Rivler does not allow anonymous posting. There is
+no guest path of any kind. Sign in with Apple or Google is required before any
+content can be created or seen, and the server rejects unauthenticated
+sessions. Every piece of content is attached to a verified account, which is
+what makes a ban meaningful.
+
 Guideline 1.2 measures in this build:
-• Age: hard date-of-birth gate at sign-up, 18+ enforced, rejection remembered
-  across reinstalls. No guest access — Sign in with Apple or Google required.
-• Terms: accepted at sign-up before any access. Section 5 states a zero-
-  tolerance policy for objectionable content and abusive users.
+• Age: hard date-of-birth gate at sign-up, 18+ enforced, and a rejection is
+  remembered across reinstalls.
+• Terms: three checkboxes at sign-up — 18 or older, agree to the Terms, follow
+  the House Rules — all required before either sign-in button does anything.
+  Terms section 5 is titled "HOUSE RULES — ZERO TOLERANCE FOR OBJECTIONABLE
+  CONTENT" and states there is no tolerance for objectionable content or
+  abusive users.
 • Automated filtering: profile photos, chat photos, handles, bios and messages
-  are screened before they are shown to anyone. Live video frames are sampled
-  continuously and a camera breaking the rules is blurred on other users'
-  screens within seconds.
-• Flagging: Report is one tap from every room, chat and profile, and asks for
-  a category (child safety, nudity, harassment, violence, impersonation).
-• Blocking: instant and permanent; a blocked user can never be matched again.
-• Removing your own content: Settings → Edit profile → Remove photo takes a
-  profile photo down immediately. Settings → Show me in Explore removes you
-  from discovery instantly. Settings → Delete account removes everything.
+  are screened before they are shown to anyone. Live video is sampled
+  continuously and a camera breaking the rules is blurred on the other
+  person's screen within seconds.
+• Flagging: a report control is visible on every live video tile (flag icon,
+  top-left of each face), in every chat via the ⋯ menu, and on every profile.
+  It asks for a category — child safety, nudity, harassment, violence,
+  impersonation, or other.
+• Blocking: instant and permanent, from the same menus. A blocked person can
+  never be matched with you again.
+• Removing your own content: Profile → Edit profile → Remove photo takes a
+  profile photo down immediately, everywhere. Settings → Show me in Explore
+  removes you from discovery instantly. Settings → Delete account removes the
+  account and its content.
 • 24-hour action: every report enters a severity-ordered human queue; child
-  safety and nudity are handled first. Automatic temporary suspension applies
-  on strong independent-report signal pending human review.
-• Contact: Settings → Contact opens email to m2mb@info.com for reporting
-  inappropriate activity.
+  safety and nudity sort above everything else. A strong independent-report
+  signal applies an automatic temporary suspension pending human review;
+  permanent removal is always a human decision.
+• Contact: Settings → "Report a problem · m2mb@info.com". Tapping it copies
+  the address and confirms reports are answered within 24 hours.
 
 Nothing is recorded. Video and audio are peer-to-peer for two-person rooms and
 relayed for group rooms; no stream is stored at any point.
 
-Test account: <fill in a sandbox account before submitting>
+No demo account is needed — Sign in with Apple works with the reviewer's own
+Apple ID. The date-of-birth screen that follows requires an 18+ date.
 ```
